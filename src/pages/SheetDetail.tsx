@@ -1,5 +1,6 @@
 import { useParams, Link } from "react-router";
 import { trpc } from "@/providers/trpc";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +16,8 @@ import {
 export default function SheetDetail() {
   const { id } = useParams<{ id: string }>();
   const sheetId = Number(id);
+
+  const { user } = useAuth();
 
   const { data: sheet, isLoading } = trpc.sheets.detail.useQuery(
     { id: sheetId },
@@ -45,6 +48,19 @@ export default function SheetDetail() {
 
   const words = (sheet.listaParole as string[] | null) ?? [];
 
+  const generatePdf = trpc.sheets.generatePdf.useMutation({
+    onSuccess: (data) => {
+      const a = document.createElement("a");
+      a.href = `data:application/pdf;base64,${data.data}`;
+      a.download = data.fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    },
+  });
+
+  const doctorName = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || user?.name || "Nome Utente";
+
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
@@ -63,9 +79,14 @@ export default function SheetDetail() {
             <Share2 className="w-4 h-4 mr-1" />
             Condividi
           </Button>
-          <Button className="bg-teal-600 hover:bg-teal-700" size="sm">
+          <Button
+            className="bg-teal-600 hover:bg-teal-700"
+            size="sm"
+            onClick={() => generatePdf.mutate({ id: sheet.id })}
+            disabled={generatePdf.isPending}
+          >
             <Download className="w-4 h-4 mr-1" />
-            Scarica PDF
+            {generatePdf.isPending ? "Generazione..." : "Scarica PDF"}
           </Button>
         </div>
       </div>
@@ -145,7 +166,7 @@ export default function SheetDetail() {
           {/* Watermark footer */}
           <div className="mt-8 pt-4 border-t border-slate-200 text-center">
             <p className="text-sm text-slate-500 italic">
-              Materiale a cura del Dott. Nome Cognome
+              Materiale a cura del Dott. {doctorName}
             </p>
             <p className="text-xs text-slate-400 mt-1">
               Generato con LogopediPro — www.logopedipro.it
