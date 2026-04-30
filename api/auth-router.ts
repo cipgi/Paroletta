@@ -6,7 +6,6 @@ import { getSessionCookieOptions } from "./lib/cookies";
 import { createRouter, authedQuery, publicQuery } from "./middleware";
 import { signSessionToken } from "./oauth/session";
 import { findUserByEmail, upsertUser } from "./queries/users";
-import { env } from "./lib/env";
 
 const credentialsSchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
@@ -42,9 +41,9 @@ export const authRouter = createRouter({
         name: input.name ?? input.email.split("@")[0],
         passwordHash: hashPassword(input.password),
         lastSignInAt: new Date(),
-        role: unionId === env.ownerUnionId ? "admin" : "user",
+        role: "user",
       });
-      const token = await signSessionToken({ unionId, clientId: env.appId });
+      const token = await signSessionToken({ unionId, clientId: "credentials" });
       const opts = getSessionCookieOptions(ctx.req.headers);
       ctx.resHeaders.append(
         "set-cookie",
@@ -67,7 +66,7 @@ export const authRouter = createRouter({
       }
       const token = await signSessionToken({
         unionId: user.unionId,
-        clientId: env.appId,
+        clientId: "credentials",
       });
       const opts = getSessionCookieOptions(ctx.req.headers);
       ctx.resHeaders.append(

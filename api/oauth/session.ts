@@ -7,7 +7,7 @@ const JWT_ALG = "HS256";
 export async function signSessionToken(
   payload: SessionPayload,
 ): Promise<string> {
-  const secret = new TextEncoder().encode(env.appSecret);
+  const secret = new TextEncoder().encode(env.sessionSecret);
   return new jose.SignJWT(payload)
     .setProtectedHeader({ alg: JWT_ALG })
     .setIssuedAt()
@@ -23,7 +23,7 @@ export async function verifySessionToken(
     return null;
   }
   try {
-    const secret = new TextEncoder().encode(env.appSecret);
+    const secret = new TextEncoder().encode(env.sessionSecret);
     const { payload } = await jose.jwtVerify(token, secret, {
       algorithms: [JWT_ALG],
     });

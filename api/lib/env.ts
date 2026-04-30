@@ -9,11 +9,11 @@ function required(name: string): string {
 }
 
 export const env = {
-  appId: required("APP_ID"),
-  appSecret: required("APP_SECRET"),
   isProduction: process.env.NODE_ENV === "production",
   databaseUrl: required("DATABASE_URL"),
-  oauthAuthUrl: required("OAUTH_AUTH_URL"),
-  oauthApiUrl: required("OAUTH_API_URL"),
-  ownerUnionId: process.env.OWNER_UNION_ID ?? "",
+  oauthAuthUrl: process.env.OAUTH_AUTH_URL ?? "",
+  oauthApiUrl: process.env.OAUTH_API_URL ?? "",
+  googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+  sessionSecret: process.env.SESSION_SECRET ?? process.env.GOOGLE_CLIENT_SECRET ?? "dev-session-secret",
 };

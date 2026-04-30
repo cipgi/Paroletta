@@ -18,9 +18,9 @@ async function exchangeAuthCode(
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     code,
-    client_id: env.appId,
+    client_id: env.googleClientId,
     redirect_uri: redirectUri,
-    client_secret: env.appSecret,
+    client_secret: env.googleClientSecret,
   });
 
   const resp = await fetch(`${env.oauthAuthUrl}/api/oauth/token`, {
@@ -73,6 +73,9 @@ export async function authenticateRequest(headers: Headers) {
 
 export function createOAuthCallbackHandler() {
   return async (c: Context) => {
+    if (!env.oauthAuthUrl || !env.oauthApiUrl || !env.googleClientId || !env.googleClientSecret) {
+      return c.json({ error: "OAuth Google non configurato" }, 503);
+    }
     const code = c.req.query("code");
     const state = c.req.query("state");
     const error = c.req.query("error");
@@ -110,7 +113,7 @@ export function createOAuthCallbackHandler() {
 
       const token = await signSessionToken({
         unionId: userId,
-        clientId: env.appId,
+        clientId: env.googleClientId,
       });
 
       const cookieOpts = getSessionCookieOptions(c.req.raw.headers);
