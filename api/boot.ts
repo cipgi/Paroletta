@@ -11,7 +11,9 @@ import { Paths } from "@contracts/constants";
 const app = new Hono<{ Bindings: HttpBindings }>();
 
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
-app.get(Paths.oauthCallback, createOAuthCallbackHandler());
+if (env.oauthAuthUrl && env.oauthApiUrl && env.googleClientId && env.googleClientSecret) {
+  app.get(Paths.oauthCallback, createOAuthCallbackHandler());
+}
 app.use("/api/trpc/*", async (c) => {
   return fetchRequestHandler({
     endpoint: "/api/trpc",
