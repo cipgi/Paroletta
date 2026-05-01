@@ -14,7 +14,7 @@ RUN npm run build
 FROM node:20-alpine AS production
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
-COPY package.json .env ./
+COPY package.json ./
 
 EXPOSE 3000
 CMD ["npm", "start"]
