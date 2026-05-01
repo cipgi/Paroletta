@@ -6,7 +6,7 @@ COPY package.json package-lock.json ./
 RUN npm config set registry https://npm.mirrors.msh.team
 # NON mettere RUN npm install qui!
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci --prefer-offline --no-audit
+    npm install
 
 FROM deps AS build
 COPY . .
