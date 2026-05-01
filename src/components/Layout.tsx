@@ -7,13 +7,54 @@ import {
   Users,
   LogOut,
   Sparkles,
+  Settings,
+  CircleHelp,
+  UserX,
+  Ban,
 } from "lucide-react";
-import { type ReactNode } from "react";
+import { type ReactNode, useMemo, useState } from "react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { trpc } from "@/providers/trpc";
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { user, logout, isAuthenticated } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const [openCancelDialog, setOpenCancelDialog] = useState(false);
+  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+
+  const utils = trpc.useUtils();
+  const cancelSubscription = trpc.subscriptions.cancel.useMutation({
+    onSuccess: async () => {
+      await utils.invalidate();
+      setOpenCancelDialog(false);
+    },
+  });
+
+  const deleteAccount = trpc.auth.deleteAccount.useMutation({
+    onSuccess: async () => {
+      await utils.invalidate();
+      setOpenDeleteDialog(false);
+      navigate("/login");
+    },
+  });
 
   if (!isAuthenticated && location.pathname !== "/login") {
     navigate("/login");
@@ -27,9 +68,16 @@ export default function Layout({ children }: { children: ReactNode }) {
     { path: "/sheets", label: "Schede", icon: FileText },
   ];
 
+  const usageLeftLabel = useMemo(() => {
+    if (!user) return "";
+    if (user.piano === "trial") {
+      return `Schede prova rimanenti: ${Math.max(10 - (user.trialSchedeUsate ?? 0), 0)}`;
+    }
+    return `Schede mensili rimanenti: ${Math.max(100 - (user.schedeMese ?? 0), 0)}`;
+  }, [user]);
+
   return (
     <div className="min-h-screen bg-slate-50 flex">
-      {/* Sidebar */}
       <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col">
         <div className="p-6 border-b border-slate-100">
           <Link to="/" className="flex items-center gap-2">
@@ -59,33 +107,50 @@ export default function Layout({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
-        <div className="p-4 border-t border-slate-100">
+        <div className="p-4 border-t border-slate-100 space-y-2">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-semibold text-slate-600">
               {user?.name?.[0] ?? "U"}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-800 truncate">
-                {user?.name ?? "Utente"}
-              </p>
-              <p className="text-xs text-slate-500 truncate">
-                {user?.email ?? ""}
-              </p>
+              <p className="text-sm font-medium text-slate-800 truncate">{user?.name ?? "Utente"}</p>
+              <p className="text-xs text-slate-500 truncate">{user?.email ?? ""}</p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start text-slate-500 hover:text-red-600"
-            onClick={logout}
-          >
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="w-full justify-start">
+                <Settings className="w-4 h-4 mr-2" />
+                Impostazioni account
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuLabel>Account</DropdownMenuLabel>
+              <DropdownMenuItem disabled>{usageLeftLabel}</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => window.open("https://www.notion.so/help", "_blank", "noopener,noreferrer")}>
+                <CircleHelp className="w-4 h-4" />
+                FAQ
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setOpenCancelDialog(true)}>
+                <Ban className="w-4 h-4" />
+                Disdici abbonamento
+              </DropdownMenuItem>
+              <DropdownMenuItem variant="destructive" onClick={() => setOpenDeleteDialog(true)}>
+                <UserX className="w-4 h-4" />
+                Cancella account
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <Button variant="ghost" size="sm" className="w-full justify-start text-slate-500 hover:text-red-600" onClick={logout}>
             <LogOut className="w-4 h-4 mr-2" />
             Esci
           </Button>
         </div>
       </aside>
 
-      {/* Mobile header */}
       <div className="flex-1 flex flex-col">
         <header className="md:hidden bg-white border-b border-slate-200 p-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
@@ -99,7 +164,6 @@ export default function Layout({ children }: { children: ReactNode }) {
           </Button>
         </header>
 
-        {/* Mobile nav */}
         <nav className="md:hidden bg-white border-b border-slate-200 flex overflow-x-auto">
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -123,6 +187,40 @@ export default function Layout({ children }: { children: ReactNode }) {
 
         <main className="flex-1 p-6 md:p-8 overflow-auto">{children}</main>
       </div>
+
+      <AlertDialog open={openCancelDialog} onOpenChange={setOpenCancelDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Disdire l'abbonamento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Il tuo piano verrà riportato alla prova gratuita. Potrai riattivarlo in qualsiasi momento.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction onClick={() => cancelSubscription.mutate()}>
+              Conferma disdetta
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={openDeleteDialog} onOpenChange={setOpenDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancellare definitivamente l'account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Questa azione elimina account, pazienti, schede e abbonamento associati. Non può essere annullata.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={() => deleteAccount.mutate()}>
+              Elimina account
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -5,6 +5,35 @@ import { subscriptions, users } from "@db/schema";
 import { eq } from "drizzle-orm";
 
 export const subscriptionsRouter = createRouter({
+  cancel: authedQuery.mutation(async ({ ctx }) => {
+    const db = getDb();
+
+    await db
+      .update(users)
+      .set({
+        piano: "trial",
+        seats: 1,
+      })
+      .where(eq(users.id, ctx.user.id));
+
+    const rows = await db
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.userId, ctx.user.id))
+      .limit(1);
+
+    if (rows[0]) {
+      await db
+        .update(subscriptions)
+        .set({
+          status: "cancellato",
+          seatsCount: 1,
+        })
+        .where(eq(subscriptions.userId, ctx.user.id));
+    }
+
+    return { success: true };
+  }),
   mySubscription: authedQuery.query(async ({ ctx }) => {
     const db = getDb();
     const rows = await db
