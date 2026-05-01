@@ -23,11 +23,7 @@ export default function Dashboard() {
 
   const planLabels: Record<string, string> = {
     trial: "Prova Gratuita",
-    base: "Professionista",
-    studio_2: "Studio 2",
-    studio_3: "Studio 3",
-    studio_5: "Studio 5",
-    studio_10: "Studio 10",
+    base: "Base",
   };
 
   return (
@@ -76,7 +72,7 @@ export default function Dashboard() {
               </p>
               <p className="text-sm text-slate-500">
                 {user?.piano === "trial"
-                  ? `${user?.trialSchedeUsate ?? 0}/5 schede prova`
+                  ? `${user?.trialSchedeUsate ?? 0}/10 schede prova`
                   : `${user?.schedeMese ?? 0}/100 schede mese`}
               </p>
             </div>
