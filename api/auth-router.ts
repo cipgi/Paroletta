@@ -6,6 +6,7 @@ import { createRouter, authedQuery, publicQuery } from "./middleware";
 import { signSessionToken } from "./oauth/session";
 import { upsertUser } from "./queries/users";
 import { supabase } from "./lib/supabase";
+import { supabaseConfigured } from "./lib/env";
 
 const credentialsSchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
@@ -17,6 +18,9 @@ export const authRouter = createRouter({
   registerWithCredentials: publicQuery
     .input(credentialsSchema)
     .mutation(async ({ input, ctx }) => {
+      if (!supabaseConfigured) {
+        throw new Error("Autenticazione con Supabase non configurata");
+      }
       const { data, error } = await supabase.auth.signUp({
         email: input.email,
         password: input.password,
@@ -43,6 +47,9 @@ export const authRouter = createRouter({
   loginWithCredentials: publicQuery
     .input(credentialsSchema.pick({ email: true, password: true }))
     .mutation(async ({ input, ctx }) => {
+      if (!supabaseConfigured) {
+        throw new Error("Autenticazione con Supabase non configurata");
+      }
       const { data, error } = await supabase.auth.signInWithPassword({
         email: input.email,
         password: input.password,

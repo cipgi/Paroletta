@@ -16,4 +16,12 @@ export const env = {
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
   sessionSecret: process.env.SESSION_SECRET ?? process.env.GOOGLE_CLIENT_SECRET ?? "dev-session-secret",
+  supabaseUrl: process.env.SUPABASE_URL ?? "",
+  supabaseAnonKey: process.env.SUPABASE_ANON_KEY ?? "",
 };
+
+export const supabaseConfigured = Boolean(env.supabaseUrl && env.supabaseAnonKey);
+
+if (env.isProduction && !supabaseConfigured) {
+  throw new Error("SUPABASE_URL and SUPABASE_ANON_KEY are required in production.");
+}
