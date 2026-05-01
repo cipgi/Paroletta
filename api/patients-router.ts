@@ -30,7 +30,7 @@ export const patientsRouter = createRouter({
           aliasEta: input.aliasEta ?? null,
           noteAnonime: input.noteAnonime ?? null,
         })
-        .$returningId();
+        .returning({ id: patients.id });
       const rows = await db
         .select()
         .from(patients)
