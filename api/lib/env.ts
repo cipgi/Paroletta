@@ -11,11 +11,7 @@ function required(name: string): string {
 export const env = {
   isProduction: process.env.NODE_ENV === "production",
   databaseUrl: required("DATABASE_URL"),
-  oauthAuthUrl: process.env.OAUTH_AUTH_URL ?? "",
-  oauthApiUrl: process.env.OAUTH_API_URL ?? "",
-  googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
-  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
-  sessionSecret: process.env.SESSION_SECRET ?? process.env.GOOGLE_CLIENT_SECRET ?? "dev-session-secret",
+  sessionSecret: process.env.SESSION_SECRET ?? "dev-session-secret",
   supabaseUrl: process.env.SUPABASE_URL ?? "",
   supabaseAnonKey: process.env.SUPABASE_ANON_KEY ?? "",
 };

@@ -5,16 +5,11 @@ import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./router";
 import { createContext } from "./context";
 import { env } from "./lib/env";
-import { createOAuthCallbackHandler } from "./oauth/auth";
 import { handleSupabaseGoogleAuth, handleSupabaseGoogleCallback } from "./supabase-oauth";
-import { Paths } from "@contracts/constants";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
-if (env.oauthAuthUrl && env.oauthApiUrl && env.googleClientId && env.googleClientSecret) {
-  app.get(Paths.oauthCallback, createOAuthCallbackHandler());
-}
 app.get("/api/auth/google", handleSupabaseGoogleAuth);
 app.get("/api/auth/google/callback", handleSupabaseGoogleCallback);
 app.use("/api/trpc/*", async (c) => {
