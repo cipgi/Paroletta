@@ -130,7 +130,7 @@ export const sheetsRouter = createRouter({
           difficolta: input.difficolta ?? "media",
           pdfUrl: input.pdfUrl ?? null,
         })
-        .$returningId();
+        .returning({ id: sheets.id });
       const rows = await db
         .select()
         .from(sheets)

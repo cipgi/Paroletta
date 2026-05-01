@@ -205,7 +205,7 @@ export const aiRouter = createRouter({
           listaParole: data.listaParole,
           difficolta: data.difficolta,
         })
-        .$returningId();
+        .returning({ id: sheets.id });
 
       const sheetId = insertResult[0].id;
 
