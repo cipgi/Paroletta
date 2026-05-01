@@ -1,96 +1,136 @@
--- Schema SQL unico per inizializzare il database MySQL di Paroletta
--- Generato in base a db/schema.ts
+-- Schema SQL per Supabase (PostgreSQL) per inizializzare il database Paroletta
+-- Adattato da uno schema MySQL: rimosse sintassi non supportate (AUTO_INCREMENT, ENGINE, ENUM MySQL, backtick)
 
-CREATE TABLE IF NOT EXISTS `users` (
-  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `unionId` VARCHAR(255) NOT NULL,
-  `name` VARCHAR(255) NULL,
-  `email` VARCHAR(320) NULL,
-  `passwordHash` VARCHAR(255) NULL,
-  `avatar` TEXT NULL,
-  `role` ENUM('user', 'admin') NOT NULL DEFAULT 'user',
-  `createdAt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updatedAt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `lastSignInAt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `firstName` VARCHAR(100) NULL,
-  `lastName` VARCHAR(100) NULL,
-  `piano` ENUM('trial', 'base') NULL DEFAULT 'trial',
-  `seats` INT NULL DEFAULT 1,
-  `schedeMese` INT NULL DEFAULT 0,
-  `trialSchedeUsate` INT NULL DEFAULT 0,
-  `teamId` BIGINT UNSIGNED NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `users_unionId_unique` (`unionId`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- Tipi enum (PostgreSQL)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
+    CREATE TYPE user_role AS ENUM ('user', 'admin');
+  END IF;
 
-CREATE TABLE IF NOT EXISTS `patients` (
-  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `userId` BIGINT UNSIGNED NOT NULL,
-  `aliasEta` VARCHAR(50) NULL,
-  `noteAnonime` TEXT NULL,
-  `createdAt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `patients_userId_idx` (`userId`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_plan') THEN
+    CREATE TYPE user_plan AS ENUM ('trial', 'base');
+  END IF;
 
-CREATE TABLE IF NOT EXISTS `sheets` (
-  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `userId` BIGINT UNSIGNED NOT NULL,
-  `patientId` BIGINT UNSIGNED NULL,
-  `fonema` VARCHAR(10) NOT NULL,
-  `interesse` VARCHAR(100) NOT NULL,
-  `tipoOutput` ENUM('storia', 'filastrocca', 'lista') NOT NULL,
-  `testoGenerato` TEXT NOT NULL,
-  `tagImmagine` VARCHAR(100) NULL,
-  `listaParole` JSON NULL,
-  `difficolta` ENUM('bassa', 'media', 'alta') NULL DEFAULT 'media',
-  `pdfUrl` VARCHAR(500) NULL,
-  `createdAt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `sheets_userId_idx` (`userId`),
-  KEY `sheets_patientId_idx` (`patientId`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'sheet_output_type') THEN
+    CREATE TYPE sheet_output_type AS ENUM ('storia', 'filastrocca', 'lista');
+  END IF;
 
-CREATE TABLE IF NOT EXISTS `illustrations` (
-  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `tag` VARCHAR(100) NOT NULL,
-  `filePath` VARCHAR(500) NOT NULL,
-  `categoria` VARCHAR(100) NULL,
-  `etaTarget` VARCHAR(20) NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'sheet_difficulty') THEN
+    CREATE TYPE sheet_difficulty AS ENUM ('bassa', 'media', 'alta');
+  END IF;
 
-CREATE TABLE IF NOT EXISTS `subscriptions` (
-  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `userId` BIGINT UNSIGNED NOT NULL,
-  `stripeSubId` VARCHAR(100) NULL,
-  `status` ENUM('attivo', 'scaduto', 'cancellato', 'trial') NOT NULL DEFAULT 'trial',
-  `currentPeriodEnd` TIMESTAMP NULL,
-  `seatsCount` INT NULL DEFAULT 1,
-  `createdAt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `subscriptions_userId_idx` (`userId`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'subscription_status') THEN
+    CREATE TYPE subscription_status AS ENUM ('attivo', 'scaduto', 'cancellato', 'trial');
+  END IF;
 
-CREATE TABLE IF NOT EXISTS `teams` (
-  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `adminUserId` BIGINT UNSIGNED NOT NULL,
-  `piano` ENUM('base') NOT NULL,
-  `seatsTotal` INT NOT NULL,
-  `seatsUsate` INT NULL DEFAULT 0,
-  `createdAt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `teams_adminUserId_idx` (`adminUserId`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'team_plan') THEN
+    CREATE TYPE team_plan AS ENUM ('base');
+  END IF;
 
-CREATE TABLE IF NOT EXISTS `team_members` (
-  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `teamId` BIGINT UNSIGNED NOT NULL,
-  `userId` BIGINT UNSIGNED NOT NULL,
-  `role` ENUM('admin', 'member') NOT NULL DEFAULT 'member',
-  `invitedAt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `joinedAt` TIMESTAMP NULL,
-  PRIMARY KEY (`id`),
-  KEY `team_members_teamId_idx` (`teamId`),
-  KEY `team_members_userId_idx` (`userId`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'team_member_role') THEN
+    CREATE TYPE team_member_role AS ENUM ('admin', 'member');
+  END IF;
+END
+$$;
+
+CREATE TABLE IF NOT EXISTS users (
+  id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+  "unionId" VARCHAR(255) NOT NULL UNIQUE,
+  name VARCHAR(255),
+  email VARCHAR(320),
+  "passwordHash" VARCHAR(255),
+  avatar TEXT,
+  role user_role NOT NULL DEFAULT 'user',
+  "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "lastSignInAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "firstName" VARCHAR(100),
+  "lastName" VARCHAR(100),
+  piano user_plan DEFAULT 'trial',
+  seats INT DEFAULT 1,
+  "schedeMese" INT DEFAULT 0,
+  "trialSchedeUsate" INT DEFAULT 0,
+  "teamId" BIGINT
+);
+
+CREATE TABLE IF NOT EXISTS patients (
+  id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+  "userId" BIGINT NOT NULL,
+  "aliasEta" VARCHAR(50),
+  "noteAnonime" TEXT,
+  "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS patients_userid_idx ON patients ("userId");
+
+CREATE TABLE IF NOT EXISTS sheets (
+  id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+  "userId" BIGINT NOT NULL,
+  "patientId" BIGINT,
+  fonema VARCHAR(10) NOT NULL,
+  interesse VARCHAR(100) NOT NULL,
+  "tipoOutput" sheet_output_type NOT NULL,
+  "testoGenerato" TEXT NOT NULL,
+  "tagImmagine" VARCHAR(100),
+  "listaParole" JSONB,
+  difficolta sheet_difficulty DEFAULT 'media',
+  "pdfUrl" VARCHAR(500),
+  "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS sheets_userid_idx ON sheets ("userId");
+CREATE INDEX IF NOT EXISTS sheets_patientid_idx ON sheets ("patientId");
+
+CREATE TABLE IF NOT EXISTS illustrations (
+  id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+  tag VARCHAR(100) NOT NULL,
+  "filePath" VARCHAR(500) NOT NULL,
+  categoria VARCHAR(100),
+  "etaTarget" VARCHAR(20)
+);
+
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+  "userId" BIGINT NOT NULL,
+  "stripeSubId" VARCHAR(100),
+  status subscription_status NOT NULL DEFAULT 'trial',
+  "currentPeriodEnd" TIMESTAMPTZ,
+  "seatsCount" INT DEFAULT 1,
+  "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS subscriptions_userid_idx ON subscriptions ("userId");
+
+CREATE TABLE IF NOT EXISTS teams (
+  id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+  "adminUserId" BIGINT NOT NULL,
+  piano team_plan NOT NULL,
+  "seatsTotal" INT NOT NULL,
+  "seatsUsate" INT DEFAULT 0,
+  "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS teams_adminuserid_idx ON teams ("adminUserId");
+
+CREATE TABLE IF NOT EXISTS team_members (
+  id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+  "teamId" BIGINT NOT NULL,
+  "userId" BIGINT NOT NULL,
+  role team_member_role NOT NULL DEFAULT 'member',
+  "invitedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "joinedAt" TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS team_members_teamid_idx ON team_members ("teamId");
+CREATE INDEX IF NOT EXISTS team_members_userid_idx ON team_members ("userId");
+
+-- Trigger per aggiornare automaticamente updatedAt su users
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW."updatedAt" = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_users_updated_at ON users;
+CREATE TRIGGER trg_users_updated_at
+BEFORE UPDATE ON users
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
