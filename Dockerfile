@@ -1,12 +1,14 @@
 FROM node:20-alpine AS base
 WORKDIR /app
 
+RUN npm install
+
 FROM base AS deps
 COPY package.json package-lock.json ./
 RUN npm config set registry https://npm.mirrors.msh.team
 # NON mettere RUN npm install qui!
 RUN --mount=type=cache,target=/root/.npm \
-    npm install
+    npm  ci --prefer-offline --no-audit
 
 FROM deps AS build
 COPY . .
