@@ -6,23 +6,6 @@ import { useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { useNavigate } from "react-router";
 
-function getOAuthUrl() {
-  const oauthAuthUrl = import.meta.env.VITE_OAUTH_AUTH_URL;
-  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-  if (!oauthAuthUrl || !googleClientId) return null;
-  const redirectUri = `${window.location.origin}/api/oauth/callback`;
-  const state = btoa(redirectUri);
-
-  const url = new URL(`${oauthAuthUrl}/api/oauth/authorize`);
-  url.searchParams.set("client_id", googleClientId);
-  url.searchParams.set("redirect_uri", redirectUri);
-  url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", "profile");
-  url.searchParams.set("state", state);
-
-  return url.toString();
-}
-
 export default function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
@@ -37,8 +20,6 @@ export default function Login() {
   });
 
   const isPending = loginMutation.isPending || registerMutation.isPending;
-  const oauthUrl = getOAuthUrl();
-
   const onCredentialsSubmit = () => {
     if (isRegister) {
       registerMutation.mutate({ email, password, name });
@@ -54,14 +35,12 @@ export default function Login() {
           <CardTitle>Accedi</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {oauthUrl && (
-            <>
-              <Button className="w-full" size="lg" onClick={() => (window.location.href = oauthUrl)}>
-                Continua con Google
-              </Button>
-              <div className="text-center text-xs text-muted-foreground">oppure</div>
-            </>
-          )}
+          <>
+            <Button className="w-full" size="lg" onClick={() => (window.location.href = "/api/auth/google")}>
+              Continua con Google
+            </Button>
+            <div className="text-center text-xs text-muted-foreground">oppure</div>
+          </>
           {isRegister && (
             <div className="space-y-2">
               <Label htmlFor="name">Nome</Label>
