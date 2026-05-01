@@ -18,26 +18,15 @@ export const subscriptionsRouter = createRouter({
   updatePlan: authedQuery
     .input(
       z.object({
-        piano: z.enum([
-          "trial",
-          "base",
-          "studio_2",
-          "studio_3",
-          "studio_5",
-          "studio_10",
-        ]),
+        piano: z.enum(["trial", "base"]),
         seatsCount: z.number().min(1).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
       const planLimits: Record<string, number> = {
-        trial: 5,
+        trial: 10,
         base: 100,
-        studio_2: 200,
-        studio_3: 300,
-        studio_5: 500,
-        studio_10: 1000,
       };
       await db
         .update(users)

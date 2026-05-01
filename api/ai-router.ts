@@ -146,12 +146,8 @@ export const aiRouter = createRouter({
 
       const piano = user.piano ?? "trial";
       const planLimits: Record<string, number> = {
-        trial: 5,
+        trial: 10,
         base: 100,
-        studio_2: 200,
-        studio_3: 300,
-        studio_5: 500,
-        studio_10: 1000,
       };
       const limit = planLimits[piano] ?? 5;
       const used =
