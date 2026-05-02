@@ -10,6 +10,10 @@ export type TrpcContext = {
 
 export async function createContext(opts: FetchCreateContextFnOptions): Promise<TrpcContext> {
   const ctx: TrpcContext = { req: opts.req, resHeaders: opts.resHeaders };
-  try { ctx.user = await authenticateRequest(opts.req.headers); } catch {}
+  try {
+    ctx.user = await authenticateRequest(opts.req.headers);
+  } catch {
+    ctx.user = undefined;
+  }
   return ctx;
 }
