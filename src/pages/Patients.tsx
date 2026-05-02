@@ -20,13 +20,18 @@ export default function Patients() {
   const [open, setOpen] = useState(false);
   const [aliasEta, setAliasEta] = useState("");
   const [note, setNote] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const create = trpc.patients.create.useMutation({
-    onSuccess: () => {
-      utils.patients.list.invalidate();
+    onSuccess: async () => {
+      await utils.patients.list.invalidate();
       setOpen(false);
       setAliasEta("");
       setNote("");
+      setCreateError(null);
+    },
+    onError: (error) => {
+      setCreateError(error.message || "Errore durante la creazione del paziente");
     },
   });
 
@@ -36,10 +41,11 @@ export default function Patients() {
     },
   });
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     const cleanAlias = aliasEta.trim();
     if (!cleanAlias) return;
-    create.mutate({ aliasEta: cleanAlias, noteAnonime: note.trim() || undefined });
+    setCreateError(null);
+    await create.mutateAsync({ aliasEta: cleanAlias, noteAnonime: note.trim() || undefined });
   };
 
   return (
@@ -65,7 +71,13 @@ export default function Patients() {
             <DialogHeader>
               <DialogTitle>Nuovo paziente</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 mt-2">
+            <form
+              className="space-y-4 mt-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleCreate();
+              }}
+            >
               <div className="space-y-2">
                 <Label>Nome paziente</Label>
                 <Input
@@ -82,14 +94,17 @@ export default function Patients() {
                   placeholder="Note cliniche anonime"
                 />
               </div>
+              {createError && (
+                <p className="text-sm text-red-600">{createError}</p>
+              )}
               <Button
+                type="submit"
                 className="w-full bg-teal-600 hover:bg-teal-700"
-                onClick={handleCreate}
                 disabled={create.isPending || !aliasEta.trim()}
               >
                 {create.isPending ? "Creazione..." : "Crea paziente"}
               </Button>
-            </div>
+            </form>
           </DialogContent>
         </Dialog>
       </div>
