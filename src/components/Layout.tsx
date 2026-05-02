@@ -34,7 +34,7 @@ import {
 import { trpc } from "@/providers/trpc";
 
 export default function Layout({ children }: { children: ReactNode }) {
-  const { user, logout, isAuthenticated } = useAuth();
+  const { user, logout, isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [openCancelDialog, setOpenCancelDialog] = useState(false);
@@ -55,6 +55,14 @@ export default function Layout({ children }: { children: ReactNode }) {
       navigate("/login");
     },
   });
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-slate-500">
+        Caricamento...
+      </div>
+    );
+  }
 
   if (!isAuthenticated && location.pathname !== "/login") {
     navigate("/login");
