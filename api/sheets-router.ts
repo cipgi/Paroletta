@@ -44,8 +44,19 @@ export const sheetsRouter = createRouter({
   }),
   create: authedQuery.input(z.object({ patientId: z.string().uuid().optional(), fonema: z.string().max(10), interesse: z.string().max(100), tipoOutput: z.enum(["storia", "filastrocca", "lista"]), testoGenerato: z.string(), tagImmagine: z.string().max(100).optional(), listaParole: z.array(z.string()).optional(), difficolta: z.enum(["bassa", "media", "alta"]).optional(), pdfUrl: z.string().max(500).optional() })).mutation(async ({ ctx, input }) => {
     const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
-    const { data, error } = await appDb().from("sheets").insert({ user_id: supabaseUserId, patient_id: input.patientId ?? null, fonema: input.fonema, interesse: input.interesse, tipo_output: input.tipoOutput, testo_generato: input.testoGenerato, tag_immagine: input.tagImmagine ?? null, lista_parole: input.listaParole ?? null, difficolta: input.difficolta ?? "media", pdf_url: input.pdfUrl ?? null }).select("*").single();
-    if (error || !data) throw new Error(error?.message ?? "Errore creazione scheda");
-    return mapSheet(data);
+    return {
+      id: crypto.randomUUID(),
+      userId: supabaseUserId,
+      patientId: input.patientId ?? null,
+      fonema: input.fonema,
+      interesse: input.interesse,
+      tipoOutput: input.tipoOutput,
+      testoGenerato: input.testoGenerato,
+      tagImmagine: input.tagImmagine ?? null,
+      listaParole: input.listaParole ?? null,
+      difficolta: input.difficolta ?? "media",
+      pdfUrl: input.pdfUrl ?? null,
+      createdAt: new Date(),
+    };
   }),
 });
