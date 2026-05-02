@@ -2,8 +2,11 @@ import { supabase } from "./supabase";
 
 const appSchemaDb = supabase.schema("app");
 
-function isInvalidAppSchemaError(message?: string) {
-  return typeof message === "string" && message.toLowerCase().includes("invalid schema") && message.includes("app");
+function isInvalidAppSchemaError(error: any) {
+  const message = typeof error?.message === "string" ? error.message : "";
+  const details = typeof error?.details === "string" ? error.details : "";
+  const combined = `${message} ${details}`.toLowerCase();
+  return combined.includes("invalid schema") && combined.includes("app");
 }
 
 /**
@@ -22,14 +25,18 @@ export async function queryAppTable(
   try {
     primary = await run((name: string) => appSchemaDb.from(name));
   } catch (error: any) {
-    if (!isInvalidAppSchemaError(error?.message)) throw error;
+    if (!isInvalidAppSchemaError(error)) throw error;
     primary = { data: null, error };
   }
 
-  if (!primary.error || !isInvalidAppSchemaError(primary.error?.message)) return primary;
+  if (!primary.error || !isInvalidAppSchemaError(primary.error)) return primary;
+
   // Fallback for deployments where schema `app` is not exposed to PostgREST.
-  // In that case we transparently retry using the default schema (usually `public`).
-  return run((name: string) => supabase.from(name));
+  // Retry first on default schema, then via fully-qualified table name.
+  const defaultSchemaResult = await run((name: string) => supabase.from(name));
+  if (!defaultSchemaResult.error) return defaultSchemaResult;
+
+  return run((name: string) => supabase.from(`app.${name}`));
 }
 
 export function getSupabaseUserIdFromUnionId(unionId: string): string | null {
