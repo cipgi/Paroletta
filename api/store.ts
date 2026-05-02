@@ -1,3 +1,6 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+
 export type Plan = "trial" | "base";
 
 export type User = {
@@ -30,3 +33,27 @@ export const illustrations: Illustration[] = [];
 export const nextUserId=()=>uid++;
 export const nextPatientId=()=>pid++;
 export const nextSheetId=()=>sid++;
+
+const SHEETS_FILE = resolve(process.cwd(), ".data/sheets.json");
+
+const ensureDir = (path: string) => {
+  const dir = dirname(path);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+};
+
+export const loadSheets = () => {
+  if (!existsSync(SHEETS_FILE)) return;
+  try {
+    const raw = JSON.parse(readFileSync(SHEETS_FILE, "utf8")) as Array<Sheet & { createdAt: string }>;
+    sheets.splice(0, sheets.length, ...raw.map((sheet) => ({ ...sheet, createdAt: new Date(sheet.createdAt) })));
+    const maxId = sheets.reduce((max, sheet) => Math.max(max, sheet.id), 0);
+    sid = Math.max(sid, maxId + 1);
+  } catch {
+    // Ignore malformed storage to keep server boot resilient.
+  }
+};
+
+export const saveSheets = () => {
+  ensureDir(SHEETS_FILE);
+  writeFileSync(SHEETS_FILE, JSON.stringify(sheets, null, 2), "utf8");
+};
