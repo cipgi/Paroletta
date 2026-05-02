@@ -1,6 +1,7 @@
 import { createRouter, authedQuery } from "./middleware";
 import { z } from "zod";
-import { nextSheetId, sheets, users } from "./store";
+import { nextSheetId, users } from "./store";
+import { appDb, getSupabaseUserIdFromUnionId } from "./lib/db";
 import { TRPCError } from "@trpc/server";
 
 const aiResponseSchema = z.object({
@@ -126,7 +127,7 @@ export const aiRouter = createRouter({
         fonema: z.string().max(10),
         interesse: z.string().max(100),
         tipoOutput: z.enum(["storia", "filastrocca", "lista"]),
-        patientId: z.number().optional(),
+        patientId: z.string().uuid().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -145,7 +146,9 @@ export const aiRouter = createRouter({
       if (!parsed.success) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI response format invalid" });
       const data = parsed.data;
       const sheet = { id: nextSheetId(), userId, patientId: input.patientId ?? null, fonema: input.fonema, interesse: input.interesse, tipoOutput: input.tipoOutput, testoGenerato: data.testoGenerato, tagImmagine: data.tagImmagine, listaParole: data.listaParole, difficolta: data.difficolta, pdfUrl: null, createdAt: new Date() };
-      sheets.push(sheet);
+      const supabaseUserId = getSupabaseUserIdFromUnionId(ctx.user.unionId);
+      if (!supabaseUserId) throw new TRPCError({ code: "UNAUTHORIZED", message: "Utente Supabase non valido" });
+      await appDb().from("sheets").insert({ user_id: supabaseUserId, patient_id: input.patientId ?? null, fonema: input.fonema, interesse: input.interesse, tipo_output: input.tipoOutput, testo_generato: data.testoGenerato, tag_immagine: data.tagImmagine, lista_parole: data.listaParole, difficolta: data.difficolta, pdf_url: null });
       if (piano === "trial") user.trialSchedeUsate = (user.trialSchedeUsate ?? 0) + 1; else user.schedeMese = (user.schedeMese ?? 0) + 1;
       return { sheet, remaining: limit - used - 1, totalUsed: used + 1 };
     }),
