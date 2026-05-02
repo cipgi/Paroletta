@@ -1,7 +1,9 @@
 import { createRouter, authedQuery } from "./middleware";
 import { z } from "zod";
 import { createDidacticPdf } from "./lib/pdf";
-import { sheets, illustrations, nextSheetId } from "./store";
+import { sheets, illustrations, nextSheetId, loadSheets, saveSheets } from "./store";
+
+loadSheets();
 
 export const sheetsRouter = createRouter({
   list: authedQuery.query(async ({ ctx }) => sheets.filter((s)=>s.userId===ctx.user.id).sort((a,b)=>b.createdAt.getTime()-a.createdAt.getTime())),
@@ -17,6 +19,8 @@ export const sheetsRouter = createRouter({
   }),
   create: authedQuery.input(z.object({ patientId: z.number().optional(), fonema: z.string().max(10), interesse: z.string().max(100), tipoOutput: z.enum(["storia", "filastrocca", "lista"]), testoGenerato: z.string(), tagImmagine: z.string().max(100).optional(), listaParole: z.array(z.string()).optional(), difficolta: z.enum(["bassa", "media", "alta"]).optional(), pdfUrl: z.string().max(500).optional() })).mutation(async ({ ctx, input }) => {
     const sheet = { id: nextSheetId(), userId: ctx.user.id, patientId: input.patientId ?? null, fonema: input.fonema, interesse: input.interesse, tipoOutput: input.tipoOutput, testoGenerato: input.testoGenerato, tagImmagine: input.tagImmagine ?? null, listaParole: input.listaParole ?? null, difficolta: input.difficolta ?? "media", pdfUrl: input.pdfUrl ?? null, createdAt: new Date() };
-    sheets.push(sheet); return sheet;
+    sheets.push(sheet);
+    saveSheets();
+    return sheet;
   }),
 });

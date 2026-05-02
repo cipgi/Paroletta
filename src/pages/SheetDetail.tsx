@@ -7,9 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   FileText,
   Download,
-  Printer,
   ArrowLeft,
-  Share2,
   Sparkles,
 } from "lucide-react";
 
@@ -71,14 +69,6 @@ export default function SheetDetail() {
           </Button>
         </Link>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <Printer className="w-4 h-4 mr-1" />
-            Stampa
-          </Button>
-          <Button variant="outline" size="sm">
-            <Share2 className="w-4 h-4 mr-1" />
-            Condividi
-          </Button>
           <Button
             className="bg-teal-600 hover:bg-teal-700"
             size="sm"
