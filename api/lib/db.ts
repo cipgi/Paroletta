@@ -1,14 +1,27 @@
 import { supabase } from "./supabase";
 
+const appSchemaDb = supabase.schema("app");
+
+function isInvalidAppSchemaError(message?: string) {
+  return typeof message === "string" && message.toLowerCase().includes("invalid schema") && message.includes("app");
+}
+
 /**
- * Use fully-qualified table names instead of PostgREST schema switching.
- *
- * Some deployments do not expose the `app` schema via `Accept-Profile`, causing
- * `Invalid schema: app` errors and blocking patient/sheet flows.
+ * Default app DB accessor (schema switching).
  */
-export const appDb = () => ({
-  from: (table: string) => supabase.from(`app.${table}`),
-});
+export const appDb = () => appSchemaDb;
+
+/**
+ * Runs a query against schema `app` first, then retries using fully-qualified
+ * table names when a deployment does not allow schema switching.
+ */
+export async function queryAppTable(
+  run: (from: (name: string) => any) => Promise<{ data: any; error: any }>,
+): Promise<{ data: any; error: any }> {
+  const primary = await run((name: string) => appSchemaDb.from(name));
+  if (!primary.error || !isInvalidAppSchemaError(primary.error?.message)) return primary;
+  return run((name: string) => supabase.from(`app.${name}`));
+}
 
 export function getSupabaseUserIdFromUnionId(unionId: string): string | null {
   if (!unionId.startsWith("supabase:")) return null;
