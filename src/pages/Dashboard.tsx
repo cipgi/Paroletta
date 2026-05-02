@@ -12,10 +12,24 @@ import {
 } from "lucide-react";
 
 export default function Dashboard() {
-  const { user } = useAuth();
-  const { data: sheetsList } = trpc.sheets.list.useQuery();
-  const { data: patientsList } = trpc.patients.list.useQuery();
-  const { data: subscription } = trpc.subscriptions.mySubscription.useQuery();
+  const { user, isAuthenticated, isLoading } = useAuth();
+  const { data: sheetsList } = trpc.sheets.list.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  const { data: patientsList } = trpc.patients.list.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  const { data: subscription } = trpc.subscriptions.mySubscription.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+
+  if (isLoading) {
+    return <div className="text-slate-500">Caricamento dashboard...</div>;
+  }
+
+  if (!isAuthenticated) {
+    return null;
+  }
 
   const totalSheets = sheetsList?.length ?? 0;
   const totalPatients = patientsList?.length ?? 0;
