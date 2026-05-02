@@ -20,7 +20,12 @@ export async function queryAppTable(
 ): Promise<{ data: any; error: any }> {
   const primary = await run((name: string) => appSchemaDb.from(name));
   if (!primary.error || !isInvalidAppSchemaError(primary.error?.message)) return primary;
-  return run((name: string) => supabase.from(`app.${name}`));
+  // Fallback for deployments where schema switching via `.schema("app")`
+  // is not available and the default API schema is already configured.
+  // NOTE: using `from("app.table")` makes PostgREST look for a literal
+  // table named `app.table` inside `public`, which causes
+  // "Could not find the table 'public.app.<table>' in the schema cache".
+  return run((name: string) => supabase.from(name));
 }
 
 export function getSupabaseUserIdFromUnionId(unionId: string): string | null {
