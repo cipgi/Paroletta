@@ -15,9 +15,9 @@ export const patientsRouter = createRouter({
     if (error) throw new Error(error.message);
     return (data ?? []).map((p) => ({ id: p.id, userId: p.user_id, aliasEta: p.alias_eta, noteAnonime: p.note_anonime, createdAt: new Date(p.created_at) }));
   }),
-  create: authedQuery.input(z.object({ aliasEta: z.string().max(50).optional(), noteAnonime: z.string().optional() })).mutation(async ({ ctx, input }) => {
+  create: authedQuery.input(z.object({ aliasEta: z.string().trim().min(1, "Il nome del paziente è obbligatorio").max(50), noteAnonime: z.string().optional() })).mutation(async ({ ctx, input }) => {
     const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
-    const { data, error } = await appDb().from("patients").insert({ user_id: supabaseUserId, alias_eta: input.aliasEta ?? null, note_anonime: input.noteAnonime ?? null }).select("id,user_id,alias_eta,note_anonime,created_at").single();
+    const { data, error } = await appDb().from("patients").insert({ user_id: supabaseUserId, alias_eta: input.aliasEta, note_anonime: input.noteAnonime ?? null }).select("id,user_id,alias_eta,note_anonime,created_at").single();
     if (error || !data) throw new Error(error?.message ?? "Errore creazione paziente");
     return { id: data.id, userId: data.user_id, aliasEta: data.alias_eta, noteAnonime: data.note_anonime, createdAt: new Date(data.created_at) };
   }),
