@@ -20,9 +20,8 @@ export async function queryAppTable(
 ): Promise<{ data: any; error: any }> {
   const primary = await run((name: string) => appSchemaDb.from(name));
   if (!primary.error || !isInvalidAppSchemaError(primary.error?.message)) return primary;
-  // Fallback for deployments where `.schema("app")` is not available.
-  // The base client is configured with `db.schema = "app"`, so using
-  // `from(name)` still targets the `app` schema.
+  // Fallback for deployments where schema `app` is not exposed to PostgREST.
+  // In that case we transparently retry using the default schema (usually `public`).
   return run((name: string) => supabase.from(name));
 }
 
