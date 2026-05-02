@@ -17,12 +17,25 @@ export const patientsRouter = createRouter({
   }),
   create: authedQuery.input(z.object({ aliasEta: z.string().trim().min(1, "Il nome del paziente è obbligatorio").max(50), noteAnonime: z.string().optional() })).mutation(async ({ ctx, input }) => {
     const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
+    const { data, error } = await queryAppTable((from) =>
+      from("patients")
+        .insert({
+          user_id: supabaseUserId,
+          alias_eta: input.aliasEta,
+          note_anonime: input.noteAnonime ?? null,
+        })
+        .select("id,user_id,alias_eta,note_anonime,created_at")
+        .single(),
+    );
+
+    if (error || !data) throw new Error(error?.message || "Errore durante la creazione del paziente");
+
     return {
-      id: crypto.randomUUID(),
-      userId: supabaseUserId,
-      aliasEta: input.aliasEta,
-      noteAnonime: input.noteAnonime ?? null,
-      createdAt: new Date(),
+      id: data.id,
+      userId: data.user_id,
+      aliasEta: data.alias_eta,
+      noteAnonime: data.note_anonime,
+      createdAt: new Date(data.created_at),
     };
   }),
   detail: authedQuery.input(z.object({ id: z.string().uuid() })).query(async ({ ctx, input }) => {
