@@ -1,4 +1,4 @@
-import { Link, useLocation, useNavigate } from "react-router";
+import { Link, Navigate, useLocation, useNavigate } from "react-router";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
@@ -65,8 +65,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   }
 
   if (!isAuthenticated && location.pathname !== "/login") {
-    navigate("/login");
-    return null;
+    return <Navigate to="/login" replace />;
   }
 
   const navItems = [
