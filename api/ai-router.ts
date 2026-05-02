@@ -1,8 +1,6 @@
 import { createRouter, authedQuery } from "./middleware";
 import { z } from "zod";
-import { getDb } from "./queries/connection";
-import { sheets, users } from "@db/schema";
-import { eq } from "drizzle-orm";
+import { nextSheetId, sheets, users } from "./store";
 import { TRPCError } from "@trpc/server";
 
 const aiResponseSchema = z.object({
@@ -132,106 +130,23 @@ export const aiRouter = createRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const db = getDb();
       const userId = ctx.user.id;
-
-      // Controllo limiti
-      const userRows = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
-      const user = userRows[0];
+      const user = users.find((u) => u.id === userId);
       if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
-
       const piano = user.piano ?? "trial";
-      const planLimits: Record<string, number> = {
-        trial: 10,
-        base: 100,
-      };
+      const planLimits: Record<string, number> = { trial: 10, base: 100 };
       const limit = planLimits[piano] ?? 5;
-      const used =
-        piano === "trial"
-          ? (user.trialSchedeUsate ?? 0)
-          : (user.schedeMese ?? 0);
-
-      if (used >= limit) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: `Hai raggiunto il limite di ${limit} schede per il piano ${piano}. Passa a un piano superiore per continuare.`,
-        });
-      }
-
-      // Chiamata AI
-      const prompt = buildPrompt({
-        eta: input.eta,
-        fonema: input.fonema,
-        interesse: input.interesse,
-        tipoOutput: input.tipoOutput,
-      });
-
+      const used = piano === "trial" ? (user.trialSchedeUsate ?? 0) : (user.schedeMese ?? 0);
+      if (used >= limit) throw new TRPCError({ code: "FORBIDDEN", message: `Hai raggiunto il limite di ${limit} schede per il piano ${piano}. Passa a un piano superiore per continuare.` });
+      const prompt = buildPrompt({ eta: input.eta, fonema: input.fonema, interesse: input.interesse, tipoOutput: input.tipoOutput });
       let raw: unknown;
-      try {
-        raw = await callOpenAI(prompt);
-      } catch {
-        raw = mockAIResponse({
-          eta: input.eta,
-          fonema: input.fonema,
-          interesse: input.interesse,
-          tipoOutput: input.tipoOutput,
-        });
-      }
-
+      try { raw = await callOpenAI(prompt); } catch { raw = mockAIResponse({ eta: input.eta, fonema: input.fonema, interesse: input.interesse, tipoOutput: input.tipoOutput }); }
       const parsed = aiResponseSchema.safeParse(raw);
-      if (!parsed.success) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "AI response format invalid",
-        });
-      }
+      if (!parsed.success) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI response format invalid" });
       const data = parsed.data;
-
-      // Salva scheda
-      const insertResult = await db
-        .insert(sheets)
-        .values({
-          userId,
-          patientId: input.patientId ?? null,
-          fonema: input.fonema,
-          interesse: input.interesse,
-          tipoOutput: input.tipoOutput,
-          testoGenerato: data.testoGenerato,
-          tagImmagine: data.tagImmagine,
-          listaParole: data.listaParole,
-          difficolta: data.difficolta,
-        })
-        .returning({ id: sheets.id });
-
-      const sheetId = insertResult[0].id;
-
-      // Aggiorna contatore
-      if (piano === "trial") {
-        await db
-          .update(users)
-          .set({ trialSchedeUsate: (user.trialSchedeUsate ?? 0) + 1 })
-          .where(eq(users.id, userId));
-      } else {
-        await db
-          .update(users)
-          .set({ schedeMese: (user.schedeMese ?? 0) + 1 })
-          .where(eq(users.id, userId));
-      }
-
-      const sheetRows = await db
-        .select()
-        .from(sheets)
-        .where(eq(sheets.id, sheetId))
-        .limit(1);
-
-      return {
-        sheet: sheetRows[0],
-        remaining: limit - used - 1,
-        totalUsed: used + 1,
-      };
+      const sheet = { id: nextSheetId(), userId, patientId: input.patientId ?? null, fonema: input.fonema, interesse: input.interesse, tipoOutput: input.tipoOutput, testoGenerato: data.testoGenerato, tagImmagine: data.tagImmagine, listaParole: data.listaParole, difficolta: data.difficolta, pdfUrl: null, createdAt: new Date() };
+      sheets.push(sheet);
+      if (piano === "trial") user.trialSchedeUsate = (user.trialSchedeUsate ?? 0) + 1; else user.schedeMese = (user.schedeMese ?? 0) + 1;
+      return { sheet, remaining: limit - used - 1, totalUsed: used + 1 };
     }),
 });
