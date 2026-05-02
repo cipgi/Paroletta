@@ -37,7 +37,9 @@ export default function Patients() {
   });
 
   const handleCreate = () => {
-    create.mutate({ aliasEta, noteAnonime: note });
+    const cleanAlias = aliasEta.trim();
+    if (!cleanAlias) return;
+    create.mutate({ aliasEta: cleanAlias, noteAnonime: note.trim() || undefined });
   };
 
   return (
@@ -65,11 +67,11 @@ export default function Patients() {
             </DialogHeader>
             <div className="space-y-4 mt-2">
               <div className="space-y-2">
-                <Label>Età / Alias</Label>
+                <Label>Nome paziente</Label>
                 <Input
                   value={aliasEta}
                   onChange={(e) => setAliasEta(e.target.value)}
-                  placeholder="es. 6 anni"
+                  placeholder="es. Mario (o alias anonimo)"
                 />
               </div>
               <div className="space-y-2">
@@ -83,7 +85,7 @@ export default function Patients() {
               <Button
                 className="w-full bg-teal-600 hover:bg-teal-700"
                 onClick={handleCreate}
-                disabled={create.isPending}
+                disabled={create.isPending || !aliasEta.trim()}
               >
                 {create.isPending ? "Creazione..." : "Crea paziente"}
               </Button>
@@ -117,7 +119,7 @@ export default function Patients() {
                 >
                   <div>
                     <p className="font-medium text-slate-800">
-                      {patient.aliasEta ?? "Paziente anonimo"}
+                      {patient.aliasEta}
                     </p>
                     {patient.noteAnonime && (
                       <p className="text-sm text-slate-500 mt-0.5">

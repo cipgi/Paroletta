@@ -1,6 +1,6 @@
 import { createRouter, authedQuery } from "./middleware";
 import { z } from "zod";
-import { nextSheetId, users } from "./store";
+import { nextSheetId } from "./store";
 import { appDb, getSupabaseUserIdFromUnionId } from "./lib/db";
 import { TRPCError } from "@trpc/server";
 
@@ -132,12 +132,10 @@ export const aiRouter = createRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user.id;
-      const user = users.find((u) => u.id === userId);
-      if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
-      const piano = user.piano ?? "trial";
+      const piano = ctx.user.piano ?? "trial";
       const planLimits: Record<string, number> = { trial: 10, base: 100 };
       const limit = planLimits[piano] ?? 5;
-      const used = piano === "trial" ? (user.trialSchedeUsate ?? 0) : (user.schedeMese ?? 0);
+      const used = piano === "trial" ? (ctx.user.trialSchedeUsate ?? 0) : (ctx.user.schedeMese ?? 0);
       if (used >= limit) throw new TRPCError({ code: "FORBIDDEN", message: `Hai raggiunto il limite di ${limit} schede per il piano ${piano}. Passa a un piano superiore per continuare.` });
       const prompt = buildPrompt({ eta: input.eta, fonema: input.fonema, interesse: input.interesse, tipoOutput: input.tipoOutput });
       let raw: unknown;
@@ -149,7 +147,7 @@ export const aiRouter = createRouter({
       const supabaseUserId = getSupabaseUserIdFromUnionId(ctx.user.unionId);
       if (!supabaseUserId) throw new TRPCError({ code: "UNAUTHORIZED", message: "Utente Supabase non valido" });
       await appDb().from("sheets").insert({ user_id: supabaseUserId, patient_id: input.patientId ?? null, fonema: input.fonema, interesse: input.interesse, tipo_output: input.tipoOutput, testo_generato: data.testoGenerato, tag_immagine: data.tagImmagine, lista_parole: data.listaParole, difficolta: data.difficolta, pdf_url: null });
-      if (piano === "trial") user.trialSchedeUsate = (user.trialSchedeUsate ?? 0) + 1; else user.schedeMese = (user.schedeMese ?? 0) + 1;
+      if (piano === "trial") ctx.user.trialSchedeUsate = (ctx.user.trialSchedeUsate ?? 0) + 1; else ctx.user.schedeMese = (ctx.user.schedeMese ?? 0) + 1;
       return { sheet, remaining: limit - used - 1, totalUsed: used + 1 };
     }),
 });
