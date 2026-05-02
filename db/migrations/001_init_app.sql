@@ -107,24 +107,31 @@ alter table app.sheets enable row level security;
 alter table app.seat_assignments enable row level security;
 alter table app.illustrations enable row level security;
 
+drop policy if exists "profile owner read/write" on app.profiles;
 create policy "profile owner read/write" on app.profiles
 for all using (auth.uid() = id) with check (auth.uid() = id);
 
+drop policy if exists "sub owner read/write" on app.subscriptions;
 create policy "sub owner read/write" on app.subscriptions
 for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+drop policy if exists "patients owner read/write" on app.patients;
 create policy "patients owner read/write" on app.patients
 for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+drop policy if exists "sheets owner read/write" on app.sheets;
 create policy "sheets owner read/write" on app.sheets
 for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+drop policy if exists "seat owner or member read" on app.seat_assignments;
 create policy "seat owner or member read" on app.seat_assignments
 for select using (auth.uid() = owner_user_id or auth.uid() = member_user_id);
 
+drop policy if exists "seat owner write" on app.seat_assignments;
 create policy "seat owner write" on app.seat_assignments
 for all using (auth.uid() = owner_user_id) with check (auth.uid() = owner_user_id);
 
+drop policy if exists "illustrations readable by authenticated" on app.illustrations;
 create policy "illustrations readable by authenticated" on app.illustrations
 for select using (auth.role() = 'authenticated');
 
