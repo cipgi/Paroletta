@@ -7,4 +7,5 @@ if (!supabaseConfigured) {
 
 export const supabase = createClient(env.supabaseUrl, env.supabasePublishableKey, {
   auth: { persistSession: false, autoRefreshToken: false },
+  db: { schema: "app" },
 });
