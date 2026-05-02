@@ -24,6 +24,17 @@ export default function SheetDetail() {
     { enabled: !isNaN(sheetId) }
   );
 
+  const generatePdf = trpc.sheets.generatePdf.useMutation({
+    onSuccess: (data) => {
+      const a = document.createElement("a");
+      a.href = `data:application/pdf;base64,${data.data}`;
+      a.download = data.fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="max-w-3xl mx-auto text-center py-20 text-slate-400">
@@ -47,17 +58,6 @@ export default function SheetDetail() {
   }
 
   const words = (sheet.listaParole as string[] | null) ?? [];
-
-  const generatePdf = trpc.sheets.generatePdf.useMutation({
-    onSuccess: (data) => {
-      const a = document.createElement("a");
-      a.href = `data:application/pdf;base64,${data.data}`;
-      a.download = data.fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    },
-  });
 
   const doctorName = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || user?.name || "Nome Utente";
 
