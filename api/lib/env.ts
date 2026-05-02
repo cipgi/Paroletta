@@ -13,11 +13,11 @@ export const env = {
   databaseUrl: required("DATABASE_URL"),
   sessionSecret: process.env.SESSION_SECRET ?? "dev-session-secret",
   supabaseUrl: process.env.SUPABASE_URL ?? "",
-  supabaseAnonKey: process.env.SUPABASE_ANON_KEY ?? "",
+  supabasePublishableKey: process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY ?? "",
 };
 
-export const supabaseConfigured = Boolean(env.supabaseUrl && env.supabaseAnonKey);
+export const supabaseConfigured = Boolean(env.supabaseUrl && env.supabasePublishableKey);
 
 if (env.isProduction && !supabaseConfigured) {
-  throw new Error("SUPABASE_URL and SUPABASE_ANON_KEY are required in production.");
+  throw new Error("SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY are required in production.");
 }
