@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
@@ -38,10 +38,35 @@ const fonemi = ["r", "s", "l", "t", "d", "k", "g", "p", "b", "f", "v"];
 
 export default function Generator() {
   const navigate = useNavigate();
-  const [eta, setEta] = useState("6 anni");
-  const [fonema, setFonema] = useState("r");
-  const [interesse, setInteresse] = useState("dinosauro");
-  const [tipoOutput, setTipoOutput] = useState<"storia" | "filastrocca" | "lista">("storia");
+  const savedPreferences = (() => {
+    const saved = localStorage.getItem("generator-preferences");
+    if (!saved) return null;
+    try {
+      const parsed = JSON.parse(saved) as {
+        eta?: string;
+        fonema?: string;
+        interesse?: string;
+        tipoOutput?: "storia" | "filastrocca" | "lista";
+      };
+      return {
+        eta: parsed.eta ?? "6 anni",
+        fonema: parsed.fonema && fonemi.includes(parsed.fonema) ? parsed.fonema : "r",
+        interesse: parsed.interesse && interessi.includes(parsed.interesse) ? parsed.interesse : "dinosauro",
+        tipoOutput: parsed.tipoOutput ?? "storia",
+      };
+    } catch {
+      return null;
+    }
+  })();
+
+  const [eta, setEta] = useState(savedPreferences?.eta ?? "6 anni");
+  const [fonema, setFonema] = useState(savedPreferences?.fonema ?? "r");
+  const [interesse, setInteresse] = useState(savedPreferences?.interesse ?? "dinosauro");
+  const [tipoOutput, setTipoOutput] = useState<"storia" | "filastrocca" | "lista">(savedPreferences?.tipoOutput ?? "storia");
+
+  useEffect(() => {
+    localStorage.setItem("generator-preferences", JSON.stringify({ eta, fonema, interesse, tipoOutput }));
+  }, [eta, fonema, interesse, tipoOutput]);
 
   const generate = trpc.ai.generate.useMutation({
     onSuccess: (data) => {

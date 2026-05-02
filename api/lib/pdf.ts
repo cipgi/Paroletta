@@ -64,12 +64,14 @@ export function createDidacticPdf(params: {
 
   const contentStream = lines.join("\n");
 
+  const streamLength = Buffer.byteLength(contentStream, "utf8");
+
   const objects = [
     "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj",
     "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj",
     "3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj",
     "4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj",
-    `5 0 obj << /Length ${contentStream.length} >> stream\n${contentStream}\nendstream endobj`,
+    `5 0 obj << /Length ${streamLength} >> stream\n${contentStream}\nendstream endobj`,
   ];
 
   let pdf = "%PDF-1.4\n";
