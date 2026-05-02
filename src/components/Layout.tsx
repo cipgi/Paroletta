@@ -56,18 +56,6 @@ export default function Layout({ children }: { children: ReactNode }) {
     },
   });
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-slate-500">
-        Caricamento...
-      </div>
-    );
-  }
-
-  if (!isAuthenticated && location.pathname !== "/login") {
-    return <Navigate to="/login" replace />;
-  }
-
   const navItems = [
     { path: "/", label: "Dashboard", icon: LayoutDashboard },
     { path: "/generator", label: "Genera Scheda", icon: Sparkles },
@@ -82,6 +70,18 @@ export default function Layout({ children }: { children: ReactNode }) {
     }
     return `Schede mensili rimanenti: ${Math.max(100 - (user.schedeMese ?? 0), 0)}`;
   }, [user]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-slate-500">
+        Caricamento...
+      </div>
+    );
+  }
+
+  if (!isAuthenticated && location.pathname !== "/login") {
+    return <Navigate to="/login" replace />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
