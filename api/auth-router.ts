@@ -5,9 +5,7 @@ import { getSessionCookieOptions } from "./lib/cookies";
 import { createRouter, authedQuery, publicQuery } from "./middleware";
 import { signSessionToken } from "./oauth/session";
 import { upsertUser } from "./queries/users";
-import { getDb } from "./queries/connection";
-import { subscriptions, sheets, patients, users } from "@db/schema";
-import { eq } from "drizzle-orm";
+import { subscriptions, sheets, patients, users } from "./store";
 import { supabase } from "./lib/supabase";
 import { supabaseConfigured } from "./lib/env";
 
@@ -78,12 +76,10 @@ export const authRouter = createRouter({
   me: authedQuery.query((opts) => opts.ctx.user),
 
   deleteAccount: authedQuery.mutation(async ({ ctx }) => {
-    const db = getDb();
-
-    await db.delete(sheets).where(eq(sheets.userId, ctx.user.id));
-    await db.delete(patients).where(eq(patients.userId, ctx.user.id));
-    await db.delete(subscriptions).where(eq(subscriptions.userId, ctx.user.id));
-    await db.delete(users).where(eq(users.id, ctx.user.id));
+    for (let i = sheets.length - 1; i >= 0; i--) if (sheets[i].userId === ctx.user.id) sheets.splice(i, 1);
+    for (let i = patients.length - 1; i >= 0; i--) if (patients[i].userId === ctx.user.id) patients.splice(i, 1);
+    for (let i = subscriptions.length - 1; i >= 0; i--) if (subscriptions[i].userId === ctx.user.id) subscriptions.splice(i, 1);
+    for (let i = users.length - 1; i >= 0; i--) if (users[i].id === ctx.user.id) users.splice(i, 1);
 
     const opts = getSessionCookieOptions(ctx.req.headers);
     ctx.resHeaders.append(

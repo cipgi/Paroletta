@@ -1,31 +1,33 @@
-import { eq } from "drizzle-orm";
-import * as schema from "@db/schema";
-import type { InsertUser } from "@db/schema";
-import { getDb } from "./connection";
+import { nextUserId, users, type User } from "../store";
 
-function removeUndefinedFields<T extends Record<string, unknown>>(data: T): Partial<T> {
-  return Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined)) as Partial<T>;
-}
+type InsertUser = Omit<User, "id" | "piano" | "seats" | "trialSchedeUsate" | "schedeMese"> & Partial<Pick<User,"piano"|"seats"|"trialSchedeUsate"|"schedeMese">>;
 
 export async function findUserByUnionId(unionId: string) {
-  const rows = await getDb().select().from(schema.users).where(eq(schema.users.unionId, unionId)).limit(1);
-  return rows.at(0);
+  return users.find((u) => u.unionId === unionId);
 }
 
 export async function findUserByEmail(email: string) {
-  const rows = await getDb().select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
-  return rows.at(0);
+  return users.find((u) => u.email === email);
 }
 
 export async function upsertUser(data: InsertUser) {
-  const cleanedData = removeUndefinedFields(data);
-  const now = new Date();
-
-  await getDb()
-    .insert(schema.users)
-    .values({ ...cleanedData, lastSignInAt: now, updatedAt: now })
-    .onConflictDoUpdate({
-      target: schema.users.unionId,
-      set: { ...cleanedData, lastSignInAt: now, updatedAt: now },
-    });
+  const existing = users.find((u) => u.unionId === data.unionId);
+  if (existing) {
+    Object.assign(existing, data, { lastSignInAt: new Date() });
+    return;
+  }
+  users.push({
+    id: nextUserId(),
+    unionId: data.unionId,
+    email: data.email,
+    name: data.name,
+    firstName: data.firstName ?? null,
+    lastName: data.lastName ?? null,
+    role: data.role ?? "user",
+    piano: data.piano ?? "trial",
+    seats: data.seats ?? 1,
+    trialSchedeUsate: data.trialSchedeUsate ?? 0,
+    schedeMese: data.schedeMese ?? 0,
+    lastSignInAt: new Date(),
+  });
 }
