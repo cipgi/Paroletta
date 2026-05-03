@@ -46,7 +46,7 @@ export default function AuthLayout({
     const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY);
     return saved ? parseInt(saved, 10) : DEFAULT_WIDTH;
   });
-  const { isLoading, user } = useAuth();
+  const { isLoading, user } = useAuth({ redirectOnUnauthenticated: true });
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString());
