@@ -91,7 +91,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
-            <span className="font-bold text-lg text-slate-800">LogopediPro</span>
+            <span className="font-bold text-lg text-slate-800">Paroletta</span>
           </Link>
         </div>
         <nav className="flex-1 p-4 space-y-1">
@@ -164,7 +164,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
-            <span className="font-bold text-slate-800">LogopediPro</span>
+            <span className="font-bold text-slate-800">Paroletta</span>
           </Link>
           <Button variant="ghost" size="sm" onClick={logout}>
             <LogOut className="w-4 h-4" />

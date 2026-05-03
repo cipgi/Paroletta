@@ -39,7 +39,7 @@ export const sheetsRouter = createRouter({
     let illustrationLabel = sheet.tagImmagine ?? "generico";
     if (sheet.tagImmagine) { const fuzzy = illustrations.find((i)=>i.tag===sheet.tagImmagine) ?? illustrations.find((i)=>i.tag.includes(sheet.tagImmagine!)); if (fuzzy) illustrationLabel = `${fuzzy.tag} (${fuzzy.filePath})`; }
     const doctorName = [ctx.user.firstName, ctx.user.lastName].filter(Boolean).join(" ") || ctx.user.name || "Nome Utente";
-    const bytes = createDidacticPdf({ title:"LogopediPro", subtitle:"Scheda didattica personalizzata", fonema: sheet.fonema, interesse: sheet.interesse, difficolta: sheet.difficolta ?? "media", content: sheet.testoGenerato, words: sheet.listaParole ?? [], illustrationLabel, watermarkDoctor: doctorName });
+    const bytes = createDidacticPdf({ title:"Paroletta", subtitle:"Scheda didattica personalizzata", fonema: sheet.fonema, interesse: sheet.interesse, difficolta: sheet.difficolta ?? "media", content: sheet.testoGenerato, words: sheet.listaParole ?? [], illustrationLabel, watermarkDoctor: doctorName });
     return { fileName: `scheda-${sheet.id}.pdf`, data: Buffer.from(bytes).toString("base64") };
   }),
   create: authedQuery.input(z.object({ patientId: z.string().uuid().optional(), fonema: z.string().max(10), interesse: z.string().max(100), tipoOutput: z.enum(["storia", "filastrocca", "lista"]), testoGenerato: z.string(), tagImmagine: z.string().max(100).optional(), listaParole: z.array(z.string()).optional(), difficolta: z.enum(["bassa", "media", "alta"]).optional(), pdfUrl: z.string().max(500).optional() })).mutation(async ({ ctx, input }) => {
