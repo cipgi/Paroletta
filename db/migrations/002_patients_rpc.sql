@@ -6,6 +6,11 @@ drop function if exists public.app_patients_create(uuid, text, text);
 drop function if exists public.app_patients_detail(uuid, uuid);
 drop function if exists public.app_patients_delete(uuid, uuid);
 
+-- Ensure app functions are recreated even when return signatures changed.
+drop function if exists app.app_patients_list(uuid);
+drop function if exists app.app_patients_create(uuid, text, text);
+drop function if exists app.app_patients_detail(uuid, uuid);
+drop function if exists app.app_patients_delete(uuid, uuid);
 create or replace function app.app_patients_list(p_user_id uuid)
 returns table (
   id uuid,
