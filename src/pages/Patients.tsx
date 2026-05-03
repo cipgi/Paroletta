@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,6 +16,7 @@ import { Users, Plus, Trash2, FileText } from "lucide-react";
 
 export default function Patients() {
   const utils = trpc.useUtils();
+  const navigate = useNavigate();
   const { data: patients, isLoading } = trpc.patients.list.useQuery();
   const [open, setOpen] = useState(false);
   const [aliasEta, setAliasEta] = useState("");
@@ -31,6 +32,11 @@ export default function Patients() {
       setCreateError(null);
     },
     onError: (error) => {
+      if (error.data?.code === "UNAUTHORIZED") {
+        setOpen(false);
+        navigate("/login");
+        return;
+      }
       setCreateError(error.message || "Errore durante la creazione del paziente");
     },
   });
