@@ -132,7 +132,24 @@ export const aiRouter = createRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const piano = ctx.user.piano ?? "trial";
-      const planLimits: Record<string, number> = { trial: 10, base: 100 };
+      const planLimits: Record<string, number> = { trial: 15, base: 100 };
+      const supabaseUserId = getSupabaseUserIdFromUnionId(ctx.user.unionId);
+      if (!supabaseUserId) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Utente Supabase non valido" });
+      }
+      const { data: subscription, error: subscriptionError } = await appDb()
+        .from("subscriptions")
+        .select("status,created_at")
+        .eq("user_id", supabaseUserId)
+        .maybeSingle();
+      if (subscriptionError) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: subscriptionError.message });
+      const trialStartedAt = subscription?.created_at ? new Date(subscription.created_at).getTime() : Date.now();
+      const trialEndsAt = trialStartedAt + 15 * 24 * 60 * 60 * 1000;
+      const hasTrialAccess = Date.now() <= trialEndsAt;
+      const hasActiveSubscription = subscription?.status === "attivo";
+      if (!hasActiveSubscription && !hasTrialAccess) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Il tuo abbonamento non è attivo. Riattivalo dalle impostazioni per continuare." });
+      }
       const limit = planLimits[piano] ?? 5;
       const used = piano === "trial" ? (ctx.user.trialSchedeUsate ?? 0) : (ctx.user.schedeMese ?? 0);
       if (used >= limit) throw new TRPCError({ code: "FORBIDDEN", message: `Hai raggiunto il limite di ${limit} schede per il piano ${piano}. Passa a un piano superiore per continuare.` });
@@ -142,11 +159,6 @@ export const aiRouter = createRouter({
       const parsed = aiResponseSchema.safeParse(raw);
       if (!parsed.success) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI response format invalid" });
       const data = parsed.data;
-      const supabaseUserId = getSupabaseUserIdFromUnionId(ctx.user.unionId);
-      if (!supabaseUserId) {
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Utente Supabase non valido" });
-      }
-
       const { data: inserted, error } = await appDb()
         .from("sheets")
         .insert({

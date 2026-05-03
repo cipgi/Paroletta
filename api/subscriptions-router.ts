@@ -38,7 +38,7 @@ export const subscriptionsRouter = createRouter({
     };
   }),
   updatePlan: authedQuery.input(z.object({ piano: z.enum(["trial", "base"]), seatsCount: z.number().min(1).optional() })).mutation(async ({ ctx, input }) => {
-    const planLimits: Record<string, number> = { trial: 10, base: 100 };
+    const planLimits: Record<string, number> = { trial: 15, base: 100 };
     const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
     const seatsCount = input.seatsCount ?? 1;
     const { error: profileError } = await appDb().from("profiles").update({ piano: input.piano, seats: seatsCount }).eq("id", supabaseUserId);
