@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { useNavigate } from "react-router";
+import { isSubscriptionCurrentlyValid } from "@/lib/subscription";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -13,11 +14,22 @@ export default function Login() {
   const [name, setName] = useState("");
   const [isRegister, setIsRegister] = useState(false);
   const [initialPlan, setInitialPlan] = useState<"trial" | "base">("trial");
+  const utils = trpc.useUtils();
+
+  const redirectAfterAuth = async () => {
+    const subscription = await utils.subscriptions.mySubscription.fetch();
+    if (isSubscriptionCurrentlyValid(subscription)) {
+      navigate("/");
+      return;
+    }
+    navigate("/abbonamento");
+  };
+
   const loginMutation = trpc.auth.loginWithCredentials.useMutation({
-    onSuccess: () => navigate("/"),
+    onSuccess: redirectAfterAuth,
   });
   const registerMutation = trpc.auth.registerWithCredentials.useMutation({
-    onSuccess: () => navigate("/"),
+    onSuccess: redirectAfterAuth,
   });
 
   const isPending = loginMutation.isPending || registerMutation.isPending;
