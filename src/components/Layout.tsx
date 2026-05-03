@@ -9,9 +9,7 @@ import {
   Sparkles,
   Settings,
   CircleHelp,
-  UserX,
-  Ban,
-  CreditCard,
+  UserX
 } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import {
@@ -38,26 +36,12 @@ export default function Layout({ children }: { children: ReactNode }) {
   const { user, logout, isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const [openCancelDialog, setOpenCancelDialog] = useState(false);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
-  const [openPlanDialog, setOpenPlanDialog] = useState(false);
   const { data: subscription } = trpc.subscriptions.mySubscription.useQuery(undefined, {
     enabled: isAuthenticated,
   });
 
   const utils = trpc.useUtils();
-  const cancelSubscription = trpc.subscriptions.cancel.useMutation({
-    onSuccess: async () => {
-      await utils.invalidate();
-      setOpenCancelDialog(false);
-    },
-  });
-  const updatePlan = trpc.subscriptions.updatePlan.useMutation({
-    onSuccess: async () => {
-      await utils.invalidate();
-      setOpenPlanDialog(false);
-    },
-  });
 
   const deleteAccount = trpc.auth.deleteAccount.useMutation({
     onSuccess: async () => {
@@ -156,12 +140,7 @@ export default function Layout({ children }: { children: ReactNode }) {
                 <CircleHelp className="w-4 h-4" />
                 FAQ
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setOpenCancelDialog(true)}>
-                <Ban className="w-4 h-4" />
-                Disdici abbonamento
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setOpenPlanDialog(true)}>
-                <CreditCard className="w-4 h-4" />
+              <DropdownMenuItem onClick={() => navigate("/abbonamento")}>
                 Gestisci abbonamento
               </DropdownMenuItem>
               <DropdownMenuItem variant="destructive" onClick={() => setOpenDeleteDialog(true)}>
@@ -218,49 +197,14 @@ export default function Layout({ children }: { children: ReactNode }) {
               <div className="bg-white border rounded-xl p-6 space-y-4">
                 <h2 className="text-xl font-semibold text-slate-800">Abbonamento non attivo</h2>
                 <p className="text-slate-600">Il tuo periodo di prova di 15 giorni è terminato. Attiva il piano Base a €14.99/mese per continuare a usare Paroletta e generare fino a 100 schede al mese.</p>
-                <Button className="bg-teal-600 hover:bg-teal-700" onClick={() => updatePlan.mutate({ piano: "base" })} disabled={updatePlan.isPending}>
-                  Attiva piano Base (€14.99/mese)
+                <Button className="bg-teal-600 hover:bg-teal-700" onClick={() => navigate("/abbonamento")}>
+                  Vai alla scelta abbonamento
                 </Button>
               </div>
             </div>
           ) : children}
         </main>
       </div>
-
-      <AlertDialog open={openCancelDialog} onOpenChange={setOpenCancelDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Disdire l'abbonamento?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Il tuo piano verrà riportato alla prova gratuita. Potrai riattivarlo in qualsiasi momento.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Annulla</AlertDialogCancel>
-            <AlertDialogAction onClick={() => cancelSubscription.mutate()}>
-              Conferma disdetta
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AlertDialog open={openPlanDialog} onOpenChange={setOpenPlanDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Gestisci abbonamento</AlertDialogTitle>
-            <AlertDialogDescription>
-              Scegli il tuo piano: Trial (15 giorni) oppure Base (€14.99/mese, 100 schede al mese).
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <Button variant="outline" onClick={() => updatePlan.mutate({ piano: "trial" })} disabled={updatePlan.isPending}>
-              Trial 15 giorni
-            </Button>
-            <AlertDialogAction onClick={() => updatePlan.mutate({ piano: "base" })}>
-              Base €14.99/mese
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       <AlertDialog open={openDeleteDialog} onOpenChange={setOpenDeleteDialog}>
         <AlertDialogContent>
