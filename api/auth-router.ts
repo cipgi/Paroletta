@@ -8,6 +8,24 @@ import { upsertUser } from "./queries/users";
 import { subscriptions, sheets, patients, users } from "./store";
 import { supabase } from "./lib/supabase";
 import { supabaseConfigured } from "./lib/env";
+import { appDb } from "./lib/db";
+
+async function ensureUserProfile(userId: string, email: string, name: string) {
+  const { error } = await appDb()
+    .from("profiles")
+    .upsert(
+      {
+        id: userId,
+        email,
+        name,
+      },
+      { onConflict: "id" },
+    );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
 
 const credentialsSchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
@@ -37,6 +55,7 @@ export const authRouter = createRouter({
         lastSignInAt: new Date(),
         role: "user",
       });
+      await ensureUserProfile(data.user.id, input.email, input.name ?? input.email.split("@")[0]);
 
       const token = await signSessionToken({ unionId, clientId: "supabase" });
       const opts = getSessionCookieOptions(ctx.req.headers);
@@ -65,6 +84,7 @@ export const authRouter = createRouter({
         lastSignInAt: new Date(),
         role: "user",
       });
+      await ensureUserProfile(data.user.id, input.email, (data.user.user_metadata?.name as string | undefined) ?? input.email.split("@")[0]);
 
       const token = await signSessionToken({ unionId, clientId: "supabase" });
       const opts = getSessionCookieOptions(ctx.req.headers);
