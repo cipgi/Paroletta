@@ -11,6 +11,7 @@ import {
   CircleHelp,
   UserX,
   Ban,
+  CreditCard,
 } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import {
@@ -39,12 +40,22 @@ export default function Layout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const [openCancelDialog, setOpenCancelDialog] = useState(false);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const [openPlanDialog, setOpenPlanDialog] = useState(false);
+  const { data: subscription } = trpc.subscriptions.mySubscription.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
 
   const utils = trpc.useUtils();
   const cancelSubscription = trpc.subscriptions.cancel.useMutation({
     onSuccess: async () => {
       await utils.invalidate();
       setOpenCancelDialog(false);
+    },
+  });
+  const updatePlan = trpc.subscriptions.updatePlan.useMutation({
+    onSuccess: async () => {
+      await utils.invalidate();
+      setOpenPlanDialog(false);
     },
   });
 
@@ -66,7 +77,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const usageLeftLabel = useMemo(() => {
     if (!user) return "";
     if (user.piano === "trial") {
-      return `Schede prova rimanenti: ${Math.max(10 - (user.trialSchedeUsate ?? 0), 0)}`;
+      return `Schede prova rimanenti: ${Math.max(15 - (user.trialSchedeUsate ?? 0), 0)}`;
     }
     return `Schede mensili rimanenti: ${Math.max(100 - (user.schedeMese ?? 0), 0)}`;
   }, [user]);
@@ -82,6 +93,11 @@ export default function Layout({ children }: { children: ReactNode }) {
   if (!isAuthenticated && location.pathname !== "/login") {
     return <Navigate to="/login" replace />;
   }
+  const trialStartedAt = subscription?.createdAt ? new Date(subscription.createdAt).getTime() : Date.now();
+  const trialEndsAt = trialStartedAt + 15 * 24 * 60 * 60 * 1000;
+  const isTrialExpired = Date.now() > trialEndsAt;
+  const hasActiveSubscription = subscription?.status === "attivo";
+  const showPaywall = isAuthenticated && !hasActiveSubscription && isTrialExpired;
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
@@ -144,6 +160,10 @@ export default function Layout({ children }: { children: ReactNode }) {
                 <Ban className="w-4 h-4" />
                 Disdici abbonamento
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setOpenPlanDialog(true)}>
+                <CreditCard className="w-4 h-4" />
+                Gestisci abbonamento
+              </DropdownMenuItem>
               <DropdownMenuItem variant="destructive" onClick={() => setOpenDeleteDialog(true)}>
                 <UserX className="w-4 h-4" />
                 Cancella account
@@ -192,7 +212,19 @@ export default function Layout({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        <main className="flex-1 p-6 md:p-8 overflow-auto">{children}</main>
+        <main className="flex-1 p-6 md:p-8 overflow-auto">
+          {showPaywall ? (
+            <div className="max-w-xl mx-auto">
+              <div className="bg-white border rounded-xl p-6 space-y-4">
+                <h2 className="text-xl font-semibold text-slate-800">Abbonamento non attivo</h2>
+                <p className="text-slate-600">Il tuo periodo di prova di 15 giorni è terminato. Attiva il piano Base a €14.99/mese per continuare a usare Paroletta e generare fino a 100 schede al mese.</p>
+                <Button className="bg-teal-600 hover:bg-teal-700" onClick={() => updatePlan.mutate({ piano: "base" })} disabled={updatePlan.isPending}>
+                  Attiva piano Base (€14.99/mese)
+                </Button>
+              </div>
+            </div>
+          ) : children}
+        </main>
       </div>
 
       <AlertDialog open={openCancelDialog} onOpenChange={setOpenCancelDialog}>
@@ -207,6 +239,24 @@ export default function Layout({ children }: { children: ReactNode }) {
             <AlertDialogCancel>Annulla</AlertDialogCancel>
             <AlertDialogAction onClick={() => cancelSubscription.mutate()}>
               Conferma disdetta
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={openPlanDialog} onOpenChange={setOpenPlanDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Gestisci abbonamento</AlertDialogTitle>
+            <AlertDialogDescription>
+              Scegli il tuo piano: Trial (15 giorni) oppure Base (€14.99/mese, 100 schede al mese).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button variant="outline" onClick={() => updatePlan.mutate({ piano: "trial" })} disabled={updatePlan.isPending}>
+              Trial 15 giorni
+            </Button>
+            <AlertDialogAction onClick={() => updatePlan.mutate({ piano: "base" })}>
+              Base €14.99/mese
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

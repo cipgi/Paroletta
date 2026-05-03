@@ -86,7 +86,7 @@ export default function Dashboard() {
               </p>
               <p className="text-sm text-slate-500">
                 {user?.piano === "trial"
-                  ? `${user?.trialSchedeUsate ?? 0}/10 schede prova`
+                  ? `${user?.trialSchedeUsate ?? 0}/15 schede prova`
                   : `${user?.schedeMese ?? 0}/100 schede mese`}
               </p>
             </div>
