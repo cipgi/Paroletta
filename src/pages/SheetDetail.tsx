@@ -91,7 +91,7 @@ export default function SheetDetail() {
                 <Sparkles className="w-5 h-5 text-white" />
               </div>
               <div>
-                <p className="font-bold text-slate-800">LogopediPro</p>
+                <p className="font-bold text-slate-800">Paroletta</p>
                 <p className="text-xs text-slate-500">Scheda didattica personalizzata</p>
               </div>
             </div>
@@ -159,7 +159,7 @@ export default function SheetDetail() {
               Materiale a cura del Dott. {doctorName}
             </p>
             <p className="text-xs text-slate-400 mt-1">
-              Generato con LogopediPro — www.logopedipro.it
+              Generato con Paroletta — www.paroletta.it
             </p>
           </div>
         </CardContent>
