@@ -12,6 +12,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [isRegister, setIsRegister] = useState(false);
+  const [initialPlan, setInitialPlan] = useState<"trial" | "base">("trial");
   const loginMutation = trpc.auth.loginWithCredentials.useMutation({
     onSuccess: () => navigate("/"),
   });
@@ -22,7 +23,7 @@ export default function Login() {
   const isPending = loginMutation.isPending || registerMutation.isPending;
   const onCredentialsSubmit = () => {
     if (isRegister) {
-      registerMutation.mutate({ email, password, name });
+      registerMutation.mutate({ email, password, name, initialPlan });
       return;
     }
     loginMutation.mutate({ email, password });
@@ -45,6 +46,15 @@ export default function Login() {
             <div className="space-y-2">
               <Label htmlFor="name">Nome</Label>
               <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+          )}
+          {isRegister && (
+            <div className="space-y-2">
+              <Label>Scelta iniziale</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button type="button" variant={initialPlan === "trial" ? "default" : "outline"} onClick={() => setInitialPlan("trial")}>Trial</Button>
+                <Button type="button" variant={initialPlan === "base" ? "default" : "outline"} onClick={() => setInitialPlan("base")}>Abbonamento</Button>
+              </div>
             </div>
           )}
           <div className="space-y-2">

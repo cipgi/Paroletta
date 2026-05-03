@@ -31,6 +31,7 @@ const credentialsSchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
   password: z.string().min(8),
   name: z.string().trim().min(2).max(255).optional(),
+  initialPlan: z.enum(["trial", "base"]).optional(),
 });
 
 export const authRouter = createRouter({
@@ -55,7 +56,24 @@ export const authRouter = createRouter({
         lastSignInAt: new Date(),
         role: "user",
       });
+      const initialPlan = input.initialPlan ?? "trial";
       await ensureUserProfile(data.user.id, input.email, input.name ?? input.email.split("@")[0]);
+      const { error: profileError } = await appDb().from("profiles").update({ piano: initialPlan, seats: 1 }).eq("id", data.user.id);
+      if (profileError) throw new Error(profileError.message);
+      const now = new Date().toISOString();
+      const periodEnd = initialPlan === "trial"
+        ? new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString()
+        : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      const { error: subError } = await appDb().from("subscriptions").upsert({
+        user_id: data.user.id,
+        status: initialPlan === "trial" ? "trial" : "attivo",
+        plan: initialPlan,
+        seats_count: 1,
+        current_period_start: now,
+        current_period_end: periodEnd,
+        cancel_at_period_end: false,
+      }, { onConflict: "user_id" });
+      if (subError) throw new Error(subError.message);
 
       const token = await signSessionToken({ unionId, clientId: "supabase" });
       const opts = getSessionCookieOptions(ctx.req.headers);
