@@ -1,8 +1,8 @@
 import { createRouter, authedQuery } from "./middleware";
 import { z } from "zod";
-import { nextSheetId } from "./store";
 
 import { TRPCError } from "@trpc/server";
+import { appDb, getSupabaseUserIdFromUnionId } from "./lib/db";
 
 const aiResponseSchema = z.object({
   testoGenerato: z.string(),
@@ -131,7 +131,6 @@ export const aiRouter = createRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const userId = ctx.user.id;
       const piano = ctx.user.piano ?? "trial";
       const planLimits: Record<string, number> = { trial: 10, base: 100 };
       const limit = planLimits[piano] ?? 5;
@@ -143,7 +142,47 @@ export const aiRouter = createRouter({
       const parsed = aiResponseSchema.safeParse(raw);
       if (!parsed.success) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI response format invalid" });
       const data = parsed.data;
-      const sheet = { id: nextSheetId(), userId, patientId: input.patientId ?? null, fonema: input.fonema, interesse: input.interesse, tipoOutput: input.tipoOutput, testoGenerato: data.testoGenerato, tagImmagine: data.tagImmagine, listaParole: data.listaParole, difficolta: data.difficolta, pdfUrl: null, createdAt: new Date() };
+      const supabaseUserId = getSupabaseUserIdFromUnionId(ctx.user.unionId);
+      if (!supabaseUserId) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Utente Supabase non valido" });
+      }
+
+      const { data: inserted, error } = await appDb()
+        .from("sheets")
+        .insert({
+          user_id: supabaseUserId,
+          patient_id: input.patientId ?? null,
+          fonema: input.fonema,
+          interesse: input.interesse,
+          tipo_output: input.tipoOutput,
+          testo_generato: data.testoGenerato,
+          tag_immagine: data.tagImmagine,
+          lista_parole: data.listaParole,
+          difficolta: data.difficolta,
+          pdf_url: null,
+        })
+        .select("*")
+        .single();
+
+      if (error || !inserted) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error?.message ?? "Errore salvataggio scheda" });
+      }
+
+      const sheet = {
+        id: inserted.id,
+        userId: inserted.user_id,
+        patientId: inserted.patient_id,
+        fonema: inserted.fonema,
+        interesse: inserted.interesse,
+        tipoOutput: inserted.tipo_output,
+        testoGenerato: inserted.testo_generato,
+        tagImmagine: inserted.tag_immagine,
+        listaParole: inserted.lista_parole,
+        difficolta: inserted.difficolta,
+        pdfUrl: inserted.pdf_url,
+        createdAt: new Date(inserted.created_at),
+      };
+
       if (piano === "trial") ctx.user.trialSchedeUsate = (ctx.user.trialSchedeUsate ?? 0) + 1; else ctx.user.schedeMese = (ctx.user.schedeMese ?? 0) + 1;
       return { sheet, remaining: limit - used - 1, totalUsed: used + 1 };
     }),

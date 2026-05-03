@@ -13,13 +13,13 @@ import {
 
 export default function SheetDetail() {
   const { id } = useParams<{ id: string }>();
-  const sheetId = Number(id);
+  const sheetId = id ?? "";
 
   const { user } = useAuth();
 
   const { data: sheet, isLoading } = trpc.sheets.detail.useQuery(
     { id: sheetId },
-    { enabled: !isNaN(sheetId) }
+    { enabled: Boolean(sheetId) }
   );
 
   const generatePdf = trpc.sheets.generatePdf.useMutation({
