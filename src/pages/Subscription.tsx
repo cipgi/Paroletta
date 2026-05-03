@@ -23,6 +23,7 @@ export default function SubscriptionPage() {
   const renewalDate = subscription?.currentPeriodEnd
     ? new Date(subscription.currentPeriodEnd).toLocaleDateString("it-IT")
     : "-";
+  const canActivateTrial = !subscription;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -36,9 +37,15 @@ export default function SubscriptionPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-slate-600">Nessun piano free disponibile. Con il piano mensile ottieni fino a 100 schede/mese, gestione pazienti e archivio completo.</p>
+          {canActivateTrial && (
+            <Button variant="outline" onClick={() => updatePlan.mutate({ piano: "trial" })} disabled={updatePlan.isPending}>
+              Attiva trial (15 giorni)
+            </Button>
+          )}
           <Button className="bg-teal-600 hover:bg-teal-700" onClick={() => updatePlan.mutate({ piano: "base" })} disabled={updatePlan.isPending}>
             Attiva abbonamento mensile
           </Button>
+          {updatePlan.error && <p className="text-sm text-red-600">{updatePlan.error.message}</p>}
         </CardContent>
       </Card>
 

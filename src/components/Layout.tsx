@@ -31,6 +31,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { trpc } from "@/providers/trpc";
+import { isSubscriptionCurrentlyValid } from "@/lib/subscription";
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { user, logout, isAuthenticated, isLoading } = useAuth();
@@ -77,11 +78,12 @@ export default function Layout({ children }: { children: ReactNode }) {
   if (!isAuthenticated && location.pathname !== "/login") {
     return <Navigate to="/login" replace />;
   }
-  const trialStartedAt = subscription?.createdAt ? new Date(subscription.createdAt).getTime() : Date.now();
-  const trialEndsAt = trialStartedAt + 15 * 24 * 60 * 60 * 1000;
-  const isTrialExpired = Date.now() > trialEndsAt;
-  const hasActiveSubscription = subscription?.status === "attivo";
-  const showPaywall = isAuthenticated && !hasActiveSubscription && isTrialExpired;
+  const hasValidSubscription = isSubscriptionCurrentlyValid(subscription);
+  const mustChooseSubscription = isAuthenticated && !hasValidSubscription && location.pathname !== "/abbonamento";
+
+  if (mustChooseSubscription) {
+    return <Navigate to="/abbonamento" replace />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
@@ -192,17 +194,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         </nav>
 
         <main className="flex-1 p-6 md:p-8 overflow-auto">
-          {showPaywall ? (
-            <div className="max-w-xl mx-auto">
-              <div className="bg-white border rounded-xl p-6 space-y-4">
-                <h2 className="text-xl font-semibold text-slate-800">Abbonamento non attivo</h2>
-                <p className="text-slate-600">Il tuo periodo di prova di 15 giorni è terminato. Attiva il piano Base a €14.99/mese per continuare a usare Paroletta e generare fino a 100 schede al mese.</p>
-                <Button className="bg-teal-600 hover:bg-teal-700" onClick={() => navigate("/abbonamento")}>
-                  Vai alla scelta abbonamento
-                </Button>
-              </div>
-            </div>
-          ) : children}
+          {children}
         </main>
       </div>
 
