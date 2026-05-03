@@ -6,6 +6,7 @@ import { env, supabaseConfigured } from "./lib/env";
 import { supabase } from "./lib/supabase";
 import { signSessionToken } from "./oauth/session";
 import { upsertUser } from "./queries/users";
+import { appDb } from "./lib/db";
 
 export async function handleSupabaseGoogleAuth(c: Context) {
   if (!supabaseConfigured) {
@@ -56,6 +57,19 @@ export async function handleSupabaseGoogleCallback(c: Context) {
     lastSignInAt: new Date(),
     role: "user",
   });
+  const { error: profileError } = await appDb()
+    .from("profiles")
+    .upsert(
+      {
+        id: user.id,
+        email: userEmail,
+        name: userName,
+      },
+      { onConflict: "id" },
+    );
+  if (profileError) {
+    return c.json({ error: profileError.message }, 500);
+  }
 
   const token = await signSessionToken({ unionId, clientId: env.supabaseUrl || "supabase" });
   const cookieOpts = getSessionCookieOptions(c.req.raw.headers);
