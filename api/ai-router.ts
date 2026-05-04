@@ -22,34 +22,40 @@ function buildPrompt(params: {
     ? `- Vincolo o aspetto specifico richiesto dal logopedista: "${params.aspettoSpecifico}"`
     : "- Vincolo o aspetto specifico richiesto dal logopedista: nessuno";
 
-  return `Sei un logopedista esperto con 15 anni di esperienza in riabilitazione del linguaggio pediatrico. Devi creare materiale didattico personalizzato per un bambino.
+  return `Sei un logopedista esperto in riabilitazione del linguaggio pediatrico. Devi creare materiale didattico personalizzato.
 
 PARAMETRI CLINICI:
-- Età del pambino: ${params.eta}
+- Età del bambino: ${params.eta} anni (compresa tra 5 e 10 anni)
 - Fonema / obiettivo target: "${params.fonema}"
 - Interesse del bambino: "${params.interesse}"
 - Tipo di output richiesto: ${params.tipoOutput}
 ${aspettoSpecificoLine}
 
-ISTRUZIONI:
-1. Se il tipo è "storia": scrivi una storia breve (max 150 parole) che includa naturalmente parole con il fonema target. La storia deve essere coinvolgente per un bambino interessato a "${params.interesse}".
-2. Se il tipo è "filastrocca": componi una filastrocca ritmata e divertente di 8-12 versi che faccia pratica sul fonema "${params.fonema}".
-3. Se il tipo è "lista": fornisci una lista di 15-20 parole divise per difficoltà crescente (semplici, medie, complesse) che contengano il fonema target.
+LINEE GUIDA PER LA SEMPLICITÀ DEL TESTO (REGOLE FONDAMENTALI):
+- Usa un linguaggio ESTREMAMENTE semplice, quotidiano e letterale.
+- Costruisci frasi brevi, lineari e dirette (soggetto, verbo, complemento). Evita le frasi subordinate.
+- Usa SOLO tempi verbali semplici: presente indicativo, imperfetto o passato prossimo. 
+- È SEVERAMENTE VIETATO l'uso di congiuntivo, condizionale, passato remoto, trapassato o forme passive.
+- Nessun vocabolo astratto, arcaico o complesso.
+
+ISTRUZIONI DI GENERAZIONE:
+1. Se il tipo è "storia": scrivi una storia brevissima (max 150 parole) sul tema "${params.interesse}". Inserisci in modo naturale le parole contenenti il fonema "${params.fonema}".
+2. Se il tipo è "filastrocca": componi una filastrocca facile e ritmata (8-12 versi) a tema "${params.interesse}", usando parole con il fonema "${params.fonema}".
+3. Se il tipo è "lista": crea una lista di 15-20 parole con il fonema "${params.fonema}", divise per difficoltà (semplici, medie, complesse) e vicine agli interessi del bambino.
 
 Devi rispondere ESCLUSIVAMENTE in formato JSON valido con questa struttura esatta:
 {
-  "testoGenerato": "il testo completo generato",
-  "tagImmagine": "una singola parola chiave in italiano per l'illustrazione (es: dinosauro, principessa, palla, gatto, auto)",
+  "testoGenerato": "il testo completo della storia, filastrocca o lista",
+  "tagImmagine": "una singola parola chiave in italiano per l'illustrazione (es: dinosauro, palla, gatto)",
   "listaParole": ["parola1", "parola2", "parola3"],
   "difficolta": "bassa" | "media" | "alta"
 }
 
-Regole:
-- Non includere MAI testo esterno al JSON.
-- Il campo tagImmagine deve essere una singola parola italiana.
-- Adatta lessico e struttura all'età indicata.
-- L'interesse del bambino deve influenzare il contenuto.
-- Se è presente un vincolo specifico del logopedista, rispettalo rigorosamente.`;
+REGOLE RIGIDE PER IL JSON:
+- Non includere MAI testo o formattazione markdown (come \`\`\`json) all'esterno del blocco JSON.
+- Corrispondenza Parole: Nel campo "listaParole", se hai generato una "storia" o "filastrocca", devi inserire ESATTAMENTE ED ESCLUSIVAMENTE le parole contenenti il fonema target che hai effettivamente scritto dentro "testoGenerato". Non inventare o aggiungere parole che non compaiono nel testo. Se hai generato una "lista", inserisci qui le parole dell'elenco.
+- Il campo "tagImmagine" deve essere un singolo sostantivo (niente aggettivi o frasi).
+- Rispetta rigorosamente il vincolo specifico del logopedista, se presente.`;
 }
 
 async function callOpenAI(prompt: string): Promise<unknown> {
