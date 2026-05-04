@@ -206,7 +206,13 @@ export const aiRouter = createRouter({
         .maybeSingle();
       if (planError) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: planError.message });
       const limit = planData?.sheet_limit ?? 5;
-      const used = piano === "trial" ? (ctx.user.trialSchedeUsate ?? 0) : (ctx.user.schedeMese ?? 0);
+      const { data: profileUsage, error: profileUsageError } = await appDb()
+        .from("profiles")
+        .select("trial_schede_usate,schede_mese")
+        .eq("id", supabaseUserId)
+        .single();
+      if (profileUsageError) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: profileUsageError.message });
+      const used = piano === "trial" ? (profileUsage.trial_schede_usate ?? 0) : (profileUsage.schede_mese ?? 0);
       if (used >= limit) throw new TRPCError({ code: "FORBIDDEN", message: `Hai raggiunto il limite di ${limit} schede per il piano ${piano}. Passa a un piano superiore per continuare.` });
       const prompt = buildPrompt({
         eta: input.eta,
@@ -243,6 +249,9 @@ export const aiRouter = createRouter({
         .single();
 
       if (error || !inserted) {
+        if (error?.message?.includes("sheet_limit_reached")) {
+          throw new TRPCError({ code: "FORBIDDEN", message: `Hai raggiunto il limite di ${limit} schede per il piano ${piano}. Passa a un piano superiore per continuare.` });
+        }
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error?.message ?? "Errore salvataggio scheda" });
       }
 
@@ -261,7 +270,14 @@ export const aiRouter = createRouter({
         createdAt: new Date(inserted.created_at),
       };
 
-      if (piano === "trial") ctx.user.trialSchedeUsate = (ctx.user.trialSchedeUsate ?? 0) + 1; else ctx.user.schedeMese = (ctx.user.schedeMese ?? 0) + 1;
-      return { sheet, remaining: limit - used - 1, totalUsed: used + 1 };
+      const { data: updatedUsage, error: updatedUsageError } = await appDb()
+        .from("profiles")
+        .select("trial_schede_usate,schede_mese")
+        .eq("id", supabaseUserId)
+        .single();
+      if (updatedUsageError) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: updatedUsageError.message });
+
+      const totalUsed = piano === "trial" ? (updatedUsage.trial_schede_usate ?? 0) : (updatedUsage.schede_mese ?? 0);
+      return { sheet, remaining: Math.max(limit - totalUsed, 0), totalUsed };
     }),
 });
