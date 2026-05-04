@@ -11,8 +11,18 @@ const aiResponseSchema = z.object({
   difficolta: z.enum(["bassa", "media", "alta"]),
 });
 
-function sanitizeWordsFromText(text: string, words: string[]): string[] {
+function normalizeFonemaForMatch(fonema: string): string {
+  return fonema
+    .toLocaleLowerCase("it-IT")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z]/g, "");
+}
+
+function sanitizeWordsFromText(text: string, words: string[], fonema: string): string[] {
   const normalizedText = text.toLocaleLowerCase("it-IT");
+  const targetFonema = normalizeFonemaForMatch(fonema);
+
   const uniqueWords = Array.from(
     new Set(words.map((word) => word.trim()).filter(Boolean))
   );
@@ -22,7 +32,17 @@ function sanitizeWordsFromText(text: string, words: string[]): string[] {
       .toLocaleLowerCase("it-IT")
       .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const wordRegex = new RegExp(`(^|[^\\p{L}\\p{N}_])${escapedWord}([^\\p{L}\\p{N}_]|$)`, "u");
-    return wordRegex.test(normalizedText);
+    if (!wordRegex.test(normalizedText)) return false;
+
+    if (!targetFonema) return true;
+
+    const normalizedWord = word
+      .toLocaleLowerCase("it-IT")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z]/g, "");
+
+    return normalizedWord.includes(targetFonema);
   });
 }
 
@@ -202,7 +222,8 @@ export const aiRouter = createRouter({
       const data = parsed.data;
       const sanitizedWords = sanitizeWordsFromText(
         data.testoGenerato,
-        data.listaParole
+        data.listaParole,
+        input.fonema
       );
       const { data: inserted, error } = await appDb()
         .from("sheets")

@@ -2,6 +2,14 @@ function escapePdfText(input: string): string {
   return input.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 }
 
+function normalizePdfText(input: string): string {
+  return input
+    .normalize("NFC")
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/\u2026/g, "...");
+}
+
 function wrapText(text: string, maxChars = 85): string[] {
   const words = text.replace(/\s+/g, " ").trim().split(" ");
   const lines: string[] = [];
@@ -62,9 +70,9 @@ export function createDidacticPdf(params: {
   lines.push(`(${escapePdfText(`Materiale a cura del Dott. ${params.watermarkDoctor}`)}) Tj ET`);
   lines.push("0 g");
 
-  const contentStream = lines.join("\n");
+  const contentStream = normalizePdfText(lines.join("\n"));
 
-  const streamLength = Buffer.byteLength(contentStream, "utf8");
+  const streamLength = Buffer.byteLength(contentStream, "latin1");
 
   const objects = [
     "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj",
@@ -88,5 +96,5 @@ export function createDidacticPdf(params: {
   }
   pdf += `trailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
 
-  return new TextEncoder().encode(pdf);
+  return Uint8Array.from(Buffer.from(normalizePdfText(pdf), "latin1"));
 }
