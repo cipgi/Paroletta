@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -47,12 +48,14 @@ export default function Generator() {
         fonema?: string;
         interesse?: string;
         tipoOutput?: "storia" | "filastrocca" | "lista";
+        aspettoSpecifico?: string;
       };
       return {
         eta: parsed.eta ?? "6 anni",
         fonema: parsed.fonema && fonemi.includes(parsed.fonema) ? parsed.fonema : "r",
         interesse: parsed.interesse && interessi.includes(parsed.interesse) ? parsed.interesse : "dinosauro",
         tipoOutput: parsed.tipoOutput ?? "storia",
+        aspettoSpecifico: parsed.aspettoSpecifico ?? "",
       };
     } catch {
       return null;
@@ -63,10 +66,11 @@ export default function Generator() {
   const [fonema, setFonema] = useState(savedPreferences?.fonema ?? "r");
   const [interesse, setInteresse] = useState(savedPreferences?.interesse ?? "dinosauro");
   const [tipoOutput, setTipoOutput] = useState<"storia" | "filastrocca" | "lista">(savedPreferences?.tipoOutput ?? "storia");
+  const [aspettoSpecifico, setAspettoSpecifico] = useState(savedPreferences?.aspettoSpecifico ?? "");
 
   useEffect(() => {
-    localStorage.setItem("generator-preferences", JSON.stringify({ eta, fonema, interesse, tipoOutput }));
-  }, [eta, fonema, interesse, tipoOutput]);
+    localStorage.setItem("generator-preferences", JSON.stringify({ eta, fonema, interesse, tipoOutput, aspettoSpecifico }));
+  }, [eta, fonema, interesse, tipoOutput, aspettoSpecifico]);
 
   const generate = trpc.ai.generate.useMutation({
     onSuccess: (data) => {
@@ -80,6 +84,7 @@ export default function Generator() {
       fonema,
       interesse,
       tipoOutput,
+      aspettoSpecifico: aspettoSpecifico.trim() || undefined,
     });
   };
 
@@ -170,6 +175,17 @@ export default function Generator() {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="aspettoSpecifico">Aspetto specifico (opzionale)</Label>
+            <Textarea
+              id="aspettoSpecifico"
+              value={aspettoSpecifico}
+              onChange={(e) => setAspettoSpecifico(e.target.value)}
+              placeholder='es. "Non usare verbi al passato"'
+              rows={3}
+            />
           </div>
 
           <Button

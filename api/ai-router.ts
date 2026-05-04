@@ -16,7 +16,12 @@ function buildPrompt(params: {
   fonema: string;
   interesse: string;
   tipoOutput: "storia" | "filastrocca" | "lista";
+  aspettoSpecifico?: string;
 }): string {
+  const aspettoSpecificoLine = params.aspettoSpecifico
+    ? `- Vincolo o aspetto specifico richiesto dal logopedista: "${params.aspettoSpecifico}"`
+    : "- Vincolo o aspetto specifico richiesto dal logopedista: nessuno";
+
   return `Sei un logopedista esperto con 15 anni di esperienza in riabilitazione del linguaggio pediatrico. Devi creare materiale didattico personalizzato per un bambino.
 
 PARAMETRI CLINICI:
@@ -24,6 +29,7 @@ PARAMETRI CLINICI:
 - Fonema / obiettivo target: "${params.fonema}"
 - Interesse del bambino: "${params.interesse}"
 - Tipo di output richiesto: ${params.tipoOutput}
+${aspettoSpecificoLine}
 
 ISTRUZIONI:
 1. Se il tipo è "storia": scrivi una storia breve (max 150 parole) che includa naturalmente parole con il fonema target. La storia deve essere coinvolgente per un bambino interessato a "${params.interesse}".
@@ -42,7 +48,8 @@ Regole:
 - Non includere MAI testo esterno al JSON.
 - Il campo tagImmagine deve essere una singola parola italiana.
 - Adatta lessico e struttura all'età indicata.
-- L'interesse del bambino deve influenzare il contenuto.`;
+- L'interesse del bambino deve influenzare il contenuto.
+- Se è presente un vincolo specifico del logopedista, rispettalo rigorosamente.`;
 }
 
 async function callOpenAI(prompt: string): Promise<unknown> {
@@ -127,6 +134,7 @@ export const aiRouter = createRouter({
         fonema: z.string().max(10),
         interesse: z.string().max(100),
         tipoOutput: z.enum(["storia", "filastrocca", "lista"]),
+        aspettoSpecifico: z.string().max(400).optional(),
         patientId: z.string().uuid().optional(),
       })
     )
@@ -153,7 +161,13 @@ export const aiRouter = createRouter({
       const limit = planLimits[piano] ?? 5;
       const used = piano === "trial" ? (ctx.user.trialSchedeUsate ?? 0) : (ctx.user.schedeMese ?? 0);
       if (used >= limit) throw new TRPCError({ code: "FORBIDDEN", message: `Hai raggiunto il limite di ${limit} schede per il piano ${piano}. Passa a un piano superiore per continuare.` });
-      const prompt = buildPrompt({ eta: input.eta, fonema: input.fonema, interesse: input.interesse, tipoOutput: input.tipoOutput });
+      const prompt = buildPrompt({
+        eta: input.eta,
+        fonema: input.fonema,
+        interesse: input.interesse,
+        tipoOutput: input.tipoOutput,
+        aspettoSpecifico: input.aspettoSpecifico,
+      });
       let raw: unknown;
       try { raw = await callOpenAI(prompt); } catch { raw = mockAIResponse({ eta: input.eta, fonema: input.fonema, interesse: input.interesse, tipoOutput: input.tipoOutput }); }
       const parsed = aiResponseSchema.safeParse(raw);
