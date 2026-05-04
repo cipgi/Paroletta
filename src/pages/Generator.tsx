@@ -39,6 +39,7 @@ const fonemi = ["r", "s", "l", "t", "d", "k", "g", "p", "b", "f", "v"];
 
 export default function Generator() {
   const navigate = useNavigate();
+  const utils = trpc.useUtils();
   const savedPreferences = (() => {
     const saved = localStorage.getItem("generator-preferences");
     if (!saved) return null;
@@ -73,7 +74,12 @@ export default function Generator() {
   }, [eta, fonema, interesse, tipoOutput, aspettoSpecifico]);
 
   const generate = trpc.ai.generate.useMutation({
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
+      await Promise.all([
+        utils.sheets.list.invalidate(),
+        utils.auth.me.invalidate(),
+        utils.subscriptions.mySubscription.invalidate(),
+      ]);
       navigate(`/sheets/${data.sheet.id}`);
     },
   });
