@@ -34,27 +34,41 @@ export const subscriptionsRouter = createRouter({
       updatedAt: data.updated_at,
     };
   }),
-  updatePlan: authedQuery.input(z.object({ piano: z.enum(["trial", "base"]), seatsCount: z.number().min(1).optional() })).mutation(async ({ ctx, input }) => {
-    const planLimits: Record<string, number> = { trial: 15, base: 100 };
+  plans: authedQuery.query(async () => {
+    const { data, error } = await appDb().from("subscription_plans").select("code,name,description,sheet_limit,duration_days,is_trial,active").eq("active", true).order("is_trial", { ascending: false });
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((plan) => ({
+      code: plan.code,
+      name: plan.name,
+      description: plan.description,
+      sheetLimit: plan.sheet_limit,
+      durationDays: plan.duration_days,
+      isTrial: plan.is_trial,
+      active: plan.active,
+    }));
+  }),
+  updatePlan: authedQuery.input(z.object({ piano: z.string().min(1), seatsCount: z.number().min(1).optional() })).mutation(async ({ ctx, input }) => {
     const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
     const seatsCount = input.seatsCount ?? 1;
+    const { data: selectedPlan, error: selectedPlanError } = await appDb().from("subscription_plans").select("code,sheet_limit,duration_days,is_trial,active").eq("code", input.piano).eq("active", true).maybeSingle();
+    if (selectedPlanError) throw new Error(selectedPlanError.message);
+    if (!selectedPlan) throw new Error("Piano non valido o non disponibile");
+
     const { data: existingSub, error: existingSubError } = await appDb().from("subscriptions").select("status,plan,created_at,current_period_start").eq("user_id", supabaseUserId).maybeSingle();
     if (existingSubError) throw new Error(existingSubError.message);
-    if (input.piano === "trial" && existingSub) {
+    if (selectedPlan.is_trial && existingSub) {
       throw new Error("Il trial può essere attivato una sola volta per account");
     }
 
     const { error: profileError } = await appDb().from("profiles").update({ piano: input.piano, seats: seatsCount }).eq("id", supabaseUserId);
     if (profileError) throw new Error(profileError.message);
-    const status = input.piano === "trial" ? "trial" : "attivo";
+    const status = selectedPlan.is_trial ? "trial" : "attivo";
     const now = new Date().toISOString();
-    const periodEnd = input.piano === "trial"
-      ? new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString()
-      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const periodEnd = new Date(Date.now() + selectedPlan.duration_days * 24 * 60 * 60 * 1000).toISOString();
     const { error: subError } = await appDb().from("subscriptions").upsert({ user_id: supabaseUserId, status, plan: input.piano, seats_count: seatsCount, current_period_start: existingSub?.current_period_start ?? now, current_period_end: periodEnd, cancel_at_period_end: false }, { onConflict: "user_id" });
     if (subError) throw new Error(subError.message);
     ctx.user.piano = input.piano;
     ctx.user.seats = seatsCount;
-    return { piano: input.piano, limit: planLimits[input.piano] ?? 5 };
+    return { piano: input.piano, limit: selectedPlan.sheet_limit };
   }),
 });

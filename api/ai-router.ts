@@ -161,7 +161,6 @@ export const aiRouter = createRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const piano = ctx.user.piano ?? "trial";
-      const planLimits: Record<string, number> = { trial: 15, base: 100 };
       const supabaseUserId = getSupabaseUserIdFromUnionId(ctx.user.unionId);
       if (!supabaseUserId) {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Utente Supabase non valido" });
@@ -179,7 +178,14 @@ export const aiRouter = createRouter({
       if (!hasActiveSubscription && !hasTrialAccess) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Il tuo abbonamento non è attivo. Riattivalo dalle impostazioni per continuare." });
       }
-      const limit = planLimits[piano] ?? 5;
+      const { data: planData, error: planError } = await appDb()
+        .from("subscription_plans")
+        .select("sheet_limit")
+        .eq("code", piano)
+        .eq("active", true)
+        .maybeSingle();
+      if (planError) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: planError.message });
+      const limit = planData?.sheet_limit ?? 5;
       const used = piano === "trial" ? (ctx.user.trialSchedeUsate ?? 0) : (ctx.user.schedeMese ?? 0);
       if (used >= limit) throw new TRPCError({ code: "FORBIDDEN", message: `Hai raggiunto il limite di ${limit} schede per il piano ${piano}. Passa a un piano superiore per continuare.` });
       const prompt = buildPrompt({
