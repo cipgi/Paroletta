@@ -11,6 +11,21 @@ const aiResponseSchema = z.object({
   difficolta: z.enum(["bassa", "media", "alta"]),
 });
 
+function sanitizeWordsFromText(text: string, words: string[]): string[] {
+  const normalizedText = text.toLocaleLowerCase("it-IT");
+  const uniqueWords = Array.from(
+    new Set(words.map((word) => word.trim()).filter(Boolean))
+  );
+
+  return uniqueWords.filter((word) => {
+    const escapedWord = word
+      .toLocaleLowerCase("it-IT")
+      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const wordRegex = new RegExp(`(^|[^\\p{L}\\p{N}_])${escapedWord}([^\\p{L}\\p{N}_]|$)`, "u");
+    return wordRegex.test(normalizedText);
+  });
+}
+
 function buildPrompt(params: {
   eta: string;
   fonema: string;
@@ -179,6 +194,10 @@ export const aiRouter = createRouter({
       const parsed = aiResponseSchema.safeParse(raw);
       if (!parsed.success) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI response format invalid" });
       const data = parsed.data;
+      const sanitizedWords = sanitizeWordsFromText(
+        data.testoGenerato,
+        data.listaParole
+      );
       const { data: inserted, error } = await appDb()
         .from("sheets")
         .insert({
@@ -189,7 +208,7 @@ export const aiRouter = createRouter({
           tipo_output: input.tipoOutput,
           testo_generato: data.testoGenerato,
           tag_immagine: data.tagImmagine,
-          lista_parole: data.listaParole,
+          lista_parole: sanitizedWords,
           difficolta: data.difficolta,
           pdf_url: null,
         })
