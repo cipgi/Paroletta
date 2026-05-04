@@ -8,6 +8,7 @@ export default function SubscriptionPage() {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
   const { data: subscription } = trpc.subscriptions.mySubscription.useQuery();
+  const { data: plans } = trpc.subscriptions.plans.useQuery();
   const updatePlan = trpc.subscriptions.updatePlan.useMutation({
     onSuccess: async () => {
       await utils.invalidate();
@@ -33,18 +34,26 @@ export default function SubscriptionPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Piano Mensile Paroletta</CardTitle>
+          <CardTitle>Piani disponibili</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-slate-600">Nessun piano free disponibile. Con il piano mensile ottieni fino a 100 schede/mese, gestione pazienti e archivio completo.</p>
-          {canActivateTrial && (
-            <Button variant="outline" onClick={() => updatePlan.mutate({ piano: "trial" })} disabled={updatePlan.isPending}>
-              Attiva trial (15 giorni)
-            </Button>
-          )}
-          <Button className="bg-teal-600 hover:bg-teal-700" onClick={() => updatePlan.mutate({ piano: "base" })} disabled={updatePlan.isPending}>
-            Attiva abbonamento mensile
-          </Button>
+          {(plans ?? []).map((plan) => (
+            <div key={plan.code} className="rounded-lg border p-4 space-y-2">
+              <p className="font-medium">{plan.name} ({plan.code})</p>
+              {plan.description && <p className="text-sm text-slate-600">{plan.description}</p>}
+              <p className="text-sm text-slate-600">{plan.sheetLimit} schede / {plan.durationDays} giorni</p>
+              {(!plan.isTrial || canActivateTrial) && (
+                <Button
+                  variant={plan.isTrial ? "outline" : "default"}
+                  className={plan.isTrial ? "" : "bg-teal-600 hover:bg-teal-700"}
+                  onClick={() => updatePlan.mutate({ piano: plan.code })}
+                  disabled={updatePlan.isPending}
+                >
+                  Attiva {plan.name}
+                </Button>
+              )}
+            </div>
+          ))}
           {updatePlan.error && <p className="text-sm text-red-600">{updatePlan.error.message}</p>}
         </CardContent>
       </Card>
