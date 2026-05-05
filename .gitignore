@@ -39,3 +39,5 @@ build/
 # Test coverage
 coverage/
 .nyc_output/
+
+!db/migrations/008_auth_profile_guard.sql
