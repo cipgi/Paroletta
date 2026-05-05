@@ -16,6 +16,9 @@ export default function Dashboard() {
   const { data: sheetsList } = trpc.sheets.list.useQuery(undefined, {
     enabled: isAuthenticated,
   });
+  const { data: sheetsCount } = trpc.sheets.count.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
   const { data: patientsList } = trpc.patients.list.useQuery(undefined, {
     enabled: isAuthenticated,
   });
@@ -31,7 +34,7 @@ export default function Dashboard() {
     return null;
   }
 
-  const totalSheets = sheetsList?.length ?? 0;
+  const totalSheets = sheetsCount ?? sheetsList?.length ?? 0;
   const totalPatients = patientsList?.length ?? 0;
   const recentSheets = sheetsList?.slice(0, 5) ?? [];
 

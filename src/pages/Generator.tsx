@@ -75,8 +75,15 @@ export default function Generator() {
 
   const generate = trpc.ai.generate.useMutation({
     onSuccess: async (data) => {
+      utils.sheets.list.setData(undefined, (current) => {
+        if (!current) return current;
+        return [data.sheet, ...current];
+      });
+      utils.sheets.count.setData(undefined, (current) => (current ?? 0) + 1);
+
       await Promise.all([
         utils.sheets.list.invalidate(),
+        utils.sheets.count.invalidate(),
         utils.auth.me.invalidate(),
         utils.subscriptions.mySubscription.invalidate(),
       ]);
