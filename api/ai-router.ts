@@ -180,24 +180,26 @@ export const aiRouter = createRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const piano = ctx.user.piano ?? "trial";
       const supabaseUserId = getSupabaseUserIdFromUnionId(ctx.user.unionId);
       if (!supabaseUserId) {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Utente Supabase non valido" });
       }
       const { data: subscription, error: subscriptionError } = await appDb()
         .from("subscriptions")
-        .select("status,created_at")
+        .select("status,plan,created_at,current_period_end")
         .eq("user_id", supabaseUserId)
         .maybeSingle();
       if (subscriptionError) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: subscriptionError.message });
-      const trialStartedAt = subscription?.created_at ? new Date(subscription.created_at).getTime() : Date.now();
+      const nowMs = Date.now();
+      const trialStartedAt = subscription?.created_at ? new Date(subscription.created_at).getTime() : nowMs;
       const trialEndsAt = trialStartedAt + 15 * 24 * 60 * 60 * 1000;
-      const hasTrialAccess = Date.now() <= trialEndsAt;
-      const hasActiveSubscription = subscription?.status === "attivo";
+      const hasTrialAccess = subscription?.status === "trial" && nowMs <= trialEndsAt;
+      const hasActiveSubscription = subscription?.status === "attivo"
+        && (!!subscription.current_period_end ? new Date(subscription.current_period_end).getTime() >= nowMs : true);
       if (!hasActiveSubscription && !hasTrialAccess) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Il tuo abbonamento non è attivo. Riattivalo dalle impostazioni per continuare." });
       }
+      const piano = subscription?.plan ?? "trial";
       const { data: planData, error: planError } = await appDb()
         .from("subscription_plans")
         .select("sheet_limit")
