@@ -13,6 +13,15 @@ function requireSupabaseUserId(unionId: string) {
 const mapSheet = (s: any) => ({ id: s.id, userId: s.user_id, patientId: s.patient_id, fonema: s.fonema, interesse: s.interesse, tipoOutput: s.tipo_output, testoGenerato: s.testo_generato, tagImmagine: s.tag_immagine, listaParole: s.lista_parole, difficolta: s.difficolta, pdfUrl: s.pdf_url, createdAt: new Date(s.created_at) });
 
 export const sheetsRouter = createRouter({
+  count: authedQuery.query(async ({ ctx }) => {
+    const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
+    const { count, error } = await appDb()
+      .from("sheets")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", supabaseUserId);
+    if (error) throw new Error(error.message);
+    return count ?? 0;
+  }),
   list: authedQuery.query(async ({ ctx }) => {
     const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
     const { data, error } = await appDb().from("sheets").select("*").eq("user_id", supabaseUserId).order("created_at", { ascending: false });
