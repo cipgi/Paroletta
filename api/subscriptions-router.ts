@@ -35,7 +35,7 @@ export const subscriptionsRouter = createRouter({
     };
   }),
   plans: authedQuery.query(async () => {
-    const { data, error } = await appDb().from("subscription_plans").select("code,name,description,sheet_limit,duration_days,is_trial,active").eq("active", true).order("is_trial", { ascending: false });
+    const { data, error } = await appDb().from("subscription_plans").select("code,name,description,sheet_limit,duration_days,is_trial,active").eq("active", true).neq("code", "dev").order("is_trial", { ascending: false });
     if (error) throw new Error(error.message);
     return (data ?? []).map((plan) => ({
       code: plan.code,
