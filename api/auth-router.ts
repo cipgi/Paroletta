@@ -56,11 +56,13 @@ export const authRouter = createRouter({
         lastSignInAt: new Date(),
         role: "user",
       });
-      const initialPlan = input.initialPlan ?? "trial";
-      const { data: selectedPlan, error: selectedPlanError } = await appDb().from("subscription_plans").select("code,duration_days,is_trial,active").eq("code", initialPlan).eq("active", true).maybeSingle();
+      const requestedPlan = input.initialPlan ?? "trial";
+      const { data: selectedPlan, error: selectedPlanError } = await appDb().from("subscription_plans").select("code,duration_days,is_trial,active").eq("code", requestedPlan).eq("active", true).maybeSingle();
       if (selectedPlanError) throw new Error(selectedPlanError.message);
       if (!selectedPlan) throw new Error("Piano iniziale non valido");
+      if (!selectedPlan.is_trial) throw new Error("Il piano iniziale deve essere trial");
 
+      const initialPlan = selectedPlan.code;
       await ensureUserProfile(data.user.id, input.email, input.name ?? input.email.split("@")[0]);
       const { error: profileError } = await appDb().from("profiles").update({ piano: initialPlan, seats: 1 }).eq("id", data.user.id);
       if (profileError) throw new Error(profileError.message);
