@@ -21,8 +21,44 @@ export async function findUserByUnionId(unionId: string) {
     .eq("id", supabaseUserId)
     .maybeSingle();
 
-  if (error || !profile) {
+  if (error) {
     return cachedUser;
+  }
+
+  if (!profile) {
+    const authEmail = cachedUser?.email;
+    const fallbackName = cachedUser?.name ?? (authEmail ? authEmail.split("@")[0] : "Utente");
+    const { data: repairedProfile, error: repairError } = await appDb()
+      .from("profiles")
+      .upsert(
+        {
+          id: supabaseUserId,
+          email: authEmail ?? "",
+          name: fallbackName,
+        },
+        { onConflict: "id" },
+      )
+      .select("email,name,first_name,last_name,piano,seats,trial_schede_usate,schede_mese")
+      .maybeSingle();
+
+    if (repairError || !repairedProfile) {
+      return cachedUser;
+    }
+
+    return {
+      id: cachedUser?.id ?? nextUserId(),
+      unionId,
+      email: repairedProfile.email,
+      name: repairedProfile.name,
+      firstName: repairedProfile.first_name,
+      lastName: repairedProfile.last_name,
+      role: cachedUser?.role ?? "user",
+      piano: (repairedProfile.piano ?? "trial") as User["piano"],
+      seats: repairedProfile.seats ?? 1,
+      trialSchedeUsate: repairedProfile.trial_schede_usate ?? 0,
+      schedeMese: repairedProfile.schede_mese ?? 0,
+      lastSignInAt: cachedUser?.lastSignInAt,
+    };
   }
 
   return {
