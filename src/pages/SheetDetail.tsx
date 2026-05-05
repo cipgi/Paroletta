@@ -1,37 +1,90 @@
 import { useParams, Link } from "react-router";
+import { useRef } from "react";
 import { trpc } from "@/providers/trpc";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  FileText,
-  Download,
-  ArrowLeft,
-  Sparkles,
-} from "lucide-react";
+import { FileText, Download, ArrowLeft, Sparkles } from "lucide-react";
 
 export default function SheetDetail() {
   const { id } = useParams<{ id: string }>();
   const sheetId = id ?? "";
 
   const { user } = useAuth();
+  const sheetCardRef = useRef<HTMLDivElement | null>(null);
 
   const { data: sheet, isLoading } = trpc.sheets.detail.useQuery(
     { id: sheetId },
     { enabled: Boolean(sheetId) }
   );
 
-  const generatePdf = trpc.sheets.generatePdf.useMutation({
-    onSuccess: (data) => {
-      const a = document.createElement("a");
-      a.href = `data:application/pdf;base64,${data.data}`;
-      a.download = data.fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    },
-  });
+  const printSheetAsPdf = () => {
+    if (!sheetCardRef.current) return;
+
+    const printWindow = window.open(
+      "",
+      "_blank",
+      "noopener,noreferrer,width=1200,height=900"
+    );
+    if (!printWindow) return;
+
+    const styles = Array.from(
+      document.querySelectorAll('link[rel="stylesheet"], style')
+    )
+      .map(el => el.outerHTML)
+      .join("\n");
+
+    printWindow.document.write(`
+      <!doctype html>
+      <html lang="it">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>Scheda ${sheetId}</title>
+          ${styles}
+          <style>
+            body {
+              margin: 0;
+              padding: 24px;
+              background: #f8fafc;
+            }
+
+            .pdf-wrapper {
+              max-width: 1200px;
+              margin: 0 auto;
+            }
+
+            @page {
+              size: A4;
+              margin: 10mm;
+            }
+
+            @media print {
+              body {
+                padding: 0;
+                background: white;
+              }
+
+              .pdf-wrapper {
+                max-width: none;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="pdf-wrapper">${sheetCardRef.current.outerHTML}</div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+
+    printWindow.onload = () => {
+      printWindow.focus();
+      printWindow.print();
+      printWindow.onafterprint = () => printWindow.close();
+    };
+  };
 
   if (isLoading) {
     return (
@@ -57,7 +110,10 @@ export default function SheetDetail() {
 
   const words = (sheet.listaParole as string[] | null) ?? [];
 
-  const doctorName = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || user?.name || "Nome Utente";
+  const doctorName =
+    [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+    user?.name ||
+    "Nome Utente";
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -72,98 +128,109 @@ export default function SheetDetail() {
           <Button
             className="bg-teal-600 hover:bg-teal-700"
             size="sm"
-            onClick={() => generatePdf.mutate({ id: sheet.id })}
-            disabled={generatePdf.isPending}
+            onClick={printSheetAsPdf}
           >
             <Download className="w-4 h-4 mr-1" />
-            {generatePdf.isPending ? "Generazione..." : "Scarica PDF"}
+            Scarica PDF
           </Button>
         </div>
       </div>
 
       {/* Preview card */}
-      <Card className="border-2 border-slate-200">
-        <CardContent className="p-8">
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-slate-200 pb-4 mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <p className="font-bold text-slate-800">Paroletta</p>
-                <p className="text-xs text-slate-500">Scheda didattica personalizzata</p>
-              </div>
-            </div>
-            <Badge variant="outline" className="capitalize">
-              {sheet.tipoOutput}
-            </Badge>
-          </div>
-
-          {/* Meta */}
-          <div className="grid grid-cols-3 gap-4 mb-6 text-sm">
-            <div className="bg-slate-50 p-3 rounded-lg">
-              <p className="text-slate-500">Fonema target</p>
-              <p className="font-semibold text-slate-800 text-lg">/{sheet.fonema}/</p>
-            </div>
-            <div className="bg-slate-50 p-3 rounded-lg">
-              <p className="text-slate-500">Interesse</p>
-              <p className="font-semibold text-slate-800 capitalize">{sheet.interesse}</p>
-            </div>
-            <div className="bg-slate-50 p-3 rounded-lg">
-              <p className="text-slate-500">Difficoltà</p>
-              <p className="font-semibold text-slate-800 capitalize">{sheet.difficolta}</p>
-            </div>
-          </div>
-
-          {/* Content */}
-          <div className="space-y-4">
-            <h2 className="text-xl font-bold text-slate-800">
-              {sheet.tipoOutput === "storia" && "Storia"}
-              {sheet.tipoOutput === "filastrocca" && "Filastrocca"}
-              {sheet.tipoOutput === "lista" && "Lista di parole"}
-            </h2>
-
-            <div className="text-slate-700 leading-relaxed whitespace-pre-line text-lg">
-              {sheet.testoGenerato}
-            </div>
-
-            {words.length > 0 && (
-              <div className="pt-4">
-                <p className="text-sm font-medium text-slate-500 mb-2">Parole chiave:</p>
-                <div className="flex flex-wrap gap-2">
-                  {words.map((w) => (
-                    <Badge key={w} variant="secondary" className="text-sm">
-                      {w}
-                    </Badge>
-                  ))}
+      <div ref={sheetCardRef}>
+        <Card className="border-2 border-slate-200">
+          <CardContent className="p-8">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-200 pb-4 mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center">
+                  <Sparkles className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <p className="font-bold text-slate-800">Paroletta</p>
+                  <p className="text-xs text-slate-500">
+                    Scheda didattica personalizzata
+                  </p>
                 </div>
               </div>
-            )}
-          </div>
-
-          {/* Illustration placeholder */}
-          <div className="mt-8 p-6 bg-slate-50 rounded-xl text-center">
-            <p className="text-sm text-slate-500 mb-2">Illustrazione</p>
-            <div className="w-32 h-32 mx-auto bg-slate-200 rounded-lg flex items-center justify-center">
-              <span className="text-4xl">🎨</span>
+              <Badge variant="outline" className="capitalize">
+                {sheet.tipoOutput}
+              </Badge>
             </div>
-            <p className="text-xs text-slate-400 mt-2 capitalize">
-              Tag: {sheet.tagImmagine ?? "generico"}
-            </p>
-          </div>
 
-          {/* Watermark footer */}
-          <div className="mt-8 pt-4 border-t border-slate-200 text-center">
-            <p className="text-sm text-slate-500 italic">
-              Materiale a cura del Dott. {doctorName}
-            </p>
-            <p className="text-xs text-slate-400 mt-1">
-              Generato con Paroletta — www.paroletta.it
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+            {/* Meta */}
+            <div className="grid grid-cols-3 gap-4 mb-6 text-sm">
+              <div className="bg-slate-50 p-3 rounded-lg">
+                <p className="text-slate-500">Fonema target</p>
+                <p className="font-semibold text-slate-800 text-lg">
+                  /{sheet.fonema}/
+                </p>
+              </div>
+              <div className="bg-slate-50 p-3 rounded-lg">
+                <p className="text-slate-500">Interesse</p>
+                <p className="font-semibold text-slate-800 capitalize">
+                  {sheet.interesse}
+                </p>
+              </div>
+              <div className="bg-slate-50 p-3 rounded-lg">
+                <p className="text-slate-500">Difficoltà</p>
+                <p className="font-semibold text-slate-800 capitalize">
+                  {sheet.difficolta}
+                </p>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="space-y-4">
+              <h2 className="text-xl font-bold text-slate-800">
+                {sheet.tipoOutput === "storia" && "Storia"}
+                {sheet.tipoOutput === "filastrocca" && "Filastrocca"}
+                {sheet.tipoOutput === "lista" && "Lista di parole"}
+              </h2>
+
+              <div className="text-slate-700 leading-relaxed whitespace-pre-line text-lg">
+                {sheet.testoGenerato}
+              </div>
+
+              {words.length > 0 && (
+                <div className="pt-4">
+                  <p className="text-sm font-medium text-slate-500 mb-2">
+                    Parole chiave:
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {words.map(w => (
+                      <Badge key={w} variant="secondary" className="text-sm">
+                        {w}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Illustration placeholder */}
+            <div className="mt-8 p-6 bg-slate-50 rounded-xl text-center">
+              <p className="text-sm text-slate-500 mb-2">Illustrazione</p>
+              <div className="w-32 h-32 mx-auto bg-slate-200 rounded-lg flex items-center justify-center">
+                <span className="text-4xl">🎨</span>
+              </div>
+              <p className="text-xs text-slate-400 mt-2 capitalize">
+                Tag: {sheet.tagImmagine ?? "generico"}
+              </p>
+            </div>
+
+            {/* Watermark footer */}
+            <div className="mt-8 pt-4 border-t border-slate-200 text-center">
+              <p className="text-sm text-slate-500 italic">
+                Materiale a cura del Dott. {doctorName}
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                Generato con Paroletta — www.paroletta.it
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
