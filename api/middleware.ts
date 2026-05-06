@@ -1,11 +1,23 @@
 import { ErrorMessages } from "@contracts/constants";
 import { initTRPC, TRPCError } from "@trpc/server";
+import { getSafeClientErrorMessage } from "./lib/errors";
 import superjson from "superjson";
 import type { TrpcContext } from "./context";
 import { assertValidCsrfRequest } from "./lib/csrf";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
+  errorFormatter({ shape, error }) {
+    return {
+      ...shape,
+      message: getSafeClientErrorMessage(error.code),
+      data: {
+        ...shape.data,
+        path: undefined,
+        stack: undefined,
+      },
+    };
+  },
 });
 
 export const createRouter = t.router;
