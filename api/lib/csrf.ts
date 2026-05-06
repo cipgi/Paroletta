@@ -39,12 +39,58 @@ function tokensMatch(left: string, right: string): boolean {
   );
 }
 
+function firstForwardedValue(value: string | null): string | undefined {
+  return value?.split(",")[0]?.trim() || undefined;
+}
+
+function stripForwardedQuotes(value: string): string {
+  if (value.startsWith('"') && value.endsWith('"')) {
+    return value.slice(1, -1);
+  }
+
+  return value;
+}
+
+function parseForwardedHeader(headers: Headers): {
+  host?: string;
+  proto?: string;
+} {
+  const forwarded = firstForwardedValue(headers.get("forwarded"));
+  if (!forwarded) return {};
+
+  return forwarded
+    .split(";")
+    .reduce<{ host?: string; proto?: string }>((acc, part) => {
+      const [rawKey, ...rawValue] = part.split("=");
+      const key = rawKey?.trim().toLowerCase();
+      const value = stripForwardedQuotes(rawValue.join("=").trim());
+      if (key === "host" && value) acc.host = value;
+      if (key === "proto" && value) acc.proto = value;
+      return acc;
+    }, {});
+}
+
+function getRequestOrigin(req: Request): string {
+  const forwarded = parseForwardedHeader(req.headers);
+  const forwardedHost =
+    forwarded.host ?? firstForwardedValue(req.headers.get("x-forwarded-host"));
+  const forwardedProto =
+    forwarded.proto ??
+    firstForwardedValue(req.headers.get("x-forwarded-proto"));
+
+  if (forwardedHost && forwardedProto) {
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+
+  return new URL(req.url).origin;
+}
+
 function validateSameOrigin(req: Request): boolean {
   const origin = req.headers.get("origin");
   if (!origin) return true;
 
   try {
-    return new URL(origin).origin === new URL(req.url).origin;
+    return new URL(origin).origin === new URL(getRequestOrigin(req)).origin;
   } catch {
     return false;
   }

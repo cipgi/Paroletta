@@ -48,4 +48,50 @@ describe("CSRF validation", () => {
       new TRPCError({ code: "FORBIDDEN", message: ErrorMessages.csrf })
     );
   });
+
+  it("accepts same-origin requests behind an HTTPS reverse proxy", () => {
+    const request = requestWithCsrf();
+    request.headers.set("origin", "https://app.example.com");
+
+    expect(() =>
+      assertValidCsrfRequest(
+        new Request("http://internal:3000/api/trpc/auth.loginWithCredentials", {
+          method: "POST",
+          headers: request.headers,
+        })
+      )
+    ).toThrow(
+      new TRPCError({ code: "FORBIDDEN", message: ErrorMessages.csrf })
+    );
+
+    request.headers.set("x-forwarded-proto", "https");
+    request.headers.set("x-forwarded-host", "app.example.com");
+
+    expect(() =>
+      assertValidCsrfRequest(
+        new Request("http://internal:3000/api/trpc/auth.loginWithCredentials", {
+          method: "POST",
+          headers: request.headers,
+        })
+      )
+    ).not.toThrow();
+  });
+
+  it("accepts standard Forwarded headers from reverse proxies", () => {
+    const request = requestWithCsrf();
+    request.headers.set("origin", "https://app.example.com");
+    request.headers.set(
+      "forwarded",
+      "for=192.0.2.1;proto=https;host=app.example.com"
+    );
+
+    expect(() =>
+      assertValidCsrfRequest(
+        new Request("http://internal:3000/api/trpc/auth.loginWithCredentials", {
+          method: "POST",
+          headers: request.headers,
+        })
+      )
+    ).not.toThrow();
+  });
 });
