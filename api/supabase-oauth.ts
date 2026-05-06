@@ -8,13 +8,15 @@ import { signSessionToken } from "./oauth/session";
 import { upsertUser } from "./queries/users";
 import { appDb } from "./lib/db";
 import { sanitizeProfileNameOrFallback } from "./lib/sanitize";
+import { getSafeHttpErrorBody, logServerError } from "./lib/errors";
 
 export async function handleSupabaseGoogleAuth(c: Context) {
   if (!supabaseConfigured) {
-    return c.json(
-      { error: "Autenticazione con Supabase non configurata" },
-      503
-    );
+    logServerError(new Error("Supabase authentication is not configured"), {
+      method: c.req.method,
+      url: c.req.url,
+    });
+    return c.json(getSafeHttpErrorBody(503), 503);
   }
 
   const redirectTo = `${new URL(c.req.url).origin}/api/auth/google/callback`;
@@ -24,10 +26,11 @@ export async function handleSupabaseGoogleAuth(c: Context) {
   });
 
   if (error || !data.url) {
-    return c.json(
-      { error: error?.message ?? "Errore avvio login Google" },
-      500
-    );
+    logServerError(error ?? new Error("Missing Supabase OAuth redirect URL"), {
+      method: c.req.method,
+      url: c.req.url,
+    });
+    return c.json(getSafeHttpErrorBody(500), 500);
   }
 
   return c.redirect(data.url, 302);
@@ -35,20 +38,25 @@ export async function handleSupabaseGoogleAuth(c: Context) {
 
 export async function handleSupabaseGoogleCallback(c: Context) {
   if (!supabaseConfigured) {
-    return c.json(
-      { error: "Autenticazione con Supabase non configurata" },
-      503
-    );
+    logServerError(new Error("Supabase authentication is not configured"), {
+      method: c.req.method,
+      url: c.req.url,
+    });
+    return c.json(getSafeHttpErrorBody(503), 503);
   }
 
   const code = c.req.query("code");
   if (!code) {
-    return c.json({ error: "Code mancante nella callback Google" }, 400);
+    return c.json(getSafeHttpErrorBody(400), 400);
   }
 
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
   if (error || !data.user) {
-    return c.json({ error: error?.message ?? "Errore callback Google" }, 401);
+    logServerError(error ?? new Error("Missing Supabase OAuth callback user"), {
+      method: c.req.method,
+      url: c.req.url,
+    });
+    return c.json(getSafeHttpErrorBody(401), 401);
   }
 
   const user = data.user;
@@ -76,7 +84,8 @@ export async function handleSupabaseGoogleCallback(c: Context) {
     { onConflict: "id" }
   );
   if (profileError) {
-    return c.json({ error: profileError.message }, 500);
+    logServerError(profileError, { method: c.req.method, url: c.req.url });
+    return c.json(getSafeHttpErrorBody(500), 500);
   }
 
   const token = await signSessionToken({
