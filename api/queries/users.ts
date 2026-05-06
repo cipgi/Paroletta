@@ -1,10 +1,15 @@
 import { nextUserId, users, type User } from "../store";
 import { appDb } from "../lib/db";
+import { sanitizeProfileNameOrFallback } from "../lib/sanitize";
 
-type InsertUser = Omit<User, "id" | "piano" | "seats" | "trialSchedeUsate" | "schedeMese"> & Partial<Pick<User,"piano"|"seats"|"trialSchedeUsate"|"schedeMese">>;
+type InsertUser = Omit<
+  User,
+  "id" | "piano" | "seats" | "trialSchedeUsate" | "schedeMese"
+> &
+  Partial<Pick<User, "piano" | "seats" | "trialSchedeUsate" | "schedeMese">>;
 
 export async function findUserByUnionId(unionId: string) {
-  const cachedUser = users.find((u) => u.unionId === unionId);
+  const cachedUser = users.find(u => u.unionId === unionId);
 
   if (!unionId.startsWith("supabase:")) {
     return cachedUser;
@@ -17,7 +22,9 @@ export async function findUserByUnionId(unionId: string) {
 
   const { data: profile, error } = await appDb()
     .from("profiles")
-    .select("email,name,first_name,last_name,piano,seats,trial_schede_usate,schede_mese")
+    .select(
+      "email,name,first_name,last_name,piano,seats,trial_schede_usate,schede_mese"
+    )
     .eq("id", supabaseUserId)
     .maybeSingle();
 
@@ -27,7 +34,10 @@ export async function findUserByUnionId(unionId: string) {
 
   if (!profile) {
     const authEmail = cachedUser?.email;
-    const fallbackName = cachedUser?.name ?? (authEmail ? authEmail.split("@")[0] : "Utente");
+    const fallbackName = sanitizeProfileNameOrFallback(
+      cachedUser?.name,
+      authEmail ? authEmail.split("@")[0] : "Utente"
+    );
     const { data: repairedProfile, error: repairError } = await appDb()
       .from("profiles")
       .upsert(
@@ -36,9 +46,11 @@ export async function findUserByUnionId(unionId: string) {
           email: authEmail ?? "",
           name: fallbackName,
         },
-        { onConflict: "id" },
+        { onConflict: "id" }
       )
-      .select("email,name,first_name,last_name,piano,seats,trial_schede_usate,schede_mese")
+      .select(
+        "email,name,first_name,last_name,piano,seats,trial_schede_usate,schede_mese"
+      )
       .maybeSingle();
 
     if (repairError || !repairedProfile) {
@@ -49,7 +61,10 @@ export async function findUserByUnionId(unionId: string) {
       id: cachedUser?.id ?? nextUserId(),
       unionId,
       email: repairedProfile.email,
-      name: repairedProfile.name,
+      name: sanitizeProfileNameOrFallback(
+        repairedProfile.name,
+        repairedProfile.email?.split("@")[0] ?? "Utente"
+      ),
       firstName: repairedProfile.first_name,
       lastName: repairedProfile.last_name,
       role: cachedUser?.role ?? "user",
@@ -65,7 +80,10 @@ export async function findUserByUnionId(unionId: string) {
     id: cachedUser?.id ?? nextUserId(),
     unionId,
     email: profile.email,
-    name: profile.name,
+    name: sanitizeProfileNameOrFallback(
+      profile.name,
+      profile.email?.split("@")[0] ?? "Utente"
+    ),
     firstName: profile.first_name,
     lastName: profile.last_name,
     role: cachedUser?.role ?? "user",
@@ -78,20 +96,24 @@ export async function findUserByUnionId(unionId: string) {
 }
 
 export async function findUserByEmail(email: string) {
-  return users.find((u) => u.email === email);
+  return users.find(u => u.email === email);
 }
 
 export async function upsertUser(data: InsertUser) {
-  const existing = users.find((u) => u.unionId === data.unionId);
+  const safeName = sanitizeProfileNameOrFallback(
+    data.name,
+    data.email?.split("@")[0] ?? "Utente"
+  );
+  const existing = users.find(u => u.unionId === data.unionId);
   if (existing) {
-    Object.assign(existing, data, { lastSignInAt: new Date() });
+    Object.assign(existing, data, { name: safeName, lastSignInAt: new Date() });
     return;
   }
   users.push({
     id: nextUserId(),
     unionId: data.unionId,
     email: data.email,
-    name: data.name,
+    name: safeName,
     firstName: data.firstName ?? null,
     lastName: data.lastName ?? null,
     role: data.role ?? "user",
