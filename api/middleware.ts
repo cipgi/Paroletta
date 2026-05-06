@@ -2,15 +2,26 @@ import { ErrorMessages } from "@contracts/constants";
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import type { TrpcContext } from "./context";
+import { assertValidCsrfRequest } from "./lib/csrf";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
 });
 
 export const createRouter = t.router;
-export const publicQuery = t.procedure;
 
-const requireAuth = t.middleware(async (opts) => {
+const requireCsrf = t.middleware(async opts => {
+  if (opts.type === "mutation") {
+    assertValidCsrfRequest(opts.ctx.req);
+  }
+
+  return opts.next();
+});
+
+const baseProcedure = t.procedure.use(requireCsrf);
+export const publicQuery = baseProcedure;
+
+const requireAuth = t.middleware(async opts => {
   const { ctx, next } = opts;
 
   if (!ctx.user) {
@@ -24,7 +35,7 @@ const requireAuth = t.middleware(async (opts) => {
 });
 
 function requireRole(role: string) {
-  return t.middleware(async (opts) => {
+  return t.middleware(async opts => {
     const { ctx, next } = opts;
 
     if (!ctx.user || ctx.user.role !== role) {
@@ -38,5 +49,5 @@ function requireRole(role: string) {
   });
 }
 
-export const authedQuery = t.procedure.use(requireAuth);
+export const authedQuery = baseProcedure.use(requireAuth);
 export const adminQuery = authedQuery.use(requireRole("admin"));
