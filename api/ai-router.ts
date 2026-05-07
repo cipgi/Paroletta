@@ -19,19 +19,26 @@ function normalizeFonemaForMatch(fonema: string): string {
     .replace(/[^a-z]/g, "");
 }
 
-function sanitizeWordsFromText(text: string, words: string[], fonema: string): string[] {
+function sanitizeWordsFromText(
+  text: string,
+  words: string[],
+  fonema: string
+): string[] {
   const normalizedText = text.toLocaleLowerCase("it-IT");
   const targetFonema = normalizeFonemaForMatch(fonema);
 
   const uniqueWords = Array.from(
-    new Set(words.map((word) => word.trim()).filter(Boolean))
+    new Set(words.map(word => word.trim()).filter(Boolean))
   );
 
-  return uniqueWords.filter((word) => {
+  return uniqueWords.filter(word => {
     const escapedWord = word
       .toLocaleLowerCase("it-IT")
       .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const wordRegex = new RegExp(`(^|[^\\p{L}\\p{N}_])${escapedWord}([^\\p{L}\\p{N}_]|$)`, "u");
+    const wordRegex = new RegExp(
+      `(^|[^\\p{L}\\p{N}_])${escapedWord}([^\\p{L}\\p{N}_]|$)`,
+      "u"
+    );
     if (!wordRegex.test(normalizedText)) return false;
 
     if (!targetFonema) return true;
@@ -107,7 +114,10 @@ async function callOpenAI(prompt: string): Promise<unknown> {
     body: JSON.stringify({
       model: "gpt-4o-mini",
       messages: [
-        { role: "system", content: "Sei un assistente specializzato in logopedia pediatrica." },
+        {
+          role: "system",
+          content: "Sei un assistente specializzato in logopedia pediatrica.",
+        },
         { role: "user", content: prompt },
       ],
       temperature: 0.7,
@@ -157,7 +167,11 @@ function mockAIResponse(params: {
     s: ["sole", "sasso", "sale", "sala", "sano", "sano", "seta"],
     l: ["luna", "lago", "lana", "lama", "lato", "luce", "lana"],
   };
-  const words = wordMap[params.fonema.toLowerCase()] ?? ["rana", "rosa", "torre"];
+  const words = wordMap[params.fonema.toLowerCase()] ?? [
+    "rana",
+    "rosa",
+    "torre",
+  ];
 
   return {
     testoGenerato: text,
@@ -182,22 +196,39 @@ export const aiRouter = createRouter({
     .mutation(async ({ ctx, input }) => {
       const supabaseUserId = getSupabaseUserIdFromUnionId(ctx.user.unionId);
       if (!supabaseUserId) {
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Utente Supabase non valido" });
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Utente Supabase non valido",
+        });
       }
       const { data: subscription, error: subscriptionError } = await appDb()
         .from("subscriptions")
         .select("status,plan,created_at,current_period_end")
         .eq("user_id", supabaseUserId)
         .maybeSingle();
-      if (subscriptionError) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: subscriptionError.message });
+      if (subscriptionError)
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: subscriptionError.message,
+        });
       const nowMs = Date.now();
-      const trialStartedAt = subscription?.created_at ? new Date(subscription.created_at).getTime() : nowMs;
+      const trialStartedAt = subscription?.created_at
+        ? new Date(subscription.created_at).getTime()
+        : nowMs;
       const trialEndsAt = trialStartedAt + 15 * 24 * 60 * 60 * 1000;
-      const hasTrialAccess = subscription?.status === "trial" && nowMs <= trialEndsAt;
-      const hasActiveSubscription = subscription?.status === "attivo"
-        && (!!subscription.current_period_end ? new Date(subscription.current_period_end).getTime() >= nowMs : true);
+      const hasTrialAccess =
+        subscription?.status === "trial" && nowMs <= trialEndsAt;
+      const hasActiveSubscription =
+        subscription?.status === "attivo" &&
+        (subscription.current_period_end
+          ? new Date(subscription.current_period_end).getTime() >= nowMs
+          : true);
       if (!hasActiveSubscription && !hasTrialAccess) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Il tuo abbonamento non è attivo. Riattivalo dalle impostazioni per continuare." });
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message:
+            "Il tuo abbonamento non è attivo. Riattivalo dalle impostazioni per continuare.",
+        });
       }
       const piano = subscription?.plan ?? "trial";
       const { data: planData, error: planError } = await appDb()
@@ -206,16 +237,31 @@ export const aiRouter = createRouter({
         .eq("code", piano)
         .eq("active", true)
         .maybeSingle();
-      if (planError) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: planError.message });
+      if (planError)
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: planError.message,
+        });
       const limit = planData?.sheet_limit ?? 5;
       const { data: profileUsage, error: profileUsageError } = await appDb()
         .from("profiles")
         .select("trial_schede_usate,schede_mese")
         .eq("id", supabaseUserId)
         .single();
-      if (profileUsageError) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: profileUsageError.message });
-      const used = piano === "trial" ? (profileUsage.trial_schede_usate ?? 0) : (profileUsage.schede_mese ?? 0);
-      if (used >= limit) throw new TRPCError({ code: "FORBIDDEN", message: `Hai raggiunto il limite di ${limit} schede per il piano ${piano}. Passa a un piano superiore per continuare.` });
+      if (profileUsageError)
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: profileUsageError.message,
+        });
+      const used =
+        piano === "trial"
+          ? (profileUsage.trial_schede_usate ?? 0)
+          : (profileUsage.schede_mese ?? 0);
+      if (used >= limit)
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: `Hai raggiunto il limite di ${limit} schede per il piano ${piano}. Passa a un piano superiore per continuare.`,
+        });
       const prompt = buildPrompt({
         eta: input.eta,
         fonema: input.fonema,
@@ -224,9 +270,22 @@ export const aiRouter = createRouter({
         aspettoSpecifico: input.aspettoSpecifico,
       });
       let raw: unknown;
-      try { raw = await callOpenAI(prompt); } catch { raw = mockAIResponse({ eta: input.eta, fonema: input.fonema, interesse: input.interesse, tipoOutput: input.tipoOutput }); }
+      try {
+        raw = await callOpenAI(prompt);
+      } catch {
+        raw = mockAIResponse({
+          eta: input.eta,
+          fonema: input.fonema,
+          interesse: input.interesse,
+          tipoOutput: input.tipoOutput,
+        });
+      }
       const parsed = aiResponseSchema.safeParse(raw);
-      if (!parsed.success) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI response format invalid" });
+      if (!parsed.success)
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "AI response format invalid",
+        });
       const data = parsed.data;
       const sanitizedWords = sanitizeWordsFromText(
         data.testoGenerato,
@@ -252,9 +311,15 @@ export const aiRouter = createRouter({
 
       if (error || !inserted) {
         if (error?.message?.includes("sheet_limit_reached")) {
-          throw new TRPCError({ code: "FORBIDDEN", message: `Hai raggiunto il limite di ${limit} schede per il piano ${piano}. Passa a un piano superiore per continuare.` });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: `Hai raggiunto il limite di ${limit} schede per il piano ${piano}. Passa a un piano superiore per continuare.`,
+          });
         }
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error?.message ?? "Errore salvataggio scheda" });
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: error?.message ?? "Errore salvataggio scheda",
+        });
       }
 
       const sheet = {
@@ -277,9 +342,16 @@ export const aiRouter = createRouter({
         .select("trial_schede_usate,schede_mese")
         .eq("id", supabaseUserId)
         .single();
-      if (updatedUsageError) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: updatedUsageError.message });
+      if (updatedUsageError)
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: updatedUsageError.message,
+        });
 
-      const totalUsed = piano === "trial" ? (updatedUsage.trial_schede_usate ?? 0) : (updatedUsage.schede_mese ?? 0);
+      const totalUsed =
+        piano === "trial"
+          ? (updatedUsage.trial_schede_usate ?? 0)
+          : (updatedUsage.schede_mese ?? 0);
       return { sheet, remaining: Math.max(limit - totalUsed, 0), totalUsed };
     }),
 });

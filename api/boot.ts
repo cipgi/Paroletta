@@ -5,15 +5,26 @@ import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./router";
 import { createContext } from "./context";
 import { env } from "./lib/env";
-import { handleSupabaseGoogleAuth, handleSupabaseGoogleCallback } from "./supabase-oauth";
+import {
+  handleSupabaseGoogleAuth,
+  handleSupabaseGoogleCallback,
+} from "./supabase-oauth";
 import { getSafeHttpErrorBody, logServerError } from "./lib/errors";
+import { securityHeaders } from "./lib/security-headers";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
+app.use(
+  "*",
+  securityHeaders({
+    cspMode: env.securityCspMode,
+    isProduction: env.isProduction,
+  })
+);
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
 app.get("/api/auth/google", handleSupabaseGoogleAuth);
 app.get("/api/auth/google/callback", handleSupabaseGoogleCallback);
-app.use("/api/trpc/*", async (c) => {
+app.use("/api/trpc/*", async c => {
   return fetchRequestHandler({
     endpoint: "/api/trpc",
     req: c.req.raw,
@@ -24,7 +35,7 @@ app.use("/api/trpc/*", async (c) => {
     },
   });
 });
-app.all("/api/*", (c) => c.json(getSafeHttpErrorBody(404), 404));
+app.all("/api/*", c => c.json(getSafeHttpErrorBody(404), 404));
 
 export default app;
 

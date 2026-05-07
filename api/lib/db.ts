@@ -2,9 +2,15 @@ import { supabase } from "./supabase";
 
 const appSchemaDb = supabase.schema("app");
 
-function isInvalidAppSchemaError(error: any) {
-  const message = typeof error?.message === "string" ? error.message : "";
-  const details = typeof error?.details === "string" ? error.details : "";
+function getErrorField(error: unknown, field: "message" | "details") {
+  if (!error || typeof error !== "object" || !(field in error)) return "";
+  const value = error[field as keyof typeof error];
+  return typeof value === "string" ? value : "";
+}
+
+function isInvalidAppSchemaError(error: unknown) {
+  const message = getErrorField(error, "message");
+  const details = getErrorField(error, "details");
   const combined = `${message} ${details}`.toLowerCase();
   return combined.includes("invalid schema") && combined.includes("app");
 }
@@ -18,18 +24,24 @@ export const appDb = () => appSchemaDb;
  * Runs a query against schema `app` first, then retries using fully-qualified
  * table names when a deployment does not allow schema switching.
  */
-export async function queryAppTable(
-  run: (from: (name: string) => any) => Promise<{ data: any; error: any }>,
-): Promise<{ data: any; error: any }> {
-  let primary: { data: any; error: any } | null = null;
+type QueryResult<TData = unknown, TError = unknown> = {
+  data: TData;
+  error: TError;
+};
+
+export async function queryAppTable<TData = unknown, TError = unknown>(
+  run: (from: (name: string) => unknown) => Promise<QueryResult<TData, TError>>
+): Promise<QueryResult<TData, TError>> {
+  let primary: QueryResult<TData | null, TError | unknown> | null = null;
   try {
     primary = await run((name: string) => appSchemaDb.from(name));
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (!isInvalidAppSchemaError(error)) throw error;
     primary = { data: null, error };
   }
 
-  if (!primary.error || !isInvalidAppSchemaError(primary.error)) return primary;
+  if (!primary.error || !isInvalidAppSchemaError(primary.error))
+    return primary as QueryResult<TData, TError>;
 
   // Fallback for deployments where schema `app` is not exposed to PostgREST.
   // Retry first on default schema, then via fully-qualified table name.
