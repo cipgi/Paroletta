@@ -118,7 +118,7 @@ export default function Generator() {
           <div className="space-y-2">
             <Label htmlFor="eta" className="flex items-center gap-2">
               <Baby className="w-4 h-4 text-teal-600" />
-              Età del paziente
+              Età di riferimento
             </Label>
             <Input
               id="eta"

@@ -33,21 +33,9 @@ export interface Subscription {
   updatedAt: string;
 }
 
-export interface Patient {
-  id: string;
-  userId: string;
-  aliasEta: string | null;
-  noteAnonime: string | null;
-  birthYear: number | null;
-  tags: string[];
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface Sheet {
   id: string;
   userId: string;
-  patientId: string | null;
   fonema: string;
   interesse: string;
   tipoOutput: SheetOutputType;

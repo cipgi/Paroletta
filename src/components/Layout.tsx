@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard,
   FileText,
-  Users,
   LogOut,
   Sparkles,
   Settings,
@@ -55,7 +54,6 @@ export default function Layout({ children }: { children: ReactNode }) {
   const navItems = [
     { path: "/", label: "Dashboard", icon: LayoutDashboard },
     { path: "/generator", label: "Genera Scheda", icon: Sparkles },
-    { path: "/patients", label: "Pazienti", icon: Users },
     { path: "/sheets", label: "Schede", icon: FileText },
   ];
 
@@ -203,7 +201,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           <AlertDialogHeader>
             <AlertDialogTitle>Cancellare definitivamente l'account?</AlertDialogTitle>
             <AlertDialogDescription>
-              Questa azione elimina account, pazienti, schede e abbonamento associati. Non può essere annullata.
+              Questa azione elimina account, schede e abbonamento associati. Non può essere annullata.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

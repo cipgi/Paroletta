@@ -14,7 +14,6 @@ function requireSupabaseUserId(unionId: string) {
 type DbSheet = {
   id: string;
   user_id: string;
-  patient_id: string | null;
   fonema: string;
   interesse: string;
   tipo_output: string;
@@ -29,7 +28,6 @@ type DbSheet = {
 const mapSheet = (s: DbSheet) => ({
   id: s.id,
   userId: s.user_id,
-  patientId: s.patient_id,
   fonema: s.fonema,
   interesse: s.interesse,
   tipoOutput: s.tipo_output,
@@ -61,19 +59,6 @@ export const sheetsRouter = createRouter({
     if (error) throw new Error(error.message);
     return (data ?? []).map(mapSheet);
   }),
-  listByPatient: authedQuery
-    .input(z.object({ patientId: z.string().uuid() }))
-    .query(async ({ ctx, input }) => {
-      const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
-      const { data, error } = await appDb()
-        .from("sheets")
-        .select("*")
-        .eq("user_id", supabaseUserId)
-        .eq("patient_id", input.patientId)
-        .order("created_at", { ascending: false });
-      if (error) throw new Error(error.message);
-      return (data ?? []).map(mapSheet);
-    }),
   detail: authedQuery
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
@@ -130,7 +115,6 @@ export const sheetsRouter = createRouter({
   create: authedQuery
     .input(
       z.object({
-        patientId: z.string().uuid().optional(),
         fonema: z.string().max(10),
         interesse: z.string().max(100),
         tipoOutput: z.enum(["storia", "filastrocca", "lista"]),
@@ -146,7 +130,6 @@ export const sheetsRouter = createRouter({
       return {
         id: crypto.randomUUID(),
         userId: supabaseUserId,
-        patientId: input.patientId ?? null,
         fonema: input.fonema,
         interesse: input.interesse,
         tipoOutput: input.tipoOutput,

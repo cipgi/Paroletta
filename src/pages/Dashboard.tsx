@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Sparkles,
   FileText,
-  Users,
   TrendingUp,
   ArrowRight,
 } from "lucide-react";
@@ -17,9 +16,6 @@ export default function Dashboard() {
     enabled: isAuthenticated,
   });
   const { data: sheetsCount } = trpc.sheets.count.useQuery(undefined, {
-    enabled: isAuthenticated,
-  });
-  const { data: patientsList } = trpc.patients.list.useQuery(undefined, {
     enabled: isAuthenticated,
   });
   const { data: subscription } = trpc.subscriptions.mySubscription.useQuery(undefined, {
@@ -35,7 +31,6 @@ export default function Dashboard() {
   }
 
   const totalSheets = sheetsCount ?? sheetsList?.length ?? 0;
-  const totalPatients = patientsList?.length ?? 0;
   const recentSheets = sheetsList?.slice(0, 5) ?? [];
 
   const planLabels: Record<string, string> = {
@@ -55,7 +50,7 @@ export default function Dashboard() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Card>
           <CardContent className="p-6 flex items-center gap-4">
             <div className="w-12 h-12 bg-teal-50 rounded-xl flex items-center justify-center">
@@ -64,17 +59,6 @@ export default function Dashboard() {
             <div>
               <p className="text-2xl font-bold text-slate-800">{totalSheets}</p>
               <p className="text-sm text-slate-500">Schede generate</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6 flex items-center gap-4">
-            <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center">
-              <Users className="w-6 h-6 text-amber-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-slate-800">{totalPatients}</p>
-              <p className="text-sm text-slate-500">Pazienti archiviati</p>
             </div>
           </CardContent>
         </Card>
@@ -103,12 +87,6 @@ export default function Dashboard() {
           <Button className="bg-teal-600 hover:bg-teal-700">
             <Sparkles className="w-4 h-4 mr-2" />
             Genera nuova scheda
-          </Button>
-        </Link>
-        <Link to="/patients">
-          <Button variant="outline">
-            <Users className="w-4 h-4 mr-2" />
-            Archivio pazienti
           </Button>
         </Link>
       </div>
