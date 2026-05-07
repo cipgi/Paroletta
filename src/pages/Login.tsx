@@ -7,6 +7,8 @@ import { trpc } from "@/providers/trpc";
 import { useNavigate } from "react-router";
 import { isSubscriptionCurrentlyValid } from "@/lib/subscription";
 
+const CAPTCHA_FAILURE_THRESHOLD = 3;
+
 export default function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
@@ -14,7 +16,15 @@ export default function Login() {
   const [name, setName] = useState("");
   const [isRegister, setIsRegister] = useState(false);
   const [initialPlan, setInitialPlan] = useState<"trial" | "base">("trial");
+  const [failedLoginAttempts, setFailedLoginAttempts] = useState(0);
+  const [captchaAnswer, setCaptchaAnswer] = useState("");
   const utils = trpc.useUtils();
+  const captchaRequired =
+    !isRegister && failedLoginAttempts >= CAPTCHA_FAILURE_THRESHOLD;
+  const captchaQuery = trpc.auth.loginCaptcha.useQuery(undefined, {
+    enabled: captchaRequired,
+    staleTime: 0,
+  });
 
   const redirectAfterAuth = async () => {
     const subscription = await utils.subscriptions.mySubscription.fetch();
@@ -26,19 +36,37 @@ export default function Login() {
   };
 
   const loginMutation = trpc.auth.loginWithCredentials.useMutation({
-    onSuccess: redirectAfterAuth,
+    onSuccess: () => {
+      setFailedLoginAttempts(0);
+      setCaptchaAnswer("");
+      void redirectAfterAuth();
+    },
+    onError: () => {
+      setFailedLoginAttempts(value => value + 1);
+      setCaptchaAnswer("");
+      void captchaQuery.refetch();
+    },
   });
   const registerMutation = trpc.auth.registerWithCredentials.useMutation({
     onSuccess: redirectAfterAuth,
   });
 
-  const isPending = loginMutation.isPending || registerMutation.isPending;
+  const captchaPending =
+    captchaRequired && (!captchaQuery.data || !captchaAnswer);
+  const isPending =
+    loginMutation.isPending || registerMutation.isPending || captchaPending;
   const onCredentialsSubmit = () => {
     if (isRegister) {
       registerMutation.mutate({ email, password, name, initialPlan });
       return;
     }
-    loginMutation.mutate({ email, password });
+
+    loginMutation.mutate({
+      email,
+      password,
+      captchaChallengeId: captchaQuery.data?.id,
+      captchaAnswer: captchaRequired ? captchaAnswer : undefined,
+    });
   };
 
   return (
@@ -49,44 +77,107 @@ export default function Login() {
         </CardHeader>
         <CardContent className="space-y-4">
           <>
-            <Button className="w-full" size="lg" onClick={() => (window.location.href = "/api/auth/google")}>
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={() => (window.location.href = "/api/auth/google")}
+            >
               Continua con Google
             </Button>
-            <div className="text-center text-xs text-muted-foreground">oppure</div>
+            <div className="text-center text-xs text-muted-foreground">
+              oppure
+            </div>
           </>
           {isRegister && (
             <div className="space-y-2">
               <Label htmlFor="name">Nome</Label>
-              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
+              <Input
+                id="name"
+                value={name}
+                onChange={e => setName(e.target.value)}
+              />
             </div>
           )}
           {isRegister && (
             <div className="space-y-2">
               <Label>Scelta iniziale</Label>
               <div className="grid grid-cols-2 gap-2">
-                <Button type="button" variant={initialPlan === "trial" ? "default" : "outline"} onClick={() => setInitialPlan("trial")}>Trial</Button>
-                <Button type="button" variant={initialPlan === "base" ? "default" : "outline"} onClick={() => setInitialPlan("base")}>Abbonamento</Button>
+                <Button
+                  type="button"
+                  variant={initialPlan === "trial" ? "default" : "outline"}
+                  onClick={() => setInitialPlan("trial")}
+                >
+                  Trial
+                </Button>
+                <Button
+                  type="button"
+                  variant={initialPlan === "base" ? "default" : "outline"}
+                  onClick={() => setInitialPlan("base")}
+                >
+                  Abbonamento
+                </Button>
               </div>
             </div>
           )}
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
-            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+            />
           </div>
-          <Button className="w-full" size="lg" disabled={isPending} onClick={onCredentialsSubmit}>
+          {captchaRequired && (
+            <div className="space-y-2 rounded-md border p-3">
+              <Label htmlFor="captcha">Verifica anti-automazione</Label>
+              <p className="text-sm text-muted-foreground">
+                Dopo diversi tentativi falliti, risolvi il CAPTCHA per
+                continuare.
+              </p>
+              <p className="text-sm font-medium">
+                {captchaQuery.data?.question ??
+                  "Generazione CAPTCHA in corso..."}
+              </p>
+              <Input
+                id="captcha"
+                inputMode="numeric"
+                value={captchaAnswer}
+                onChange={e => setCaptchaAnswer(e.target.value)}
+                placeholder="Risposta"
+              />
+            </div>
+          )}
+          <Button
+            className="w-full"
+            size="lg"
+            disabled={isPending}
+            onClick={onCredentialsSubmit}
+          >
             {isRegister ? "Registrati con email" : "Accedi con email"}
           </Button>
           <Button
             type="button"
             variant="ghost"
             className="w-full"
-            onClick={() => setIsRegister((value) => !value)}
+            onClick={() => {
+              setIsRegister(value => !value);
+              setFailedLoginAttempts(0);
+              setCaptchaAnswer("");
+            }}
           >
-            {isRegister ? "Hai già un account? Accedi" : "Non hai un account? Registrati"}
+            {isRegister
+              ? "Hai già un account? Accedi"
+              : "Non hai un account? Registrati"}
           </Button>
           {(loginMutation.error || registerMutation.error) && (
             <p className="text-sm text-red-600">
