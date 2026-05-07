@@ -3,6 +3,12 @@ import { z } from "zod";
 import { Session } from "@contracts/constants";
 import { getSessionCookieOptions } from "./lib/cookies";
 import { createRouter, authedQuery, publicQuery } from "./middleware";
+import {
+  assertLoginAllowed,
+  buildLoginCaptcha,
+  recordFailedLogin,
+  recordSuccessfulLogin,
+} from "./lib/login-security";
 import { signSessionToken } from "./oauth/session";
 import { upsertUser } from "./queries/users";
 import { subscriptions, sheets, patients, users } from "./store";
@@ -44,7 +50,15 @@ const credentialsSchema = z.object({
   initialPlan: z.string().min(1).optional(),
 });
 
+const loginCredentialsSchema = credentialsSchema
+  .pick({ email: true, password: true })
+  .extend({
+    captchaChallengeId: z.string().optional(),
+    captchaAnswer: z.string().optional(),
+  });
+
 export const authRouter = createRouter({
+  loginCaptcha: publicQuery.query(() => buildLoginCaptcha()),
   registerWithCredentials: publicQuery
     .input(credentialsSchema)
     .mutation(async ({ input, ctx }) => {
@@ -117,7 +131,7 @@ export const authRouter = createRouter({
         cookie.serialize(Session.cookieName, token, {
           httpOnly: opts.httpOnly,
           path: opts.path,
-          sameSite: opts.sameSite?.toLowerCase() as "lax" | "none",
+          sameSite: opts.sameSite?.toLowerCase() as "lax" | "none" | "strict",
           secure: opts.secure,
           maxAge: Session.maxAgeMs / 1000,
         })
@@ -125,17 +139,29 @@ export const authRouter = createRouter({
       return { success: true };
     }),
   loginWithCredentials: publicQuery
-    .input(credentialsSchema.pick({ email: true, password: true }))
+    .input(loginCredentialsSchema)
     .mutation(async ({ input, ctx }) => {
       if (!supabaseConfigured) {
         throw new Error("Autenticazione con Supabase non configurata");
       }
+
+      assertLoginAllowed({
+        ip: ctx.clientIp,
+        email: input.email,
+        captchaChallengeId: input.captchaChallengeId,
+        captchaAnswer: input.captchaAnswer,
+      });
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email: input.email,
         password: input.password,
       });
-      if (error || !data.user) throw new Error("Credenziali non valide");
+      if (error || !data.user) {
+        recordFailedLogin(ctx.clientIp, input.email);
+        throw new Error("Credenziali non valide");
+      }
 
+      recordSuccessfulLogin(ctx.clientIp, input.email);
       const unionId = `supabase:${data.user.id}`;
       const profileName = sanitizeProfileNameOrFallback(
         data.user.user_metadata?.name as string | undefined,
@@ -157,7 +183,7 @@ export const authRouter = createRouter({
         cookie.serialize(Session.cookieName, token, {
           httpOnly: opts.httpOnly,
           path: opts.path,
-          sameSite: opts.sameSite?.toLowerCase() as "lax" | "none",
+          sameSite: opts.sameSite?.toLowerCase() as "lax" | "none" | "strict",
           secure: opts.secure,
           maxAge: Session.maxAgeMs / 1000,
         })
@@ -182,7 +208,7 @@ export const authRouter = createRouter({
       cookie.serialize(Session.cookieName, "", {
         httpOnly: opts.httpOnly,
         path: opts.path,
-        sameSite: opts.sameSite?.toLowerCase() as "lax" | "none",
+        sameSite: opts.sameSite?.toLowerCase() as "lax" | "none" | "strict",
         secure: opts.secure,
         maxAge: 0,
       })
@@ -197,7 +223,7 @@ export const authRouter = createRouter({
       cookie.serialize(Session.cookieName, "", {
         httpOnly: opts.httpOnly,
         path: opts.path,
-        sameSite: opts.sameSite?.toLowerCase() as "lax" | "none",
+        sameSite: opts.sameSite?.toLowerCase() as "lax" | "none" | "strict",
         secure: opts.secure,
         maxAge: 0,
       })
