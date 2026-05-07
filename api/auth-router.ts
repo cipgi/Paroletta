@@ -11,7 +11,7 @@ import {
 } from "./lib/login-security";
 import { signSessionToken } from "./oauth/session";
 import { upsertUser } from "./queries/users";
-import { subscriptions, sheets, patients, users } from "./store";
+import { subscriptions, sheets, users } from "./store";
 import { supabase } from "./lib/supabase";
 import { supabaseConfigured } from "./lib/env";
 import { appDb } from "./lib/db";
@@ -195,8 +195,6 @@ export const authRouter = createRouter({
   deleteAccount: authedQuery.mutation(async ({ ctx }) => {
     for (let i = sheets.length - 1; i >= 0; i--)
       if (sheets[i].userId === ctx.user.id) sheets.splice(i, 1);
-    for (let i = patients.length - 1; i >= 0; i--)
-      if (patients[i].userId === ctx.user.id) patients.splice(i, 1);
     for (let i = subscriptions.length - 1; i >= 0; i--)
       if (subscriptions[i].userId === ctx.user.id) subscriptions.splice(i, 1);
     for (let i = users.length - 1; i >= 0; i--)

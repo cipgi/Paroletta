@@ -292,7 +292,6 @@ export const aiRouter = createRouter({
         interesse: z.string().max(100),
         tipoOutput: z.enum(["storia", "filastrocca", "lista"]),
         aspettoSpecifico: z.string().max(400).optional(),
-        patientId: z.string().uuid().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -388,7 +387,6 @@ export const aiRouter = createRouter({
         .from("sheets")
         .insert({
           user_id: supabaseUserId,
-          patient_id: input.patientId ?? null,
           fonema: sanitizedInput.fonema,
           interesse: sanitizedInput.interesse,
           tipo_output: sanitizedInput.tipoOutput,
@@ -417,7 +415,6 @@ export const aiRouter = createRouter({
       const sheet = {
         id: inserted.id,
         userId: inserted.user_id,
-        patientId: inserted.patient_id,
         fonema: inserted.fonema,
         interesse: inserted.interesse,
         tipoOutput: inserted.tipo_output,

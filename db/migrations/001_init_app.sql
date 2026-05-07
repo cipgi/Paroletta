@@ -31,16 +31,6 @@ create table if not exists app.subscriptions (
   updated_at timestamptz not null default now()
 );
 
-create table if not exists app.patients (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references app.profiles(id) on delete cascade,
-  alias_eta text,
-  note_anonime text,
-  birth_year integer check (birth_year between 1900 and extract(year from now())::integer),
-  tags text[] not null default '{}',
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
 
 create table if not exists app.illustrations (
   id uuid primary key default gen_random_uuid(),
@@ -52,7 +42,6 @@ create table if not exists app.illustrations (
 create table if not exists app.sheets (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references app.profiles(id) on delete cascade,
-  patient_id uuid references app.patients(id) on delete set null,
   fonema text not null,
   interesse text not null,
   tipo_output text not null check (tipo_output in ('storia','filastrocca','lista')),
@@ -92,9 +81,6 @@ drop trigger if exists trg_subscriptions_updated_at on app.subscriptions;
 create trigger trg_subscriptions_updated_at before update on app.subscriptions
 for each row execute function app.set_updated_at();
 
-drop trigger if exists trg_patients_updated_at on app.patients;
-create trigger trg_patients_updated_at before update on app.patients
-for each row execute function app.set_updated_at();
 
 drop trigger if exists trg_sheets_updated_at on app.sheets;
 create trigger trg_sheets_updated_at before update on app.sheets
@@ -102,7 +88,6 @@ for each row execute function app.set_updated_at();
 
 alter table app.profiles enable row level security;
 alter table app.subscriptions enable row level security;
-alter table app.patients enable row level security;
 alter table app.sheets enable row level security;
 alter table app.seat_assignments enable row level security;
 alter table app.illustrations enable row level security;
@@ -115,9 +100,6 @@ drop policy if exists "sub owner read/write" on app.subscriptions;
 create policy "sub owner read/write" on app.subscriptions
 for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
-drop policy if exists "patients owner read/write" on app.patients;
-create policy "patients owner read/write" on app.patients
-for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 drop policy if exists "sheets owner read/write" on app.sheets;
 create policy "sheets owner read/write" on app.sheets
@@ -135,6 +117,4 @@ drop policy if exists "illustrations readable by authenticated" on app.illustrat
 create policy "illustrations readable by authenticated" on app.illustrations
 for select using (auth.role() = 'authenticated');
 
-create index if not exists idx_patients_user on app.patients(user_id);
 create index if not exists idx_sheets_user_created on app.sheets(user_id, created_at desc);
-create index if not exists idx_sheets_patient on app.sheets(patient_id);
