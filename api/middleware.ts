@@ -3,7 +3,6 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import { getSafeClientErrorMessage } from "./lib/errors";
 import superjson from "superjson";
 import type { TrpcContext } from "./context";
-import { assertValidCsrfRequest } from "./lib/csrf";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
@@ -22,15 +21,7 @@ const t = initTRPC.context<TrpcContext>().create({
 
 export const createRouter = t.router;
 
-const requireCsrf = t.middleware(async opts => {
-  if (opts.type === "mutation") {
-    assertValidCsrfRequest(opts.ctx.req);
-  }
-
-  return opts.next();
-});
-
-const baseProcedure = t.procedure.use(requireCsrf);
+const baseProcedure = t.procedure;
 export const publicQuery = baseProcedure;
 
 const requireAuth = t.middleware(async opts => {
