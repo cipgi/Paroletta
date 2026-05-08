@@ -7,6 +7,112 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { FileText, Download, ArrowLeft, Sparkles } from "lucide-react";
 
+function collectPrintableStyles() {
+  return Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+    .map(el => el.outerHTML)
+    .join("\n");
+}
+
+function waitForPrintableAssets(doc: Document) {
+  const imagePromises = Array.from(doc.images).map(
+    image =>
+      new Promise<void>(resolve => {
+        if (image.complete) {
+          resolve();
+          return;
+        }
+
+        image.addEventListener("load", () => resolve(), { once: true });
+        image.addEventListener("error", () => resolve(), { once: true });
+      })
+  );
+
+  const fontsReady = doc.fonts?.ready ?? Promise.resolve();
+
+  return Promise.all([...imagePromises, fontsReady]).then(() => undefined);
+}
+
+function createPrintableSheetHtml(params: {
+  markup: string;
+  styles: string;
+  title: string;
+  sheetWidth: number;
+  sheetHeight: number;
+}) {
+  const pageWidth = params.sheetWidth + 48;
+  const pageHeight = params.sheetHeight + 48;
+
+  return `
+    <!doctype html>
+    <html lang="it">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>${params.title}</title>
+        ${params.styles}
+        <style>
+          html,
+          body {
+            margin: 0;
+            min-height: 100%;
+            background: #f8fafc;
+          }
+
+          *,
+          *::before,
+          *::after {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          body {
+            padding: 24px;
+          }
+
+          .pdf-page {
+            width: ${params.sheetWidth}px;
+            max-width: 100%;
+            margin: 0 auto;
+          }
+
+          .pdf-page > * {
+            width: 100%;
+          }
+
+          @page {
+            size: ${pageWidth}px ${pageHeight}px;
+            margin: 0;
+          }
+
+          @media print {
+            html,
+            body {
+              width: ${pageWidth}px;
+              min-height: ${pageHeight}px;
+              background: #ffffff;
+            }
+
+            body {
+              padding: 24px;
+            }
+
+            .pdf-page {
+              width: ${params.sheetWidth}px;
+              max-width: none;
+              margin: 0 auto;
+              break-inside: avoid;
+              page-break-inside: avoid;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <main class="pdf-page">${params.markup}</main>
+      </body>
+    </html>
+  `;
+}
+
 export default function SheetDetail() {
   const { id } = useParams<{ id: string }>();
   const sheetId = id ?? "";
@@ -20,70 +126,59 @@ export default function SheetDetail() {
   );
 
   const printSheetAsPdf = () => {
-    if (!sheetCardRef.current) return;
+    const sheetElement = sheetCardRef.current;
+    if (!sheetElement) return;
 
-    const printWindow = window.open(
-      "",
-      "_blank",
-      "noopener,noreferrer,width=1200,height=900"
-    );
-    if (!printWindow) return;
+    const printFrame = document.createElement("iframe");
+    printFrame.title = "Anteprima PDF della scheda";
+    printFrame.style.position = "fixed";
+    printFrame.style.right = "0";
+    printFrame.style.bottom = "0";
+    printFrame.style.width = "0";
+    printFrame.style.height = "0";
+    printFrame.style.border = "0";
+    printFrame.style.opacity = "0";
+    printFrame.style.pointerEvents = "none";
 
-    const styles = Array.from(
-      document.querySelectorAll('link[rel="stylesheet"], style')
-    )
-      .map(el => el.outerHTML)
-      .join("\n");
-
-    printWindow.document.write(`
-      <!doctype html>
-      <html lang="it">
-        <head>
-          <meta charset="UTF-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-          <title>Scheda ${sheetId}</title>
-          ${styles}
-          <style>
-            body {
-              margin: 0;
-              padding: 24px;
-              background: #f8fafc;
-            }
-
-            .pdf-wrapper {
-              max-width: 1200px;
-              margin: 0 auto;
-            }
-
-            @page {
-              size: A4;
-              margin: 10mm;
-            }
-
-            @media print {
-              body {
-                padding: 0;
-                background: white;
-              }
-
-              .pdf-wrapper {
-                max-width: none;
-              }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="pdf-wrapper">${sheetCardRef.current.outerHTML}</div>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-
-    printWindow.onload = () => {
-      printWindow.focus();
-      printWindow.print();
-      printWindow.onafterprint = () => printWindow.close();
+    const cleanup = () => {
+      window.setTimeout(() => printFrame.remove(), 250);
     };
+
+    printFrame.addEventListener("load", () => {
+      const printDocument = printFrame.contentDocument;
+      const printWindow = printFrame.contentWindow;
+      if (!printDocument || !printWindow) {
+        cleanup();
+        return;
+      }
+
+      waitForPrintableAssets(printDocument).then(() => {
+        printWindow.addEventListener("afterprint", cleanup, { once: true });
+        printWindow.focus();
+        printWindow.print();
+        window.setTimeout(cleanup, 60_000);
+      });
+    });
+
+    document.body.appendChild(printFrame);
+
+    const printDocument = printFrame.contentDocument;
+    if (!printDocument) {
+      cleanup();
+      return;
+    }
+
+    printDocument.open();
+    printDocument.write(
+      createPrintableSheetHtml({
+        markup: sheetElement.outerHTML,
+        styles: collectPrintableStyles(),
+        title: `Scheda ${sheetId}`,
+        sheetWidth: Math.ceil(sheetElement.getBoundingClientRect().width),
+        sheetHeight: Math.ceil(sheetElement.getBoundingClientRect().height),
+      })
+    );
+    printDocument.close();
   };
 
   if (isLoading) {
