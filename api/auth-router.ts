@@ -61,7 +61,7 @@ export const authRouter = createRouter({
   loginCaptcha: publicQuery.query(() => buildLoginCaptcha()),
   registerWithCredentials: publicQuery
     .input(credentialsSchema)
-    .mutation(async ({ input, ctx }) => {
+    .mutation(async ({ input }) => {
       if (!supabaseConfigured) {
         throw new Error("Autenticazione con Supabase non configurata");
       }
@@ -124,19 +124,7 @@ export const authRouter = createRouter({
         );
       if (subError) throw new Error(subError.message);
 
-      const token = await signSessionToken({ unionId, clientId: "supabase" });
-      const opts = getSessionCookieOptions(ctx.req.headers);
-      ctx.resHeaders.append(
-        "set-cookie",
-        cookie.serialize(Session.cookieName, token, {
-          httpOnly: opts.httpOnly,
-          path: opts.path,
-          sameSite: opts.sameSite?.toLowerCase() as "lax" | "none" | "strict",
-          secure: opts.secure,
-          maxAge: Session.maxAgeMs / 1000,
-        })
-      );
-      return { success: true };
+      return { success: true, verificationRequired: true };
     }),
   loginWithCredentials: publicQuery
     .input(loginCredentialsSchema)
