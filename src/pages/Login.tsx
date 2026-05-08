@@ -18,6 +18,9 @@ export default function Login() {
   const [initialPlan, setInitialPlan] = useState<"trial" | "base">("trial");
   const [failedLoginAttempts, setFailedLoginAttempts] = useState(0);
   const [captchaAnswer, setCaptchaAnswer] = useState("");
+  const [registrationMessage, setRegistrationMessage] = useState<string | null>(
+    null
+  );
   const utils = trpc.useUtils();
   const captchaRequired =
     !isRegister && failedLoginAttempts >= CAPTCHA_FAILURE_THRESHOLD;
@@ -48,7 +51,16 @@ export default function Login() {
     },
   });
   const registerMutation = trpc.auth.registerWithCredentials.useMutation({
-    onSuccess: redirectAfterAuth,
+    onSuccess: () => {
+      setRegistrationMessage(
+        "Account creato. Conferma la tua e-mail tramite il link fornito nella mail di verifica, poi accedi."
+      );
+      setIsRegister(false);
+      setPassword("");
+      setName("");
+      setInitialPlan("trial");
+      navigate("/login");
+    },
   });
 
   const captchaPending =
@@ -56,6 +68,7 @@ export default function Login() {
   const isPending =
     loginMutation.isPending || registerMutation.isPending || captchaPending;
   const onCredentialsSubmit = () => {
+    setRegistrationMessage(null);
     if (isRegister) {
       registerMutation.mutate({ email, password, name, initialPlan });
       return;
@@ -137,6 +150,11 @@ export default function Login() {
               onChange={e => setPassword(e.target.value)}
             />
           </div>
+          {registrationMessage && !isRegister && (
+            <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+              {registrationMessage}
+            </div>
+          )}
           {captchaRequired && (
             <div className="space-y-2 rounded-md border p-3">
               <Label htmlFor="captcha">Verifica anti-automazione</Label>
@@ -170,7 +188,11 @@ export default function Login() {
             variant="ghost"
             className="w-full"
             onClick={() => {
-              setIsRegister(value => !value);
+              setIsRegister(value => {
+                const nextValue = !value;
+                if (nextValue) setRegistrationMessage(null);
+                return nextValue;
+              });
               setFailedLoginAttempts(0);
               setCaptchaAnswer("");
             }}
