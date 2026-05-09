@@ -5,6 +5,21 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { FileText, ArrowRight, Sparkles } from "lucide-react";
 
+function getSheetTypeLabel(tipoOutput: string) {
+  const labels: Record<string, string> = {
+    storia: "Storia",
+    filastrocca: "Filastrocca",
+    lista: "Lista parole",
+    discriminazione_visiva: "Discriminazione visiva",
+    morfosintassi_complessa: "Morfosintassi complessa",
+  };
+  return labels[tipoOutput] ?? tipoOutput;
+}
+
+function isTextWithPhonemeSheet(tipoOutput: string) {
+  return ["storia", "filastrocca", "lista"].includes(tipoOutput);
+}
+
 export default function Sheets() {
   const { data: sheets, isLoading } = trpc.sheets.list.useQuery();
 
@@ -55,12 +70,12 @@ export default function Sheets() {
                     </div>
                     <div>
                       <p className="font-medium text-slate-800 flex items-center gap-2">
-                        {sheet.tipoOutput === "storia" && "Storia"}
-                        {sheet.tipoOutput === "filastrocca" && "Filastrocca"}
-                        {sheet.tipoOutput === "lista" && "Lista parole"}
-                        <Badge variant="outline" className="capitalize text-xs">
-                          {sheet.fonema}
-                        </Badge>
+                        {getSheetTypeLabel(sheet.tipoOutput)}
+                        {isTextWithPhonemeSheet(sheet.tipoOutput) && (
+                          <Badge variant="outline" className="capitalize text-xs">
+                            /{sheet.fonema}/
+                          </Badge>
+                        )}
                       </p>
                       <p className="text-sm text-slate-500">
                         {sheet.interesse} •{" "}

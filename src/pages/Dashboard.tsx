@@ -10,6 +10,21 @@ import {
   ArrowRight,
 } from "lucide-react";
 
+function getSheetTypeLabel(tipoOutput: string) {
+  const labels: Record<string, string> = {
+    storia: "Storia",
+    filastrocca: "Filastrocca",
+    lista: "Lista parole",
+    discriminazione_visiva: "Discriminazione visiva",
+    morfosintassi_complessa: "Morfosintassi complessa",
+  };
+  return labels[tipoOutput] ?? tipoOutput;
+}
+
+function isTextWithPhonemeSheet(tipoOutput: string) {
+  return ["storia", "filastrocca", "lista"].includes(tipoOutput);
+}
+
 export default function Dashboard() {
   const { user, isAuthenticated, isLoading } = useAuth();
   const { data: sheetsList } = trpc.sheets.list.useQuery(undefined, {
@@ -116,9 +131,9 @@ export default function Dashboard() {
                 >
                   <div>
                     <p className="font-medium text-slate-800">
-                      {sheet.tipoOutput === "storia" && "Storia"}
-                      {sheet.tipoOutput === "filastrocca" && "Filastrocca"}
-                      {sheet.tipoOutput === "lista" && "Lista parole"} — {sheet.fonema}
+                      {getSheetTypeLabel(sheet.tipoOutput)}
+                      {isTextWithPhonemeSheet(sheet.tipoOutput) &&
+                        ` — /${sheet.fonema}/`}
                     </p>
                     <p className="text-sm text-slate-500">
                       {sheet.interesse} • {new Date(sheet.createdAt).toLocaleDateString("it-IT")}
