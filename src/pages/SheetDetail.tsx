@@ -25,6 +25,10 @@ function getSheetTypeLabel(tipoOutput: string) {
   return labels[tipoOutput] ?? tipoOutput;
 }
 
+function isTextWithPhonemeSheet(tipoOutput: string) {
+  return ["storia", "filastrocca", "lista"].includes(tipoOutput);
+}
+
 function getVisualOptionCount(words: string[]) {
   const count = words.filter(word =>
     /^(target|distrattore)/i.test(word.trim())
@@ -231,6 +235,7 @@ export default function SheetDetail() {
   const words = (sheet.listaParole as string[] | null) ?? [];
   const isVisualDiscrimination = sheet.tipoOutput === "discriminazione_visiva";
   const isComplexMorphosyntax = sheet.tipoOutput === "morfosintassi_complessa";
+  const showPhonemeTarget = isTextWithPhonemeSheet(sheet.tipoOutput);
   const visualOptionCount = getVisualOptionCount(words);
 
   const doctorName =
@@ -282,13 +287,19 @@ export default function SheetDetail() {
             </div>
 
             {/* Meta */}
-            <div className="grid grid-cols-3 gap-4 mb-6 text-sm">
-              <div className="bg-slate-50 p-3 rounded-lg">
-                <p className="text-slate-500">Fonema target</p>
-                <p className="font-semibold text-slate-800 text-lg">
-                  /{sheet.fonema}/
-                </p>
-              </div>
+            <div
+              className={`grid gap-4 mb-6 text-sm ${
+                showPhonemeTarget ? "grid-cols-3" : "grid-cols-2"
+              }`}
+            >
+              {showPhonemeTarget && (
+                <div className="bg-slate-50 p-3 rounded-lg">
+                  <p className="text-slate-500">Fonema target</p>
+                  <p className="font-semibold text-slate-800 text-lg">
+                    /{sheet.fonema}/
+                  </p>
+                </div>
+              )}
               <div className="bg-slate-50 p-3 rounded-lg">
                 <p className="text-slate-500">Interesse</p>
                 <p className="font-semibold text-slate-800 capitalize">

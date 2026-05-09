@@ -31,6 +31,10 @@ function wrapText(text: string, maxChars = 85): string[] {
   return lines;
 }
 
+function isTextWithPhonemeSheet(tipoOutput?: string) {
+  return ["storia", "filastrocca", "lista"].includes(tipoOutput ?? "");
+}
+
 export function createDidacticPdf(params: {
   title: string;
   subtitle: string;
@@ -60,10 +64,17 @@ export function createDidacticPdf(params: {
     morfosintassi_complessa: "Morfosintassi complessa",
   };
 
+  const metadata = [
+    `Tipo: ${typeLabel[params.tipoOutput ?? ""] ?? "Scheda"}`,
+    ...(isTextWithPhonemeSheet(params.tipoOutput)
+      ? [`Fonema: /${params.fonema}/`]
+      : []),
+    `Interesse: ${params.interesse}`,
+    `Difficolta: ${params.difficolta}`,
+  ].join("   ");
+
   lines.push("BT /F1 12 Tf 50 740 Td");
-  lines.push(
-    `(${escapePdfText(`Tipo: ${typeLabel[params.tipoOutput ?? ""] ?? "Scheda"}   Fonema: /${params.fonema}/   Interesse: ${params.interesse}   Difficolta: ${params.difficolta}`)}) Tj ET`
-  );
+  lines.push(`(${escapePdfText(metadata)}) Tj ET`);
 
   let y = 710;
   for (const row of wrapText(params.content)) {
