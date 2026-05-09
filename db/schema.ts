@@ -1,7 +1,12 @@
 // Logical app schema (stored in Postgres schema: app)
 export type Plan = "trial" | "base" | "dev";
 export type SubscriptionStatus = "trial" | "attivo" | "cancellato";
-export type SheetOutputType = "storia" | "filastrocca" | "lista";
+export type SheetOutputType =
+  | "storia"
+  | "filastrocca"
+  | "lista"
+  | "discriminazione_visiva"
+  | "morfosintassi_complessa";
 export type Difficulty = "bassa" | "media" | "alta";
 
 export interface Profile {

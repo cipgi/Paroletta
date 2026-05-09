@@ -1,5 +1,8 @@
 function escapePdfText(input: string): string {
-  return input.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+  return input
+    .replace(/\\/g, "\\\\")
+    .replace(/\(/g, "\\(")
+    .replace(/\)/g, "\\)");
 }
 
 function normalizePdfText(input: string): string {
@@ -38,6 +41,7 @@ export function createDidacticPdf(params: {
   words: string[];
   illustrationLabel: string;
   watermarkDoctor: string;
+  tipoOutput?: string;
 }): Uint8Array {
   const lines: string[] = [];
   lines.push("BT");
@@ -48,8 +52,18 @@ export function createDidacticPdf(params: {
   lines.push("BT /F1 11 Tf 50 772 Td");
   lines.push(`(${escapePdfText(params.subtitle)}) Tj ET`);
 
+  const typeLabel: Record<string, string> = {
+    storia: "Storia",
+    filastrocca: "Filastrocca",
+    lista: "Lista parole",
+    discriminazione_visiva: "Discriminazione visiva",
+    morfosintassi_complessa: "Morfosintassi complessa",
+  };
+
   lines.push("BT /F1 12 Tf 50 740 Td");
-  lines.push(`(${escapePdfText(`Fonema: /${params.fonema}/   Interesse: ${params.interesse}   Difficolta: ${params.difficolta}`)}) Tj ET`);
+  lines.push(
+    `(${escapePdfText(`Tipo: ${typeLabel[params.tipoOutput ?? ""] ?? "Scheda"}   Fonema: /${params.fonema}/   Interesse: ${params.interesse}   Difficolta: ${params.difficolta}`)}) Tj ET`
+  );
 
   let y = 710;
   for (const row of wrapText(params.content)) {
@@ -58,16 +72,62 @@ export function createDidacticPdf(params: {
     if (y < 140) break;
   }
 
-  if (params.words.length > 0 && y > 180) {
-    lines.push(`BT /F1 11 Tf 50 ${y - 8} Td (${escapePdfText(`Parole chiave: ${params.words.join(", ")}`)}) Tj ET`);
+  if (params.tipoOutput === "discriminazione_visiva") {
+    const optionCount = Math.min(Math.max(params.words.length || 4, 2), 4);
+    const positions = [
+      [55, 250],
+      [310, 250],
+      [55, 120],
+      [310, 120],
+    ];
+    lines.push(
+      "BT /F1 13 Tf 50 310 Td (Layout PDF: scelta multipla con target e distrattori coordinati) Tj ET"
+    );
+    for (let index = 0; index < optionCount; index += 1) {
+      const [x, boxY] = positions[index];
+      lines.push("0.92 g");
+      lines.push(`${x} ${boxY} 220 105 re f`);
+      lines.push("0 g");
+      lines.push(
+        `BT /F1 12 Tf ${x + 18} ${boxY + 55} Td (${escapePdfText(index === 0 ? "TARGET" : `DISTRATTORE ${index}`)}) Tj ET`
+      );
+      lines.push(
+        `BT /F1 10 Tf ${x + 18} ${boxY + 35} Td (${escapePdfText("spazio immagine AI")}) Tj ET`
+      );
+    }
+    y = 105;
+  } else if (params.tipoOutput === "morfosintassi_complessa") {
+    lines.push("0.92 g");
+    lines.push("80 135 435 155 re f");
+    lines.push("0 g");
+    lines.push(
+      "BT /F1 13 Tf 105 225 Td (Scena AI vincolata alla frase target) Tj ET"
+    );
+    lines.push(
+      `BT /F1 10 Tf 105 205 Td (${escapePdfText(`Etichetta immagine: ${params.illustrationLabel}`)}) Tj ET`
+    );
+    y = 110;
+  } else if (params.words.length > 0 && y > 180) {
+    lines.push(
+      `BT /F1 11 Tf 50 ${y - 8} Td (${escapePdfText(`Parole chiave: ${params.words.join(", ")}`)}) Tj ET`
+    );
     y -= 28;
   }
 
-  lines.push(`BT /F1 11 Tf 50 ${Math.max(y - 6, 120)} Td (${escapePdfText(`Illustrazione associata: ${params.illustrationLabel}`)}) Tj ET`);
+  if (
+    params.tipoOutput !== "discriminazione_visiva" &&
+    params.tipoOutput !== "morfosintassi_complessa"
+  ) {
+    lines.push(
+      `BT /F1 11 Tf 50 ${Math.max(y - 6, 120)} Td (${escapePdfText(`Illustrazione associata: ${params.illustrationLabel}`)}) Tj ET`
+    );
+  }
 
   lines.push("0.85 g");
   lines.push("BT /F1 12 Tf 110 60 Td");
-  lines.push(`(${escapePdfText(`Materiale a cura del Dott. ${params.watermarkDoctor}`)}) Tj ET`);
+  lines.push(
+    `(${escapePdfText(`Materiale a cura del Dott. ${params.watermarkDoctor}`)}) Tj ET`
+  );
   lines.push("0 g");
 
   const contentStream = normalizePdfText(lines.join("\n"));

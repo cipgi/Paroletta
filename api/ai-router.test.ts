@@ -49,6 +49,27 @@ describe("AI prompt security", () => {
     ).toThrow("Interesse non valido");
   });
 
+  it("builds clinical templates for visual discrimination worksheets", () => {
+    const params = sanitizeGenerationParams({
+      eta: "7 anni",
+      fonema: "s",
+      interesse: "mare",
+      tipoOutput: "discriminazione_visiva",
+      scenarioSmart:
+        "scegli il bambino che mette il secchiello sopra la sabbia",
+      numeroOpzioni: 4,
+    });
+
+    const messages = buildPromptMessages(params);
+
+    expect(messages[0].content).toContain("Target");
+    expect(messages[0].content).toContain("Distrattori");
+    expect(messages[1].content).toContain(
+      '"tipoOutput":"discriminazione_visiva"'
+    );
+    expect(messages[1].content).toContain('"numeroOpzioni":4');
+  });
+
   it("keeps sanitized user values as data separate from the fixed server template", () => {
     const params = sanitizeGenerationParams({
       eta: "6 anni",
