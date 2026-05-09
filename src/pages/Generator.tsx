@@ -47,10 +47,44 @@ type TipoScheda =
   | "discriminazione_visiva"
   | "morfosintassi_complessa";
 
+type TipoSchedaPrincipale =
+  | "testo_con_fonema"
+  | "discriminazione_visiva"
+  | "morfosintassi_complessa";
+
+type TipoTestoConFonema = Extract<
+  TipoScheda,
+  "storia" | "filastrocca" | "lista"
+>;
+
 type LivelloComplessita = "base" | "intermedio" | "avanzato";
 
+const tipiTestoConFonema: TipoTestoConFonema[] = [
+  "storia",
+  "filastrocca",
+  "lista",
+];
+
+const tipoTestoConFonemaConfig: Record<
+  TipoTestoConFonema,
+  { titolo: string; descrizione: string }
+> = {
+  storia: {
+    titolo: "Storia breve",
+    descrizione: "Materiale fonologico semplice con parole target nel testo.",
+  },
+  filastrocca: {
+    titolo: "Filastrocca",
+    descrizione: "Testo ritmato e breve per ripetizione e produzione orale.",
+  },
+  lista: {
+    titolo: "Lista parole",
+    descrizione: "Parole organizzate per difficoltà e fonema target.",
+  },
+};
+
 const tipoSchedaConfig: Record<
-  TipoScheda,
+  TipoSchedaPrincipale,
   { titolo: string; descrizione: string; icona: typeof FileText }
 > = {
   discriminazione_visiva: {
@@ -65,22 +99,16 @@ const tipoSchedaConfig: Record<
       "Pronomi clitici, relative e subordinate con scena visiva precisa e frase target.",
     icona: Brain,
   },
-  storia: {
-    titolo: "Storia breve",
-    descrizione: "Materiale fonologico semplice con parole target nel testo.",
-    icona: FileText,
-  },
-  filastrocca: {
-    titolo: "Filastrocca",
-    descrizione: "Testo ritmato e breve per ripetizione e produzione orale.",
-    icona: FileText,
-  },
-  lista: {
-    titolo: "Lista parole",
-    descrizione: "Parole organizzate per difficoltà e fonema target.",
+  testo_con_fonema: {
+    titolo: "Testo con fonema",
+    descrizione:
+      "Storie, filastrocche o liste costruite intorno a un fonema obiettivo.",
     icona: FileText,
   },
 };
+
+const isTipoTestoConFonema = (tipo: TipoScheda): tipo is TipoTestoConFonema =>
+  tipiTestoConFonema.includes(tipo as TipoTestoConFonema);
 
 export default function Generator() {
   const navigate = useNavigate();
@@ -328,18 +356,45 @@ export default function Generator() {
     }
 
     return (
-      <div className="space-y-2">
-        <Label htmlFor="aspettoSpecifico">Aspetto specifico (opzionale)</Label>
-        <Textarea
-          id="aspettoSpecifico"
-          value={aspettoSpecifico}
-          onChange={e => setAspettoSpecifico(e.target.value)}
-          placeholder='es. "Non usare verbi al passato"'
-          rows={3}
-        />
+      <div className="space-y-5 rounded-2xl border border-teal-100 bg-teal-50/50 p-4">
+        <div className="space-y-2">
+          <Label htmlFor="fonema" className="flex items-center gap-2">
+            <Mic className="w-4 h-4 text-teal-600" />
+            Fonema obiettivo
+          </Label>
+          <Select value={fonema} onValueChange={setFonema}>
+            <SelectTrigger id="fonema">
+              <SelectValue placeholder="Seleziona fonema" />
+            </SelectTrigger>
+            <SelectContent>
+              {fonemi.map(f => (
+                <SelectItem key={f} value={f}>
+                  /{f}/
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="aspettoSpecifico">
+            Aspetto specifico (opzionale)
+          </Label>
+          <Textarea
+            id="aspettoSpecifico"
+            value={aspettoSpecifico}
+            onChange={e => setAspettoSpecifico(e.target.value)}
+            placeholder='es. "Non usare verbi al passato"'
+            rows={3}
+          />
+        </div>
       </div>
     );
   };
+
+  const tipoPrincipale: TipoSchedaPrincipale = isTipoTestoConFonema(tipoOutput)
+    ? "testo_con_fonema"
+    : tipoOutput;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -366,19 +421,91 @@ export default function Generator() {
                 [
                   "discriminazione_visiva",
                   "morfosintassi_complessa",
-                  "storia",
-                  "filastrocca",
-                  "lista",
-                ] as TipoScheda[]
+                  "testo_con_fonema",
+                ] as TipoSchedaPrincipale[]
               ).map(tipo => {
                 const config = tipoSchedaConfig[tipo];
                 const Icon = config.icona;
+                const selected = tipoPrincipale === tipo;
+
+                if (tipo === "testo_con_fonema") {
+                  const selectedTextConfig =
+                    tipoTestoConFonemaConfig[
+                      tipoOutput as TipoTestoConFonema
+                    ] ?? tipoTestoConFonemaConfig.storia;
+
+                  return (
+                    <div
+                      key={tipo}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => {
+                        if (!isTipoTestoConFonema(tipoOutput)) {
+                          setTipoOutput("storia");
+                        }
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          if (!isTipoTestoConFonema(tipoOutput)) {
+                            setTipoOutput("storia");
+                          }
+                        }
+                      }}
+                      className={`rounded-2xl border p-4 text-left transition-all ${
+                        selected
+                          ? "border-teal-600 bg-teal-50 text-teal-800 shadow-sm"
+                          : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 font-semibold">
+                        <Icon className="h-5 w-5" />
+                        {config.titolo}
+                      </div>
+                      <p className="mt-2 text-sm leading-relaxed text-slate-500">
+                        {config.descrizione}
+                      </p>
+
+                      {selected && (
+                        <div
+                          className="mt-4 space-y-2"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <Label htmlFor="tipoTestoConFonema">
+                            Formato del testo
+                          </Label>
+                          <Select
+                            value={tipoOutput}
+                            onValueChange={(value: TipoTestoConFonema) =>
+                              setTipoOutput(value)
+                            }
+                          >
+                            <SelectTrigger id="tipoTestoConFonema">
+                              <SelectValue placeholder="Scegli formato" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {tipiTestoConFonema.map(opzione => (
+                                <SelectItem key={opzione} value={opzione}>
+                                  {tipoTestoConFonemaConfig[opzione].titolo}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs leading-relaxed text-slate-500">
+                            {selectedTextConfig.descrizione}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
                 return (
                   <button
                     key={tipo}
                     onClick={() => setTipoOutput(tipo)}
                     className={`rounded-2xl border p-4 text-left transition-all ${
-                      tipoOutput === tipo
+                      selected
                         ? "border-teal-600 bg-teal-50 text-teal-800 shadow-sm"
                         : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
                     }`}
@@ -396,7 +523,7 @@ export default function Generator() {
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="eta" className="flex items-center gap-2">
                 <Baby className="w-4 h-4 text-teal-600" />
@@ -408,25 +535,6 @@ export default function Generator() {
                 onChange={e => setEta(e.target.value)}
                 placeholder="es. 6 anni"
               />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="fonema" className="flex items-center gap-2">
-                <Mic className="w-4 h-4 text-teal-600" />
-                Fonema / obiettivo
-              </Label>
-              <Select value={fonema} onValueChange={setFonema}>
-                <SelectTrigger id="fonema">
-                  <SelectValue placeholder="Seleziona fonema" />
-                </SelectTrigger>
-                <SelectContent>
-                  {fonemi.map(f => (
-                    <SelectItem key={f} value={f}>
-                      /{f}/
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
 
             <div className="space-y-2">
