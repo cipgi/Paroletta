@@ -209,19 +209,30 @@ export default function Generator() {
   ]);
 
   const generate = trpc.ai.generate.useMutation({
-    onSuccess: async data => {
+    onSuccess: data => {
       utils.sheets.list.setData(undefined, current => {
         if (!current) return current;
         return [data.sheet, ...current];
       });
       utils.sheets.count.setData(undefined, current => (current ?? 0) + 1);
 
-      await Promise.all([
+      void Promise.allSettled([
         utils.sheets.list.invalidate(),
         utils.sheets.count.invalidate(),
         utils.auth.me.invalidate(),
         utils.subscriptions.mySubscription.invalidate(),
-      ]);
+      ]).then(results => {
+        const failedRefreshes = results.filter(
+          result => result.status === "rejected"
+        );
+        if (failedRefreshes.length > 0) {
+          console.warn(
+            "Post-generation cache refresh failed",
+            failedRefreshes
+          );
+        }
+      });
+
       navigate(`/sheets/${data.sheet.id}`);
     },
   });
