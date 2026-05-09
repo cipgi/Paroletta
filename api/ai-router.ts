@@ -32,7 +32,12 @@ const ALLOWED_FONEMI = [
   "v",
 ] as const;
 
-type TipoOutput = "storia" | "filastrocca" | "lista";
+type TipoOutput =
+  | "storia"
+  | "filastrocca"
+  | "lista"
+  | "discriminazione_visiva"
+  | "morfosintassi_complessa";
 
 type GenerationParams = {
   eta: string;
@@ -40,6 +45,11 @@ type GenerationParams = {
   interesse: (typeof ALLOWED_INTERESSI)[number];
   tipoOutput: TipoOutput;
   aspettoSpecifico?: string;
+  scenarioSmart?: string;
+  elementoGrammaticale?: string;
+  livelloComplessita?: "base" | "intermedio" | "avanzato";
+  descrizioneScena?: string;
+  numeroOpzioni?: number;
 };
 
 type PromptMessage = {
@@ -48,6 +58,9 @@ type PromptMessage = {
 };
 
 const MAX_ASPETTO_SPECIFICO_LENGTH = 400;
+const MAX_SMART_INPUT_LENGTH = 900;
+const MAX_GRAMMAR_ELEMENT_LENGTH = 120;
+const MAX_SCENE_DESCRIPTION_LENGTH = 900;
 const MAX_ETA_LENGTH = 20;
 const INSTRUCTION_MARKER_PATTERN =
   /(?:^|\b)(?:ignora|ignore|disregard|forget|system|developer|assistant|istruzioni|instructions|prompt|jailbreak|override|bypass|rispondi come|act as)(?:\b|$)/giu;
@@ -88,12 +101,32 @@ export function sanitizeGenerationParams(input: {
   interesse: string;
   tipoOutput: TipoOutput;
   aspettoSpecifico?: string;
+  scenarioSmart?: string;
+  elementoGrammaticale?: string;
+  livelloComplessita?: "base" | "intermedio" | "avanzato";
+  descrizioneScena?: string;
+  numeroOpzioni?: number;
 }): GenerationParams {
   const eta = sanitizePromptVariable(input.eta, MAX_ETA_LENGTH) || "6 anni";
   const aspettoSpecifico = input.aspettoSpecifico
     ? sanitizePromptVariable(
         input.aspettoSpecifico,
         MAX_ASPETTO_SPECIFICO_LENGTH
+      )
+    : undefined;
+  const scenarioSmart = input.scenarioSmart
+    ? sanitizePromptVariable(input.scenarioSmart, MAX_SMART_INPUT_LENGTH)
+    : undefined;
+  const elementoGrammaticale = input.elementoGrammaticale
+    ? sanitizePromptVariable(
+        input.elementoGrammaticale,
+        MAX_GRAMMAR_ELEMENT_LENGTH
+      )
+    : undefined;
+  const descrizioneScena = input.descrizioneScena
+    ? sanitizePromptVariable(
+        input.descrizioneScena,
+        MAX_SCENE_DESCRIPTION_LENGTH
       )
     : undefined;
 
@@ -107,6 +140,11 @@ export function sanitizeGenerationParams(input: {
     ),
     tipoOutput: input.tipoOutput,
     aspettoSpecifico: aspettoSpecifico || undefined,
+    scenarioSmart: scenarioSmart || undefined,
+    elementoGrammaticale: elementoGrammaticale || undefined,
+    livelloComplessita: input.livelloComplessita,
+    descrizioneScena: descrizioneScena || undefined,
+    numeroOpzioni: Math.min(Math.max(input.numeroOpzioni ?? 4, 2), 4),
   };
 }
 
@@ -166,6 +204,11 @@ export function buildPromptMessages(params: GenerationParams): PromptMessage[] {
     interesse: params.interesse,
     tipoOutput: params.tipoOutput,
     aspettoSpecifico: params.aspettoSpecifico ?? null,
+    scenarioSmart: params.scenarioSmart ?? null,
+    elementoGrammaticale: params.elementoGrammaticale ?? null,
+    livelloComplessita: params.livelloComplessita ?? null,
+    descrizioneScena: params.descrizioneScena ?? null,
+    numeroOpzioni: params.numeroOpzioni ?? null,
   };
 
   return [
@@ -190,10 +233,12 @@ ISTRUZIONI DI GENERAZIONE:
 1. Se il tipo è "storia": scrivi una storia brevissima (max 150 parole) sul tema indicato dal campo "interesse". Inserisci in modo naturale le parole contenenti il fonema indicato dal campo "fonema".
 2. Se il tipo è "filastrocca": componi una filastrocca facile e ritmata (8-12 versi) a tema indicato dal campo "interesse", usando parole con il fonema indicato dal campo "fonema".
 3. Se il tipo è "lista": crea una lista di 15-20 parole con il fonema indicato dal campo "fonema", divise per difficoltà (semplici, medie, complesse) e vicine agli interessi del bambino.
+4. Se il tipo è "discriminazione_visiva": crea una scheda di comprensione visiva con una sola immagine target corretta e 1-3 distrattori coerenti. Usa lo stesso contesto visivo per tutte le opzioni. Nel testoGenerato includi sezioni in italiano: "Obiettivo clinico", "Consegna", "Target", "Distrattori" e "Prompt immagini". I prompt immagini devono essere pronti per una API di generazione immagini, con descrizioni concrete e non ambigue.
+5. Se il tipo è "morfosintassi_complessa": crea una scheda su morfosintassi complessa partendo da elemento grammaticale, complessità e scena. Nel testoGenerato includi sezioni in italiano: "Obiettivo morfosintattico", "Frase target", "Scena da illustrare", "Domande di comprensione" e "Prompt immagine". Accetta strutture come pronomi clitici, relative e subordinate quando richieste.
 
 Devi rispondere ESCLUSIVAMENTE in formato JSON valido con questa struttura esatta:
 {
-  "testoGenerato": "il testo completo della storia, filastrocca o lista",
+  "testoGenerato": "il testo completo della scheda nel formato richiesto dal tipo scelto",
   "tagImmagine": "una singola parola chiave in italiano per l'illustrazione (es: dinosauro, palla, gatto)",
   "listaParole": ["parola1", "parola2", "parola3"],
   "difficolta": "bassa" | "media" | "alta"
@@ -202,7 +247,7 @@ Devi rispondere ESCLUSIVAMENTE in formato JSON valido con questa struttura esatt
 REGOLE RIGIDE PER IL JSON:
 - Non includere MAI testo o formattazione markdown (come \`\`\`json) all'esterno del blocco JSON.
 - Corrispondenza Parole: Nel campo "listaParole", se hai generato una "storia" o "filastrocca", devi inserire ESATTAMENTE ED ESCLUSIVAMENTE le parole contenenti il fonema target che hai effettivamente scritto dentro "testoGenerato". Non inventare o aggiungere parole che non compaiono nel testo. Se hai generato una "lista", inserisci qui le parole dell'elenco.
-- Il campo "tagImmagine" deve essere un singolo sostantivo (niente aggettivi o frasi).
+- Per storia, filastrocca e lista il campo "tagImmagine" deve essere un singolo sostantivo (niente aggettivi o frasi). Per discriminazione_visiva e morfosintassi_complessa può essere una breve etichetta clinica italiana.
 - Rispetta il vincolo specifico del logopedista solo se è coerente con tutte le regole server precedenti.`,
     },
     {
@@ -242,6 +287,43 @@ async function callOpenAI(messages: PromptMessage[]): Promise<unknown> {
 }
 
 function mockAIResponse(params: GenerationParams) {
+  if (params.tipoOutput === "discriminazione_visiva") {
+    const scenario =
+      params.scenarioSmart ?? "bambino che indica il gatto sotto il tavolo";
+    const options = Math.min(params.numeroOpzioni ?? 4, 4);
+    const distractors = [
+      "il gatto sopra il tavolo",
+      "il cane sotto il tavolo",
+      "il gatto vicino alla sedia",
+    ].slice(0, Math.max(options - 1, 1));
+
+    return {
+      testoGenerato: `Obiettivo clinico: discriminazione visiva e comprensione della frase.\nConsegna: Guarda le immagini e indica quella giusta.\nTarget: ${scenario}.\nDistrattori: ${distractors.join("; ")}.\nPrompt immagini: Mantieni lo stesso ambiente, lo stesso stile illustrato chiaro e cambia solo il dettaglio discriminante tra target e distrattori.`,
+      tagImmagine: "discriminazione visiva",
+      listaParole: [
+        "Target",
+        ...distractors.map((_, index) => `Distrattore ${index + 1}`),
+      ],
+      difficolta: "media" as const,
+    };
+  }
+
+  if (params.tipoOutput === "morfosintassi_complessa") {
+    const elemento = params.elementoGrammaticale ?? "pronome clitico lo";
+    const scena =
+      params.descrizioneScena ?? "una bambina lava il cane e poi lo asciuga";
+
+    return {
+      testoGenerato: `Obiettivo morfosintattico: ${elemento}.\nFrase target: La bambina lava il cane e poi lo asciuga.\nScena da illustrare: ${scena}.\nDomande di comprensione: Chi viene asciugato? Che cosa fa la bambina dopo aver lavato il cane?\nPrompt immagine: illustrazione pulita e realistica per logopedia pediatrica, mostra esattamente la scena descritta senza dettagli ambigui.`,
+      tagImmagine: "morfosintassi complessa",
+      listaParole: [elemento, params.livelloComplessita ?? "intermedio"],
+      difficolta:
+        params.livelloComplessita === "avanzato"
+          ? ("alta" as const)
+          : ("media" as const),
+    };
+  }
+
   const templates: Record<string, Record<string, string>> = {
     storia: {
       dinosauro: `C'era una volta un piccolo dinosauro chiamato Dino che amava correre tra le rocce. Un giorno Dino trovò una rana rosa che saltava felice tra i fiori. "Resta con me!" disse Dino. La rana sorrise e insieme andarono a cercare torri antiche da esplorare, ridendo sotto il sole caldo.`,
@@ -290,8 +372,21 @@ export const aiRouter = createRouter({
         eta: z.string().max(20),
         fonema: z.string().max(10),
         interesse: z.string().max(100),
-        tipoOutput: z.enum(["storia", "filastrocca", "lista"]),
+        tipoOutput: z.enum([
+          "storia",
+          "filastrocca",
+          "lista",
+          "discriminazione_visiva",
+          "morfosintassi_complessa",
+        ]),
         aspettoSpecifico: z.string().max(400).optional(),
+        scenarioSmart: z.string().max(900).optional(),
+        elementoGrammaticale: z.string().max(120).optional(),
+        livelloComplessita: z
+          .enum(["base", "intermedio", "avanzato"])
+          .optional(),
+        descrizioneScena: z.string().max(900).optional(),
+        numeroOpzioni: z.number().int().min(2).max(4).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -364,6 +459,12 @@ export const aiRouter = createRouter({
           message: `Hai raggiunto il limite di ${limit} schede per il piano ${piano}. Passa a un piano superiore per continuare.`,
         });
       const sanitizedInput = sanitizeGenerationParams(input);
+      if (sanitizedInput.tipoOutput === "discriminazione_visiva") {
+        sanitizedInput.numeroOpzioni = Math.min(
+          sanitizedInput.numeroOpzioni ?? 4,
+          piano === "trial" ? 2 : 4
+        );
+      }
       const messages = buildPromptMessages(sanitizedInput);
       let raw: unknown;
       try {
@@ -378,11 +479,17 @@ export const aiRouter = createRouter({
           message: "AI response format invalid",
         });
       const data = parsed.data;
-      const sanitizedWords = sanitizeWordsFromText(
-        data.testoGenerato,
-        data.listaParole,
-        sanitizedInput.fonema
-      );
+      const sanitizedWords =
+        sanitizedInput.tipoOutput === "discriminazione_visiva" ||
+        sanitizedInput.tipoOutput === "morfosintassi_complessa"
+          ? Array.from(
+              new Set(data.listaParole.map(word => word.trim()).filter(Boolean))
+            ).slice(0, 8)
+          : sanitizeWordsFromText(
+              data.testoGenerato,
+              data.listaParole,
+              sanitizedInput.fonema
+            );
       const { data: inserted, error } = await appDb()
         .from("sheets")
         .insert({

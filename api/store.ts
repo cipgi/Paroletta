@@ -18,18 +18,40 @@ export type User = {
   lastSignInAt?: Date;
 };
 
-export type Sheet = { id: number; userId: number; fonema: string; interesse: string; tipoOutput: "storia"|"filastrocca"|"lista"; testoGenerato: string; tagImmagine: string | null; listaParole: string[] | null; difficolta: "bassa"|"media"|"alta"; pdfUrl: string | null; createdAt: Date };
-export type Subscription = { userId: number; status: string; seatsCount: number };
+export type Sheet = {
+  id: number;
+  userId: number;
+  fonema: string;
+  interesse: string;
+  tipoOutput:
+    | "storia"
+    | "filastrocca"
+    | "lista"
+    | "discriminazione_visiva"
+    | "morfosintassi_complessa";
+  testoGenerato: string;
+  tagImmagine: string | null;
+  listaParole: string[] | null;
+  difficolta: "bassa" | "media" | "alta";
+  pdfUrl: string | null;
+  createdAt: Date;
+};
+export type Subscription = {
+  userId: number;
+  status: string;
+  seatsCount: number;
+};
 export type Illustration = { tag: string; filePath: string };
 
-let uid=1,sid=1;
+let uid = 1,
+  sid = 1;
 export const users: User[] = [];
 export const sheets: Sheet[] = [];
 export const subscriptions: Subscription[] = [];
 export const illustrations: Illustration[] = [];
 
-export const nextUserId=()=>uid++;
-export const nextSheetId=()=>sid++;
+export const nextUserId = () => uid++;
+export const nextSheetId = () => sid++;
 
 const SHEETS_FILE = resolve(process.cwd(), ".data/sheets.json");
 
@@ -41,8 +63,14 @@ const ensureDir = (path: string) => {
 export const loadSheets = () => {
   if (!existsSync(SHEETS_FILE)) return;
   try {
-    const raw = JSON.parse(readFileSync(SHEETS_FILE, "utf8")) as Array<Sheet & { createdAt: string }>;
-    sheets.splice(0, sheets.length, ...raw.map((sheet) => ({ ...sheet, createdAt: new Date(sheet.createdAt) })));
+    const raw = JSON.parse(readFileSync(SHEETS_FILE, "utf8")) as Array<
+      Sheet & { createdAt: string }
+    >;
+    sheets.splice(
+      0,
+      sheets.length,
+      ...raw.map(sheet => ({ ...sheet, createdAt: new Date(sheet.createdAt) }))
+    );
     const maxId = sheets.reduce((max, sheet) => Math.max(max, sheet.id), 0);
     sid = Math.max(sid, maxId + 1);
   } catch {

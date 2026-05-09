@@ -5,7 +5,32 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Download, ArrowLeft, Sparkles } from "lucide-react";
+import {
+  FileText,
+  Download,
+  ArrowLeft,
+  Sparkles,
+  Eye,
+  Brain,
+} from "lucide-react";
+
+function getSheetTypeLabel(tipoOutput: string) {
+  const labels: Record<string, string> = {
+    storia: "Storia",
+    filastrocca: "Filastrocca",
+    lista: "Lista di parole",
+    discriminazione_visiva: "Discriminazione visiva",
+    morfosintassi_complessa: "Morfosintassi complessa",
+  };
+  return labels[tipoOutput] ?? tipoOutput;
+}
+
+function getVisualOptionCount(words: string[]) {
+  const count = words.filter(word =>
+    /^(target|distrattore)/i.test(word.trim())
+  ).length;
+  return Math.min(Math.max(count || 4, 2), 4);
+}
 
 function collectPrintableStyles() {
   return Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
@@ -204,6 +229,9 @@ export default function SheetDetail() {
   }
 
   const words = (sheet.listaParole as string[] | null) ?? [];
+  const isVisualDiscrimination = sheet.tipoOutput === "discriminazione_visiva";
+  const isComplexMorphosyntax = sheet.tipoOutput === "morfosintassi_complessa";
+  const visualOptionCount = getVisualOptionCount(words);
 
   const doctorName =
     [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
@@ -244,12 +272,12 @@ export default function SheetDetail() {
                 <div>
                   <p className="font-bold text-slate-800">Paroletta</p>
                   <p className="text-xs text-slate-500">
-                    Scheda didattica personalizzata
+                    Scheda clinica personalizzata
                   </p>
                 </div>
               </div>
               <Badge variant="outline" className="capitalize">
-                {sheet.tipoOutput}
+                {getSheetTypeLabel(sheet.tipoOutput)}
               </Badge>
             </div>
 
@@ -278,19 +306,19 @@ export default function SheetDetail() {
             {/* Content */}
             <div className="space-y-4">
               <h2 className="text-xl font-bold text-slate-800">
-                {sheet.tipoOutput === "storia" && "Storia"}
-                {sheet.tipoOutput === "filastrocca" && "Filastrocca"}
-                {sheet.tipoOutput === "lista" && "Lista di parole"}
+                {getSheetTypeLabel(sheet.tipoOutput)}
               </h2>
 
               <div className="text-slate-700 leading-relaxed whitespace-pre-line text-lg">
                 {sheet.testoGenerato}
               </div>
 
-              {words.length > 0 && (
+              {words.length > 0 && !isVisualDiscrimination && (
                 <div className="pt-4">
                   <p className="text-sm font-medium text-slate-500 mb-2">
-                    Parole chiave:
+                    {isComplexMorphosyntax
+                      ? "Parametri clinici:"
+                      : "Parole chiave:"}
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {words.map(w => (
@@ -303,16 +331,65 @@ export default function SheetDetail() {
               )}
             </div>
 
-            {/* Illustration placeholder */}
-            <div className="mt-8 p-6 bg-slate-50 rounded-xl text-center">
-              <p className="text-sm text-slate-500 mb-2">Illustrazione</p>
-              <div className="w-32 h-32 mx-auto bg-slate-200 rounded-lg flex items-center justify-center">
-                <span className="text-4xl">🎨</span>
+            {isVisualDiscrimination ? (
+              <div className="mt-8 rounded-xl bg-teal-50 p-5">
+                <div className="mb-4 flex items-center gap-2 text-teal-800">
+                  <Eye className="h-5 w-5" />
+                  <p className="font-semibold">Scelta multipla visiva</p>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  {Array.from({ length: visualOptionCount }, (_, index) => (
+                    <div
+                      key={index}
+                      className="rounded-xl border-2 border-white bg-white p-3 text-center shadow-sm"
+                    >
+                      <div className="flex h-40 items-center justify-center rounded-lg bg-slate-100">
+                        <span className="text-5xl">
+                          {index === 0 ? "🎯" : "🖼️"}
+                        </span>
+                      </div>
+                      <p className="mt-3 text-sm font-semibold text-slate-700">
+                        {index === 0
+                          ? "Target corretto"
+                          : `Distrattore ${index}`}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 text-xs text-slate-500">
+                  Le immagini sono generate come set coordinato: stesso contesto
+                  visivo, dettaglio discriminante diverso.
+                </p>
               </div>
-              <p className="text-xs text-slate-400 mt-2 capitalize">
-                Tag: {sheet.tagImmagine ?? "generico"}
-              </p>
-            </div>
+            ) : isComplexMorphosyntax ? (
+              <div className="mt-8 rounded-xl bg-indigo-50 p-5">
+                <div className="mb-4 flex items-center gap-2 text-indigo-800">
+                  <Brain className="h-5 w-5" />
+                  <p className="font-semibold">
+                    Scena morfosintattica illustrata
+                  </p>
+                </div>
+                <div className="rounded-xl border-2 border-white bg-white p-5 text-center shadow-sm">
+                  <div className="mx-auto flex h-56 max-w-lg items-center justify-center rounded-lg bg-slate-100">
+                    <span className="text-6xl">🧠</span>
+                  </div>
+                  <p className="mt-3 text-sm text-slate-500">
+                    Immagine AI vincolata alla frase target e alla struttura
+                    grammaticale descritta.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-8 p-6 bg-slate-50 rounded-xl text-center">
+                <p className="text-sm text-slate-500 mb-2">Illustrazione</p>
+                <div className="w-32 h-32 mx-auto bg-slate-200 rounded-lg flex items-center justify-center">
+                  <span className="text-4xl">🎨</span>
+                </div>
+                <p className="text-xs text-slate-400 mt-2 capitalize">
+                  Tag: {sheet.tagImmagine ?? "generico"}
+                </p>
+              </div>
+            )}
 
             {/* Watermark footer */}
             <div className="mt-8 pt-4 border-t border-slate-200 text-center">

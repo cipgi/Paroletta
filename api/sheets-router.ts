@@ -106,6 +106,7 @@ export const sheetsRouter = createRouter({
         words: sheet.listaParole ?? [],
         illustrationLabel,
         watermarkDoctor: doctorName,
+        tipoOutput: sheet.tipoOutput,
       });
       return {
         fileName: `scheda-${sheet.id}.pdf`,
@@ -117,7 +118,13 @@ export const sheetsRouter = createRouter({
       z.object({
         fonema: z.string().max(10),
         interesse: z.string().max(100),
-        tipoOutput: z.enum(["storia", "filastrocca", "lista"]),
+        tipoOutput: z.enum([
+          "storia",
+          "filastrocca",
+          "lista",
+          "discriminazione_visiva",
+          "morfosintassi_complessa",
+        ]),
         testoGenerato: z.string(),
         tagImmagine: z.string().max(100).optional(),
         listaParole: z.array(z.string()).optional(),
