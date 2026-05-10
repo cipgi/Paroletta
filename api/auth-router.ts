@@ -14,7 +14,7 @@ import { upsertUser } from "./queries/users";
 import { subscriptions, sheets, users } from "./store";
 import { supabase } from "./lib/supabase";
 import { supabaseConfigured } from "./lib/env";
-import { appDb } from "./lib/db";
+import { appDb, appDbForAccessToken } from "./lib/db";
 import {
   databaseOperationError,
   missingResourceError,
@@ -29,12 +29,19 @@ import {
 // handlers are intentionally separate so removing Google OAuth does not affect
 // credentials-based registration or login.
 
-async function ensureUserProfile(userId: string, email: string, name: string) {
+type AppDbClient = ReturnType<typeof appDb>;
+
+async function ensureUserProfile(
+  db: AppDbClient,
+  userId: string,
+  email: string,
+  name: string
+) {
   const safeName = sanitizeProfileNameOrFallback(
     name,
     email.split("@")[0] || "Utente"
   );
-  const { error } = await appDb().from("profiles").upsert(
+  const { error } = await db.from("profiles").upsert(
     {
       id: userId,
       email,
@@ -46,6 +53,10 @@ async function ensureUserProfile(userId: string, email: string, name: string) {
   if (error) {
     throw databaseOperationError("creare o aggiornare il profilo", error);
   }
+}
+
+function getAppDbForSession(accessToken?: string) {
+  return accessToken ? appDbForAccessToken(accessToken) : appDb();
 }
 
 const credentialsSchema = z.object({
@@ -95,6 +106,7 @@ export const authRouter = createRouter({
           error
         );
 
+      const appDatabase = getAppDbForSession(data.session?.access_token);
       const unionId = `supabase:${data.user.id}`;
       await upsertUser({
         unionId,
@@ -104,7 +116,7 @@ export const authRouter = createRouter({
         role: "user",
       });
       const requestedPlan = input.initialPlan ?? "trial";
-      const { data: selectedPlan, error: selectedPlanError } = await appDb()
+      const { data: selectedPlan, error: selectedPlanError } = await appDatabase
         .from("subscription_plans")
         .select("code,duration_days,is_trial,active")
         .eq("code", requestedPlan)
@@ -123,8 +135,13 @@ export const authRouter = createRouter({
         );
 
       const initialPlan = selectedPlan.code;
-      await ensureUserProfile(data.user.id, input.email, profileName);
-      const { error: profileError } = await appDb()
+      await ensureUserProfile(
+        appDatabase,
+        data.user.id,
+        input.email,
+        profileName
+      );
+      const { error: profileError } = await appDatabase
         .from("profiles")
         .update({ piano: initialPlan, seats: 1 })
         .eq("id", data.user.id);
@@ -137,7 +154,7 @@ export const authRouter = createRouter({
       const periodEnd = new Date(
         Date.now() + selectedPlan.duration_days * 24 * 60 * 60 * 1000
       ).toISOString();
-      const { error: subError } = await appDb()
+      const { error: subError } = await appDatabase
         .from("subscriptions")
         .upsert(
           {
@@ -201,8 +218,9 @@ export const authRouter = createRouter({
         lastSignInAt: new Date(),
         role: "user",
       });
-      await ensureUserProfile(data.user.id, input.email, profileName);
-
+      // Login must only authenticate and establish the app session. Profile
+      // creation/repair belongs to registration or explicit maintenance flows,
+      // not to a sign-in attempt.
       const token = await signSessionToken({ unionId, clientId: "supabase" });
       const opts = getSessionCookieOptions(ctx.req.headers);
       ctx.resHeaders.append(
