@@ -27,6 +27,81 @@ async function getPlanLimit(plan: string) {
   return data?.sheet_limit ?? 5;
 }
 
+async function getSeatCapacity(ownerUserId: string) {
+  const { data: subscription, error: subscriptionError } = await appDb()
+    .from("subscriptions")
+    .select("seats_count")
+    .eq("user_id", ownerUserId)
+    .maybeSingle();
+  if (subscriptionError)
+    throw databaseOperationError(
+      "verificare i posti disponibili del team",
+      subscriptionError
+    );
+
+  if (subscription?.seats_count) return subscription.seats_count;
+
+  const { data: profile, error: profileError } = await appDb()
+    .from("profiles")
+    .select("seats")
+    .eq("id", ownerUserId)
+    .single();
+  if (profileError || !profile) {
+    throw databaseOperationError(
+      "verificare i posti disponibili del profilo",
+      profileError
+    );
+  }
+
+  return profile.seats ?? 1;
+}
+
+async function getTeamOccupancy(ownerUserId: string) {
+  const { count: membersCount, error: membersError } = await appDb()
+    .from("seat_assignments")
+    .select("id", { count: "exact", head: true })
+    .eq("owner_user_id", ownerUserId);
+  if (membersError)
+    throw databaseOperationError("contare i membri del team", membersError);
+
+  const { count: pendingInvitationsCount, error: invitationsError } =
+    await appDb()
+      .from("organization_invitations")
+      .select("id", { count: "exact", head: true })
+      .eq("owner_user_id", ownerUserId)
+      .eq("status", "pending");
+  if (invitationsError)
+    throw databaseOperationError(
+      "contare gli inviti pendenti del team",
+      invitationsError
+    );
+
+  return {
+    membersCount: membersCount ?? 0,
+    pendingInvitationsCount: pendingInvitationsCount ?? 0,
+  };
+}
+
+async function assertTeamHasSeat(
+  ownerUserId: string,
+  options: { includePendingInvitations: boolean }
+) {
+  const seatsCount = await getSeatCapacity(ownerUserId);
+  const { membersCount, pendingInvitationsCount } =
+    await getTeamOccupancy(ownerUserId);
+  const occupiedSeats =
+    1 +
+    membersCount +
+    (options.includePendingInvitations ? pendingInvitationsCount : 0);
+
+  if (occupiedSeats >= seatsCount) {
+    throw userFacingError(
+      "FORBIDDEN",
+      `Non ci sono posti disponibili nel team (${occupiedSeats}/${seatsCount}). Aumenta i posti dell'abbonamento o rimuovi un invito pendente.`
+    );
+  }
+}
+
 export const organizationRouter = createRouter({
   overview: authedQuery.query(async ({ ctx }) => {
     const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
@@ -96,7 +171,7 @@ export const organizationRouter = createRouter({
 
     const { data: invitations, error: invitationError } = await appDb()
       .from("organization_invitations")
-      .select("id,email,status,created_at,accepted_at,revoked_at")
+      .select("id,email,token,status,created_at,accepted_at,revoked_at")
       .eq("owner_user_id", account.ownerUserId)
       .order("created_at", { ascending: false });
     if (invitationError)
@@ -104,6 +179,11 @@ export const organizationRouter = createRouter({
         "caricare gli inviti del team",
         invitationError
       );
+
+    const seatsCount = subscription?.seats_count ?? ownerProfile.seats ?? 1;
+    const pendingInvitationsCount = (invitations ?? []).filter(
+      invitation => invitation.status === "pending"
+    ).length;
 
     return {
       role: account.role,
@@ -128,6 +208,15 @@ export const organizationRouter = createRouter({
         remaining: Math.max(limit - used, 0),
         teamSheetsCount: teamSheetsCount ?? 0,
       },
+      seats: {
+        total: seatsCount,
+        used: 1 + memberIds.length,
+        pending: pendingInvitationsCount,
+        available: Math.max(
+          seatsCount - 1 - memberIds.length - pendingInvitationsCount,
+          0
+        ),
+      },
       members: (memberRows ?? []).map(row => {
         const profile = Array.isArray(row.profiles)
           ? row.profiles[0]
@@ -142,6 +231,7 @@ export const organizationRouter = createRouter({
       invitations: (invitations ?? []).map(invitation => ({
         id: invitation.id,
         email: invitation.email,
+        token: account.role === "manager" ? invitation.token : undefined,
         status: invitation.status,
         createdAt: invitation.created_at,
         acceptedAt: invitation.accepted_at,
@@ -174,6 +264,10 @@ export const organizationRouter = createRouter({
           "Non puoi invitare il tuo stesso account."
         );
       }
+
+      await assertTeamHasSeat(supabaseUserId, {
+        includePendingInvitations: true,
+      });
 
       const { data, error } = await appDb()
         .from("organization_invitations")
@@ -245,6 +339,10 @@ export const organizationRouter = createRouter({
           message: "Invito non valido o non più disponibile.",
         });
       }
+
+      await assertTeamHasSeat(invitation.owner_user_id, {
+        includePendingInvitations: false,
+      });
 
       const { error: seatError } = await appDb()
         .from("seat_assignments")

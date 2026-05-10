@@ -124,7 +124,7 @@ export const subscriptionsRouter = createRouter({
     .input(
       z.object({
         piano: z.enum(["trial", "base", "dev"]),
-        seatsCount: z.number().min(1).optional(),
+        seatsCount: z.number().min(1).max(50).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
