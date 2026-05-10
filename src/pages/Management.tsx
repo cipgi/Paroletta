@@ -17,8 +17,13 @@ export default function Management() {
   const { user, isLoading, isAuthenticated } = useAuth();
   const [email, setEmail] = useState("");
   const utils = trpc.useUtils();
-  const { data: overview, isLoading: isOverviewLoading } = trpc.organization.overview.useQuery(undefined, {
-    enabled: isAuthenticated,
+  const canManage = user?.accountRole === "manager";
+  const {
+    data: overview,
+    error: overviewError,
+    isLoading: isOverviewLoading,
+  } = trpc.organization.overview.useQuery(undefined, {
+    enabled: isAuthenticated && canManage,
   });
   const invite = trpc.organization.invite.useMutation({
     onSuccess: async () => {
@@ -33,12 +38,49 @@ export default function Management() {
     onSuccess: async () => utils.organization.overview.invalidate(),
   });
 
-  if (isLoading || isOverviewLoading) {
+  if (isLoading) {
     return <div className="text-slate-500">Caricamento gestione...</div>;
   }
 
-  if (!user || overview?.role !== "manager") {
+  if (!user || !canManage) {
     return <Navigate to="/" replace />;
+  }
+
+  if (isOverviewLoading) {
+    return <div className="text-slate-500">Caricamento gestione...</div>;
+  }
+
+  if (overviewError) {
+    return (
+      <Card className="max-w-2xl">
+        <CardHeader>
+          <CardTitle className="text-lg text-slate-800">Gestione non disponibile</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-slate-600">
+            Non è stato possibile caricare i dati di gestione. Riprova tra poco
+            o contatta il supporto se il problema persiste.
+          </p>
+          <p className="mt-3 text-xs text-red-600">{overviewError.message}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!overview || overview.role !== "manager") {
+    return (
+      <Card className="max-w-2xl">
+        <CardHeader>
+          <CardTitle className="text-lg text-slate-800">Gestione non disponibile</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-slate-600">
+            Il tuo account risulta Manager, ma i dati di gestione non sono
+            ancora disponibili. Aggiorna la pagina o riprova tra poco.
+          </p>
+        </CardContent>
+      </Card>
+    );
   }
 
   const usagePercent = percent(overview.usage.used, overview.usage.limit);
