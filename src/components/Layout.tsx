@@ -38,9 +38,10 @@ export default function Layout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
-  const { data: subscription } = trpc.subscriptions.mySubscription.useQuery(undefined, {
-    enabled: isAuthenticated,
-  });
+  const { data: subscription, isLoading: isSubscriptionLoading } =
+    trpc.subscriptions.mySubscription.useQuery(undefined, {
+      enabled: isAuthenticated,
+    });
   const { data: organizationOverview } = trpc.organization.overview.useQuery(undefined, {
     enabled: isAuthenticated,
   });
@@ -86,8 +87,25 @@ export default function Layout({ children }: { children: ReactNode }) {
   if (!isAuthenticated && location.pathname !== "/login") {
     return <Navigate to="/login" replace />;
   }
+
+  if (
+    isAuthenticated &&
+    isSubscriptionLoading &&
+    location.pathname !== "/abbonamento"
+  ) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-slate-500">
+        Verifica abbonamento...
+      </div>
+    );
+  }
+
   const hasValidSubscription = isSubscriptionCurrentlyValid(subscription);
-  const mustChooseSubscription = isAuthenticated && !hasValidSubscription && location.pathname !== "/abbonamento";
+  const mustChooseSubscription =
+    isAuthenticated &&
+    !isSubscriptionLoading &&
+    !hasValidSubscription &&
+    location.pathname !== "/abbonamento";
 
   if (mustChooseSubscription) {
     return <Navigate to="/abbonamento" replace />;
