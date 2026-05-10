@@ -1,4 +1,4 @@
-import { supabaseServerDb } from "./supabase";
+import { createSupabaseUserDb, supabaseServerDb } from "./supabase";
 
 const appSchemaDb = supabaseServerDb.schema("app");
 
@@ -19,6 +19,9 @@ function isInvalidAppSchemaError(error: unknown) {
  * Default app DB accessor (schema switching).
  */
 export const appDb = () => appSchemaDb;
+
+export const appDbForAccessToken = (accessToken: string) =>
+  createSupabaseUserDb(accessToken).schema("app");
 
 /**
  * Runs a query against schema `app` first, then retries using fully-qualified

@@ -34,51 +34,10 @@ export async function findUserByUnionId(unionId: string) {
   }
 
   if (!profile) {
-    const authEmail = cachedUser?.email;
-    const fallbackName = sanitizeProfileNameOrFallback(
-      cachedUser?.name,
-      authEmail ? authEmail.split("@")[0] : "Utente"
-    );
-    const { data: repairedProfile, error: repairError } = await appDb()
-      .from("profiles")
-      .upsert(
-        {
-          id: supabaseUserId,
-          email: authEmail ?? "",
-          name: fallbackName,
-        },
-        { onConflict: "id" }
-      )
-      .select(
-        "email,name,first_name,last_name,role,piano,seats,trial_schede_usate,schede_mese"
-      )
-      .maybeSingle();
-
-    if (repairError || !repairedProfile) {
-      return cachedUser;
-    }
-
-    const account = await getAccountContext(supabaseUserId);
-
-    return {
-      id: cachedUser?.id ?? nextUserId(),
-      unionId,
-      email: repairedProfile.email,
-      name: sanitizeProfileNameOrFallback(
-        repairedProfile.name,
-        repairedProfile.email?.split("@")[0] ?? "Utente"
-      ),
-      firstName: repairedProfile.first_name,
-      lastName: repairedProfile.last_name,
-      role: repairedProfile.role ?? cachedUser?.role ?? "user",
-      accountRole: account.role,
-      organizationOwnerId: account.ownerUserId,
-      piano: (repairedProfile.piano ?? "trial") as User["piano"],
-      seats: repairedProfile.seats ?? 1,
-      trialSchedeUsate: repairedProfile.trial_schede_usate ?? 0,
-      schedeMese: repairedProfile.schede_mese ?? 0,
-      lastSignInAt: cachedUser?.lastSignInAt,
-    };
+    // Resolving the authenticated user is intentionally read-only. Missing
+    // profiles should be created during registration or fixed by maintenance,
+    // not silently repaired during login/session reads.
+    return cachedUser;
   }
 
   const account = await getAccountContext(supabaseUserId);
