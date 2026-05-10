@@ -1,6 +1,7 @@
 import { nextUserId, users, type User } from "../store";
 import { appDb } from "../lib/db";
 import { sanitizeProfileNameOrFallback } from "../lib/sanitize";
+import { getAccountContext } from "../lib/organization";
 
 type InsertUser = Omit<
   User,
@@ -23,7 +24,7 @@ export async function findUserByUnionId(unionId: string) {
   const { data: profile, error } = await appDb()
     .from("profiles")
     .select(
-      "email,name,first_name,last_name,piano,seats,trial_schede_usate,schede_mese"
+      "email,name,first_name,last_name,role,piano,seats,trial_schede_usate,schede_mese"
     )
     .eq("id", supabaseUserId)
     .maybeSingle();
@@ -49,13 +50,15 @@ export async function findUserByUnionId(unionId: string) {
         { onConflict: "id" }
       )
       .select(
-        "email,name,first_name,last_name,piano,seats,trial_schede_usate,schede_mese"
+        "email,name,first_name,last_name,role,piano,seats,trial_schede_usate,schede_mese"
       )
       .maybeSingle();
 
     if (repairError || !repairedProfile) {
       return cachedUser;
     }
+
+    const account = await getAccountContext(supabaseUserId);
 
     return {
       id: cachedUser?.id ?? nextUserId(),
@@ -67,7 +70,9 @@ export async function findUserByUnionId(unionId: string) {
       ),
       firstName: repairedProfile.first_name,
       lastName: repairedProfile.last_name,
-      role: cachedUser?.role ?? "user",
+      role: repairedProfile.role ?? cachedUser?.role ?? "user",
+      accountRole: account.role,
+      organizationOwnerId: account.ownerUserId,
       piano: (repairedProfile.piano ?? "trial") as User["piano"],
       seats: repairedProfile.seats ?? 1,
       trialSchedeUsate: repairedProfile.trial_schede_usate ?? 0,
@@ -75,6 +80,8 @@ export async function findUserByUnionId(unionId: string) {
       lastSignInAt: cachedUser?.lastSignInAt,
     };
   }
+
+  const account = await getAccountContext(supabaseUserId);
 
   return {
     id: cachedUser?.id ?? nextUserId(),
@@ -86,7 +93,9 @@ export async function findUserByUnionId(unionId: string) {
     ),
     firstName: profile.first_name,
     lastName: profile.last_name,
-    role: cachedUser?.role ?? "user",
+    role: profile.role ?? cachedUser?.role ?? "user",
+    accountRole: account.role,
+    organizationOwnerId: account.ownerUserId,
     piano: (profile.piano ?? "trial") as User["piano"],
     seats: profile.seats ?? 1,
     trialSchedeUsate: profile.trial_schede_usate ?? 0,

@@ -1,6 +1,7 @@
 import { createRouter, authedQuery } from "./middleware";
 import { z } from "zod";
 import { appDb, getSupabaseUserIdFromUnionId } from "./lib/db";
+import { getAccountContext, requireManager } from "./lib/organization";
 import type { Plan } from "./store";
 
 function requireSupabaseUserId(unionId: string) {
@@ -12,6 +13,7 @@ function requireSupabaseUserId(unionId: string) {
 export const subscriptionsRouter = createRouter({
   cancel: authedQuery.mutation(async ({ ctx }) => {
     const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
+    await requireManager(supabaseUserId);
     const { data: currentSub } = await appDb()
       .from("subscriptions")
       .select("plan,current_period_end")
@@ -36,16 +38,19 @@ export const subscriptionsRouter = createRouter({
   }),
   mySubscription: authedQuery.query(async ({ ctx }) => {
     const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
+    const account = await getAccountContext(supabaseUserId);
     const { data, error } = await appDb()
       .from("subscriptions")
       .select(
         "id,user_id,status,plan,seats_count,current_period_start,current_period_end,cancel_at_period_end,created_at,updated_at"
       )
-      .eq("user_id", supabaseUserId)
+      .eq("user_id", account.ownerUserId)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
     return {
+      accountRole: account.role,
+      ownerUserId: account.ownerUserId,
       id: data.id,
       userId: data.user_id,
       status: data.status,
@@ -85,6 +90,7 @@ export const subscriptionsRouter = createRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
+      await requireManager(supabaseUserId);
       const seatsCount = input.seatsCount ?? 1;
       const { data: selectedPlan, error: selectedPlanError } = await appDb()
         .from("subscription_plans")
