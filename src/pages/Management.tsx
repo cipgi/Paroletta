@@ -1,11 +1,20 @@
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { Navigate } from "react-router";
-import { BarChart3, CreditCard, MailPlus, ShieldCheck, Users, X } from "lucide-react";
+import {
+  BarChart3,
+  Copy,
+  CreditCard,
+  MailPlus,
+  ShieldCheck,
+  Users,
+  X,
+} from "lucide-react";
 import { trpc } from "@/providers/trpc";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 
 function percent(value: number, total: number) {
@@ -18,6 +27,10 @@ export default function Management() {
   const [email, setEmail] = useState("");
   const utils = trpc.useUtils();
   const canManage = user?.accountRole === "manager";
+  const invitationBaseUrl = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    return `${window.location.origin}/invito`;
+  }, []);
   const {
     data: overview,
     error: overviewError,
@@ -54,7 +67,9 @@ export default function Management() {
     return (
       <Card className="max-w-2xl">
         <CardHeader>
-          <CardTitle className="text-lg text-slate-800">Gestione non disponibile</CardTitle>
+          <CardTitle className="text-lg text-slate-800">
+            Gestione non disponibile
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-slate-600">
@@ -71,7 +86,9 @@ export default function Management() {
     return (
       <Card className="max-w-2xl">
         <CardHeader>
-          <CardTitle className="text-lg text-slate-800">Gestione non disponibile</CardTitle>
+          <CardTitle className="text-lg text-slate-800">
+            Gestione non disponibile
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-slate-600">
@@ -84,6 +101,7 @@ export default function Management() {
   }
 
   const usagePercent = percent(overview.usage.used, overview.usage.limit);
+  const seatsSummary = `${overview.seats.used}/${overview.seats.total} posti attivi`;
 
   function onInvite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -94,9 +112,12 @@ export default function Management() {
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold text-slate-800">Management Dashboard</h1>
+        <h1 className="text-2xl font-bold text-slate-800">
+          Management Dashboard
+        </h1>
         <p className="text-slate-500 mt-1">
-          Controllo centrale di staff, abbonamento e consumo del pool AI condiviso.
+          Controllo centrale di staff, abbonamento e consumo del pool AI
+          condiviso.
         </p>
       </div>
 
@@ -107,8 +128,10 @@ export default function Management() {
               <Users className="w-6 h-6 text-teal-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-slate-800">{overview.members.length + 1}</p>
-              <p className="text-sm text-slate-500">Account nel team</p>
+              <p className="text-2xl font-bold text-slate-800">
+                {overview.members.length + 1}
+              </p>
+              <p className="text-sm text-slate-500">{seatsSummary}</p>
             </div>
           </CardContent>
         </Card>
@@ -118,7 +141,9 @@ export default function Management() {
               <BarChart3 className="w-6 h-6 text-violet-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-slate-800">{overview.usage.used}/{overview.usage.limit}</p>
+              <p className="text-2xl font-bold text-slate-800">
+                {overview.usage.used}/{overview.usage.limit}
+              </p>
               <p className="text-sm text-slate-500">Generazioni dal pool</p>
             </div>
           </CardContent>
@@ -129,8 +154,12 @@ export default function Management() {
               <CreditCard className="w-6 h-6 text-amber-600" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-slate-800">{overview.subscription?.plan ?? "trial"}</p>
-              <p className="text-sm text-slate-500">Piano gestito dal Manager</p>
+              <p className="text-sm font-semibold text-slate-800">
+                {overview.subscription?.plan ?? "trial"}
+              </p>
+              <p className="text-sm text-slate-500">
+                Piano gestito dal Manager
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -145,14 +174,20 @@ export default function Management() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-            <div className="h-full bg-teal-600" style={{ width: `${usagePercent}%` }} />
+            <div
+              className="h-full bg-teal-600"
+              style={{ width: `${usagePercent}%` }}
+            />
           </div>
           <div className="flex flex-wrap justify-between gap-3 text-sm text-slate-600">
             <span>{overview.usage.remaining} generazioni rimanenti</span>
             <span>{overview.usage.teamSheetsCount} schede totali del team</span>
           </div>
           <p className="text-xs text-slate-500">
-            Ogni scheda generata dal Manager o dallo staff viene scalata dallo stesso allowance mensile, mantenendo private le aree di lavoro personali.
+            Ogni scheda generata dal Manager o dallo staff viene scalata dallo
+            stesso allowance mensile, mantenendo private le aree di lavoro
+            personali. Posti disponibili: {overview.seats.available}. Inviti
+            pendenti: {overview.seats.pending}.
           </p>
         </CardContent>
       </Card>
@@ -166,37 +201,99 @@ export default function Management() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <form className="flex gap-2" onSubmit={onInvite}>
-              <Input
-                type="email"
-                value={email}
-                onChange={event => setEmail(event.target.value)}
-                placeholder="terapeuta@clinica.it"
-                aria-label="Email terapeuta"
-              />
-              <Button type="submit" disabled={invite.isPending} className="bg-teal-600 hover:bg-teal-700">
-                Invita
-              </Button>
+            <form className="space-y-2" onSubmit={onInvite}>
+              <Label htmlFor="staff-email">Email terapeuta</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="staff-email"
+                  type="email"
+                  value={email}
+                  onChange={event => setEmail(event.target.value)}
+                  placeholder="terapeuta@clinica.it"
+                  disabled={overview.seats.available === 0}
+                />
+                <Button
+                  type="submit"
+                  disabled={invite.isPending || overview.seats.available === 0}
+                  className="bg-teal-600 hover:bg-teal-700"
+                >
+                  Invita
+                </Button>
+              </div>
+              {overview.seats.available === 0 && (
+                <p className="text-xs text-amber-700">
+                  Tutti i posti sono occupati o riservati da inviti pendenti.
+                  Aumenta i posti dall'abbonamento o revoca un invito.
+                </p>
+              )}
             </form>
-            {invite.error && <p className="text-sm text-red-600">{invite.error.message}</p>}
+            {invite.error && (
+              <p className="text-sm text-red-600">{invite.error.message}</p>
+            )}
 
             <div className="space-y-2">
               {overview.invitations.length === 0 ? (
                 <p className="text-sm text-slate-500">Nessun invito creato.</p>
               ) : (
-                overview.invitations.map(invitation => (
-                  <div key={invitation.id} className="flex items-center justify-between rounded-lg border border-slate-100 p-3">
-                    <div>
-                      <p className="text-sm font-medium text-slate-800">{invitation.email}</p>
-                      <Badge variant="secondary" className="mt-1">{invitation.status}</Badge>
+                overview.invitations.map(invitation => {
+                  const invitationUrl = invitation.token
+                    ? `${invitationBaseUrl}/${invitation.token}`
+                    : "";
+
+                  return (
+                    <div
+                      key={invitation.id}
+                      className="rounded-lg border border-slate-100 p-3 space-y-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium text-slate-800">
+                            {invitation.email}
+                          </p>
+                          <Badge variant="secondary" className="mt-1">
+                            {invitation.status}
+                          </Badge>
+                        </div>
+                        {invitation.status === "pending" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-label={`Revoca invito per ${invitation.email}`}
+                            onClick={() =>
+                              revokeInvitation.mutate({ id: invitation.id })
+                            }
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+                      {invitation.status === "pending" && invitationUrl && (
+                        <div className="space-y-2">
+                          <Label htmlFor={`invite-link-${invitation.id}`}>
+                            Link invito
+                          </Label>
+                          <div className="flex gap-2">
+                            <Input
+                              id={`invite-link-${invitation.id}`}
+                              readOnly
+                              value={invitationUrl}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                navigator.clipboard?.writeText(invitationUrl)
+                              }
+                            >
+                              <Copy className="w-4 h-4 mr-2" /> Copia
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    {invitation.status === "pending" && (
-                      <Button variant="ghost" size="sm" onClick={() => revokeInvitation.mutate({ id: invitation.id })}>
-                        <X className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </CardContent>
@@ -211,35 +308,62 @@ export default function Management() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="rounded-lg bg-slate-50 p-3">
-              <p className="text-sm font-medium text-slate-800">{overview.owner.name}</p>
-              <p className="text-xs text-slate-500">Manager · {overview.owner.email}</p>
+              <p className="text-sm font-medium text-slate-800">
+                {overview.owner.name}
+              </p>
+              <p className="text-xs text-slate-500">
+                Manager · {overview.owner.email}
+              </p>
             </div>
             {overview.members.map(member => (
-              <div key={member.id} className="flex items-center justify-between rounded-lg border border-slate-100 p-3">
+              <div
+                key={member.id}
+                className="flex items-center justify-between rounded-lg border border-slate-100 p-3"
+              >
                 <div>
-                  <p className="text-sm font-medium text-slate-800">{member.name}</p>
-                  <p className="text-xs text-slate-500">Staff · {member.email}</p>
+                  <p className="text-sm font-medium text-slate-800">
+                    {member.name}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Staff · {member.email}
+                  </p>
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => removeMember.mutate({ memberUserId: member.id })}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    removeMember.mutate({ memberUserId: member.id })
+                  }
+                >
                   Rimuovi
                 </Button>
               </div>
             ))}
-            {overview.members.length === 0 && <p className="text-sm text-slate-500">Nessun sub-account collegato.</p>}
+            {overview.members.length === 0 && (
+              <p className="text-sm text-slate-500">
+                Nessun sub-account collegato.
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Qualità clinica e privacy by design</CardTitle>
+          <CardTitle className="text-lg">
+            Qualità clinica e privacy by design
+          </CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-slate-600 space-y-2">
           <p>
-            Il Manager può supervisionare il volume e i tipi di materiali prodotti dal team, inclusi esercizi di morfosintassi complessa e comprensione visiva.
+            Il Manager può supervisionare il volume e i tipi di materiali
+            prodotti dal team, inclusi esercizi di morfosintassi complessa e
+            comprensione visiva.
           </p>
           <p>
-            Le credenziali dei sub-account restano individuali e l'archivio clinico personale non viene condiviso con lo staff. Paroletta continua a non richiedere né memorizzare nomi paziente.
+            Le credenziali dei sub-account restano individuali e l'archivio
+            clinico personale non viene condiviso con lo staff. Paroletta
+            continua a non richiedere né memorizzare nomi paziente.
           </p>
         </CardContent>
       </Card>
