@@ -20,6 +20,7 @@ export const env = {
   supabaseUrl: process.env.SUPABASE_URL ?? "",
   supabasePublishableKey:
     process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY ?? "",
+  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
 };
 
 export const supabaseConfigured = Boolean(

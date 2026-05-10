@@ -9,3 +9,10 @@ export const supabase = createClient(env.supabaseUrl, env.supabasePublishableKey
   auth: { persistSession: false, autoRefreshToken: false },
   db: { schema: "app" },
 });
+
+const serverDbKey = env.supabaseServiceRoleKey || env.supabasePublishableKey;
+
+export const supabaseServerDb = createClient(env.supabaseUrl, serverDbKey, {
+  auth: { persistSession: false, autoRefreshToken: false },
+  db: { schema: "app" },
+});

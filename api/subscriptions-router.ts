@@ -54,7 +54,38 @@ export const subscriptionsRouter = createRouter({
       .eq("user_id", account.ownerUserId)
       .maybeSingle();
     if (error) throw databaseOperationError("caricare l’abbonamento", error);
-    if (!data) return null;
+    if (!data) {
+      const { data: ownerProfile, error: profileError } = await appDb()
+        .from("profiles")
+        .select("piano,seats,created_at,updated_at")
+        .eq("id", account.ownerUserId)
+        .single();
+      if (profileError || !ownerProfile) {
+        throw databaseOperationError(
+          "caricare il profilo dell’abbonamento",
+          profileError
+        );
+      }
+
+      const plan = (ownerProfile.piano ?? "trial") as Plan;
+      const status = plan === "trial" ? "trial" : "attivo";
+
+      return {
+        accountRole: account.role,
+        ownerUserId: account.ownerUserId,
+        id: null,
+        userId: account.ownerUserId,
+        status,
+        plan,
+        seatsCount: ownerProfile.seats ?? 1,
+        currentPeriodStart: ownerProfile.created_at,
+        currentPeriodEnd: status === "attivo" ? null : ownerProfile.updated_at,
+        cancelAtPeriodEnd: false,
+        createdAt: ownerProfile.created_at,
+        updatedAt: ownerProfile.updated_at,
+        derivedFromProfile: true,
+      };
+    }
     return {
       accountRole: account.role,
       ownerUserId: account.ownerUserId,
