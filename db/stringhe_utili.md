@@ -1,4 +1,12 @@
- cancellazione account: sostituire solo il utente@example.com
+# Stringhe utili
+
+## Cancellazione account
+
+Sostituire solo `utente@example.com` con l'email dell'account da eliminare.
+
+> Nota: la query è dentro un blocco di codice per preservare correttamente `count(*)` quando viene copiata da Markdown.
+
+```sql
 with input_email as (
   select lower(trim('utente@example.com')) as email
 ),
@@ -25,4 +33,4 @@ deleted_auth_user as (
 select
   (select count(*) from deleted_auth_user) as utenti_registrati_eliminati,
   (select count(*) from deleted_invitations) as inviti_eliminati;
-
+```
