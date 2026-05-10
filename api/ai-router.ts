@@ -3,6 +3,11 @@ import { z } from "zod";
 
 import { TRPCError } from "@trpc/server";
 import { appDb, getSupabaseUserIdFromUnionId } from "./lib/db";
+import {
+  databaseOperationError,
+  invalidSessionError,
+  userFacingError,
+} from "./lib/errors";
 import { getAccountContext } from "./lib/organization";
 import { sanitizePlainText } from "./lib/sanitize";
 
@@ -412,10 +417,7 @@ export const aiRouter = createRouter({
     .mutation(async ({ ctx, input }) => {
       const supabaseUserId = getSupabaseUserIdFromUnionId(ctx.user.unionId);
       if (!supabaseUserId) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Utente Supabase non valido",
-        });
+        throw invalidSessionError();
       }
       const account = await getAccountContext(supabaseUserId);
       const { data: subscription, error: subscriptionError } = await appDb()
@@ -424,10 +426,10 @@ export const aiRouter = createRouter({
         .eq("user_id", account.ownerUserId)
         .maybeSingle();
       if (subscriptionError)
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: subscriptionError.message,
-        });
+        throw databaseOperationError(
+          "verificare il tuo abbonamento",
+          subscriptionError
+        );
       const nowMs = Date.now();
       const trialStartedAt = subscription?.created_at
         ? new Date(subscription.created_at).getTime()
@@ -455,10 +457,7 @@ export const aiRouter = createRouter({
         .eq("active", true)
         .maybeSingle();
       if (planError)
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: planError.message,
-        });
+        throw databaseOperationError("caricare il limite del piano", planError);
       const limit = planData?.sheet_limit ?? 5;
       const { data: profileUsage, error: profileUsageError } = await appDb()
         .from("profiles")
@@ -466,10 +465,10 @@ export const aiRouter = createRouter({
         .eq("id", account.ownerUserId)
         .single();
       if (profileUsageError)
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: profileUsageError.message,
-        });
+        throw databaseOperationError(
+          "leggere l’utilizzo delle schede",
+          profileUsageError
+        );
       const used =
         piano === "trial"
           ? (profileUsage.trial_schede_usate ?? 0)
@@ -495,10 +494,10 @@ export const aiRouter = createRouter({
       }
       const parsed = aiResponseSchema.safeParse(raw);
       if (!parsed.success)
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "AI response format invalid",
-        });
+        throw userFacingError(
+          "SERVICE_UNAVAILABLE",
+          "La generazione non ha restituito una scheda valida. Riprova modificando leggermente i parametri."
+        );
       const data = parsed.data;
       const sanitizedWords =
         sanitizedInput.tipoOutput === "discriminazione_visiva" ||
@@ -534,10 +533,7 @@ export const aiRouter = createRouter({
             message: `Hai raggiunto il limite di ${limit} schede per il piano ${piano}. Passa a un piano superiore per continuare.`,
           });
         }
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: error?.message ?? "Errore salvataggio scheda",
-        });
+        throw databaseOperationError("salvare la scheda generata", error);
       }
 
       const sheet = {
@@ -560,10 +556,10 @@ export const aiRouter = createRouter({
         .eq("id", account.ownerUserId)
         .single();
       if (updatedUsageError)
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: updatedUsageError.message,
-        });
+        throw databaseOperationError(
+          "aggiornare il conteggio delle schede residue",
+          updatedUsageError
+        );
 
       const totalUsed =
         piano === "trial"

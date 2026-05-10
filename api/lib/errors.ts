@@ -1,5 +1,6 @@
-import { getTRPCErrorFromUnknown } from "@trpc/server";
+import { TRPCError, getTRPCErrorFromUnknown } from "@trpc/server";
 import type { TRPC_ERROR_CODE_KEY } from "@trpc/server/rpc";
+import { ZodError } from "zod";
 
 type ServerErrorContext = {
   path?: string;
@@ -16,7 +17,9 @@ const genericNotFoundMessage = "Risorsa non trovata.";
 const genericBadRequestMessage = "Richiesta non valida.";
 const genericTimeoutMessage = "La richiesta è scaduta. Riprova più tardi.";
 
-const clientErrorMessages: Partial<Record<TRPC_ERROR_CODE_KEY | string, string>> = {
+const clientErrorMessages: Partial<
+  Record<TRPC_ERROR_CODE_KEY | string, string>
+> = {
   BAD_REQUEST: genericBadRequestMessage,
   PARSE_ERROR: genericBadRequestMessage,
   UNAUTHORIZED: genericAuthMessage,
@@ -27,7 +30,35 @@ const clientErrorMessages: Partial<Record<TRPC_ERROR_CODE_KEY | string, string>>
   PAYLOAD_TOO_LARGE: "La richiesta è troppo grande.",
 };
 
-export function getSafeClientErrorMessage(code?: TRPC_ERROR_CODE_KEY | string) {
+const hiddenClientCodes = new Set<TRPC_ERROR_CODE_KEY | string>([
+  "INTERNAL_SERVER_ERROR",
+]);
+
+function cleanClientMessage(message?: string) {
+  return message?.replace(/\s+/g, " ").trim().slice(0, 500);
+}
+
+function getZodValidationMessage(cause: unknown) {
+  if (!(cause instanceof ZodError) || cause.issues.length === 0) return null;
+
+  const issue = cause.issues[0];
+  const field = issue.path.length > 0 ? issue.path.join(".") : "campo";
+  return `Controlla il campo "${field}": ${issue.message}`;
+}
+
+export function getSafeClientErrorMessage(
+  code?: TRPC_ERROR_CODE_KEY | string,
+  message?: string,
+  cause?: unknown
+) {
+  if (code && hiddenClientCodes.has(code)) return genericErrorMessage;
+
+  const validationMessage = getZodValidationMessage(cause);
+  if (validationMessage) return validationMessage;
+
+  const explicitMessage = cleanClientMessage(message);
+  if (explicitMessage) return explicitMessage;
+
   return (code && clientErrorMessages[code]) || genericErrorMessage;
 }
 
@@ -40,7 +71,40 @@ export function getSafeHttpErrorBody(status: number) {
   return { error: genericErrorMessage };
 }
 
-export function logServerError(error: unknown, context: ServerErrorContext = {}) {
+export function userFacingError(
+  code: TRPC_ERROR_CODE_KEY,
+  message: string,
+  cause?: unknown
+) {
+  return new TRPCError({ code, message, cause });
+}
+
+export function databaseOperationError(operation: string, cause?: unknown) {
+  return userFacingError(
+    "SERVICE_UNAVAILABLE",
+    `Non è stato possibile completare l'operazione: ${operation}. Riprova tra poco.`,
+    cause
+  );
+}
+
+export function missingResourceError(resource: string) {
+  return userFacingError(
+    "NOT_FOUND",
+    `${resource} non trovata o non più disponibile.`
+  );
+}
+
+export function invalidSessionError() {
+  return userFacingError(
+    "UNAUTHORIZED",
+    "Sessione non valida: esci e accedi di nuovo."
+  );
+}
+
+export function logServerError(
+  error: unknown,
+  context: ServerErrorContext = {}
+) {
   const trpcError = getTRPCErrorFromUnknown(error);
 
   console.error("[server-error]", {
