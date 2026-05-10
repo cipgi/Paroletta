@@ -1,6 +1,6 @@
-import { supabase } from "./supabase";
+import { supabaseServerDb } from "./supabase";
 
-const appSchemaDb = supabase.schema("app");
+const appSchemaDb = supabaseServerDb.schema("app");
 
 function getErrorField(error: unknown, field: "message" | "details") {
   if (!error || typeof error !== "object" || !(field in error)) return "";
@@ -45,10 +45,12 @@ export async function queryAppTable<TData = unknown, TError = unknown>(
 
   // Fallback for deployments where schema `app` is not exposed to PostgREST.
   // Retry first on default schema, then via fully-qualified table name.
-  const defaultSchemaResult = await run((name: string) => supabase.from(name));
+  const defaultSchemaResult = await run((name: string) =>
+    supabaseServerDb.from(name)
+  );
   if (!defaultSchemaResult.error) return defaultSchemaResult;
 
-  return run((name: string) => supabase.from(`app.${name}`));
+  return run((name: string) => supabaseServerDb.from(`app.${name}`));
 }
 
 export function getSupabaseUserIdFromUnionId(unionId: string): string | null {

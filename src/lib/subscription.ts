@@ -5,14 +5,25 @@ type SubscriptionLike = {
   currentPeriodEnd?: string | null;
 };
 
-export function isSubscriptionCurrentlyValid(subscription: SubscriptionLike | null | undefined): boolean {
+export function isSubscriptionCurrentlyValid(
+  subscription: SubscriptionLike | null | undefined
+): boolean {
   if (!subscription) return false;
 
-  const periodEnd = subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd).getTime() : 0;
+  if (subscription.status === "attivo") {
+    if (!subscription.currentPeriodEnd) return true;
+    const periodEnd = new Date(subscription.currentPeriodEnd).getTime();
+    return Number.isFinite(periodEnd) && periodEnd > Date.now();
+  }
+
+  const periodEnd = subscription.currentPeriodEnd
+    ? new Date(subscription.currentPeriodEnd).getTime()
+    : 0;
   const isPeriodActive = Number.isFinite(periodEnd) && periodEnd > Date.now();
 
-  if (!isPeriodActive) return false;
-
-  return subscription.status === "attivo" || subscription.status === "trial" || subscription.status === "cancellato";
+  return (
+    isPeriodActive &&
+    (subscription.status === "trial" || subscription.status === "cancellato")
+  );
 }
 
