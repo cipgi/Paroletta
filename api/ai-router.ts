@@ -7,6 +7,7 @@ import { getAccountContext } from "./lib/organization";
 import { sanitizePlainText } from "./lib/sanitize";
 
 const ALLOWED_INTERESSI = [
+  "libero",
   "dinosauro",
   "principessa",
   "calcio",
@@ -18,6 +19,10 @@ const ALLOWED_INTERESSI = [
   "ballo",
   "musica",
 ] as const;
+
+const AVAILABLE_SPECIFIC_INTERESTS = ALLOWED_INTERESSI.filter(
+  interesse => interesse !== "libero"
+);
 
 const ALLOWED_FONEMI = [
   "r",
@@ -63,12 +68,21 @@ const MAX_SMART_INPUT_LENGTH = 900;
 const MAX_GRAMMAR_ELEMENT_LENGTH = 120;
 const MAX_SCENE_DESCRIPTION_LENGTH = 900;
 const MAX_ETA_LENGTH = 20;
+const FREE_INTEREST_VALUE = "libero";
 const INSTRUCTION_MARKER_PATTERN =
   /(?:^|\b)(?:ignora|ignore|disregard|forget|system|developer|assistant|istruzioni|instructions|prompt|jailbreak|override|bypass|rispondi come|act as)(?:\b|$)/giu;
 const SCRIPT_STYLE_CONTENT_PATTERN =
   /<\s*(script|style)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/giu;
 const CODE_FENCE_PATTERN = /```+/g;
 const ROLE_MARKER_PATTERN = /\b(?:system|developer|assistant|user)\s*:/giu;
+
+function resolveInterestForGeneration(
+  interesse: (typeof ALLOWED_INTERESSI)[number]
+): (typeof AVAILABLE_SPECIFIC_INTERESTS)[number] {
+  if (interesse !== FREE_INTEREST_VALUE) return interesse;
+
+  return AVAILABLE_SPECIFIC_INTERESTS[0];
+}
 
 export function sanitizePromptVariable(
   input: string,
@@ -210,6 +224,10 @@ export function buildPromptMessages(params: GenerationParams): PromptMessage[] {
     livelloComplessita: params.livelloComplessita ?? null,
     descrizioneScena: params.descrizioneScena ?? null,
     numeroOpzioni: params.numeroOpzioni ?? null,
+    interessiDisponibili:
+      params.interesse === FREE_INTEREST_VALUE
+        ? AVAILABLE_SPECIFIC_INTERESTS
+        : null,
   };
 
   return [
@@ -231,9 +249,9 @@ LINEE GUIDA PER LA SEMPLICITÀ DEL TESTO (REGOLE FONDAMENTALI):
 - Nessun vocabolo astratto, arcaico o complesso.
 
 ISTRUZIONI DI GENERAZIONE:
-1. Se il tipo è "storia": scrivi una storia brevissima (max 150 parole) sul tema indicato dal campo "interesse". Inserisci in modo naturale le parole contenenti il fonema indicato dal campo "fonema".
-2. Se il tipo è "filastrocca": componi una filastrocca facile e ritmata (8-12 versi) a tema indicato dal campo "interesse", usando parole con il fonema indicato dal campo "fonema".
-3. Se il tipo è "lista": crea una lista di 15-20 parole con il fonema indicato dal campo "fonema", divise per difficoltà (semplici, medie, complesse) e vicine agli interessi del bambino.
+1. Se il tipo è "storia": scrivi una storia brevissima (max 150 parole) sul tema indicato dal campo "interesse". Se il campo "interesse" vale "libero", non c'è un interesse specifico: scegli liberamente un tema tra gli interessi disponibili nel messaggio utente. Inserisci in modo naturale le parole contenenti il fonema indicato dal campo "fonema".
+2. Se il tipo è "filastrocca": componi una filastrocca facile e ritmata (8-12 versi) a tema indicato dal campo "interesse". Se il campo "interesse" vale "libero", scegli liberamente un tema tra gli interessi disponibili nel messaggio utente. Usa parole con il fonema indicato dal campo "fonema".
+3. Se il tipo è "lista": crea una lista di 15-20 parole con il fonema indicato dal campo "fonema", divise per difficoltà (semplici, medie, complesse) e vicine agli interessi del bambino. Se il campo "interesse" vale "libero", usa liberamente uno degli interessi disponibili nel messaggio utente.
 4. Se il tipo è "discriminazione_visiva": crea una scheda di comprensione visiva con una sola immagine target corretta e 1-3 distrattori coerenti. Usa lo stesso contesto visivo per tutte le opzioni. Nel testoGenerato includi sezioni in italiano: "Obiettivo clinico", "Consegna", "Target", "Distrattori" e "Prompt immagini". I prompt immagini devono essere pronti per una API di generazione immagini, con descrizioni concrete e non ambigue.
 5. Se il tipo è "morfosintassi_complessa": crea una scheda su morfosintassi complessa partendo da elemento grammaticale, complessità e scena. Nel testoGenerato includi sezioni in italiano: "Obiettivo morfosintattico", "Frase target", "Scena da illustrare", "Domande di comprensione" e "Prompt immagine". Accetta strutture come pronomi clitici, relative e subordinate quando richieste.
 
@@ -343,8 +361,9 @@ function mockAIResponse(params: GenerationParams) {
     },
   };
 
+  const effectiveInterest = resolveInterestForGeneration(params.interesse);
   const text =
-    templates[params.tipoOutput]?.[params.interesse] ??
+    templates[params.tipoOutput]?.[effectiveInterest] ??
     templates[params.tipoOutput]["dinosauro"];
 
   const wordMap: Record<string, string[]> = {
@@ -360,7 +379,7 @@ function mockAIResponse(params: GenerationParams) {
 
   return {
     testoGenerato: text,
-    tagImmagine: params.interesse,
+    tagImmagine: effectiveInterest,
     listaParole: words,
     difficolta: "media" as const,
   };

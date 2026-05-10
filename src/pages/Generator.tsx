@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 
 const interessi = [
+  "libero",
   "dinosauro",
   "principessa",
   "calcio",
@@ -136,7 +137,7 @@ export default function Generator() {
         interesse:
           parsed.interesse && interessi.includes(parsed.interesse)
             ? parsed.interesse
-            : "dinosauro",
+            : "libero",
         tipoOutput: parsed.tipoOutput ?? "discriminazione_visiva",
         aspettoSpecifico: parsed.aspettoSpecifico ?? "",
         scenarioSmart: parsed.scenarioSmart ?? "",
@@ -154,7 +155,7 @@ export default function Generator() {
   const [eta, setEta] = useState(savedPreferences?.eta ?? "6 anni");
   const [fonema, setFonema] = useState(savedPreferences?.fonema ?? "r");
   const [interesse, setInteresse] = useState(
-    savedPreferences?.interesse ?? "dinosauro"
+    savedPreferences?.interesse ?? "libero"
   );
   const [tipoOutput, setTipoOutput] = useState<TipoScheda>(
     savedPreferences?.tipoOutput ?? "discriminazione_visiva"
@@ -226,10 +227,7 @@ export default function Generator() {
           result => result.status === "rejected"
         );
         if (failedRefreshes.length > 0) {
-          console.warn(
-            "Post-generation cache refresh failed",
-            failedRefreshes
-          );
+          console.warn("Post-generation cache refresh failed", failedRefreshes);
         }
       });
 
@@ -560,7 +558,9 @@ export default function Generator() {
                 <SelectContent>
                   {interessi.map(i => (
                     <SelectItem key={i} value={i}>
-                      {i.charAt(0).toUpperCase() + i.slice(1)}
+                      {i === "libero"
+                        ? "Libero (nessun interesse specifico)"
+                        : i.charAt(0).toUpperCase() + i.slice(1)}
                     </SelectItem>
                   ))}
                 </SelectContent>

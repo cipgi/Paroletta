@@ -29,7 +29,7 @@ describe("AI prompt security", () => {
     ).toBe("le e admin 6 anni");
   });
 
-  it("allows only server-defined fonemi and interests", () => {
+  it("allows only server-defined fonemi and interests, including free interest", () => {
     expect(() =>
       sanitizeGenerationParams({
         eta: "6 anni",
@@ -47,6 +47,33 @@ describe("AI prompt security", () => {
         tipoOutput: "storia",
       })
     ).toThrow("Interesse non valido");
+
+    expect(
+      sanitizeGenerationParams({
+        eta: "6 anni",
+        fonema: "r",
+        interesse: "libero",
+        tipoOutput: "storia",
+      }).interesse
+    ).toBe("libero");
+  });
+
+  it("tells the model to choose from available interests when interest is free", () => {
+    const params = sanitizeGenerationParams({
+      eta: "6 anni",
+      fonema: "r",
+      interesse: "libero",
+      tipoOutput: "storia",
+    });
+
+    const messages = buildPromptMessages(params);
+
+    expect(messages[0].content).toContain(
+      'Se il campo "interesse" vale "libero"'
+    );
+    expect(messages[1].content).toContain('"interesse":"libero"');
+    expect(messages[1].content).toContain('"interessiDisponibili"');
+    expect(messages[1].content).toContain('"dinosauro"');
   });
 
   it("builds clinical templates for visual discrimination worksheets", () => {
