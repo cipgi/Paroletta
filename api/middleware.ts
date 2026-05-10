@@ -9,7 +9,11 @@ const t = initTRPC.context<TrpcContext>().create({
   errorFormatter({ shape, error }) {
     return {
       ...shape,
-      message: getSafeClientErrorMessage(error.code),
+      message: getSafeClientErrorMessage(
+        error.code,
+        shape.message,
+        error.cause
+      ),
       data: {
         ...shape.data,
         path: undefined,

@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { appDb } from "./db";
+import { databaseOperationError } from "./errors";
 
 export type AccountRole = "manager" | "staff";
 
@@ -9,14 +10,20 @@ export type AccountContext = {
   role: AccountRole;
 };
 
-export async function getAccountContext(userId: string): Promise<AccountContext> {
+export async function getAccountContext(
+  userId: string
+): Promise<AccountContext> {
   const { data, error } = await appDb()
     .from("seat_assignments")
     .select("owner_user_id")
     .eq("member_user_id", userId)
     .maybeSingle();
 
-  if (error) throw new Error(error.message);
+  if (error)
+    throw databaseOperationError(
+      "verificare il ruolo nell’organizzazione",
+      error
+    );
 
   return {
     userId,

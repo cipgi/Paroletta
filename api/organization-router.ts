@@ -2,11 +2,16 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { createRouter, authedQuery } from "./middleware";
 import { appDb, getSupabaseUserIdFromUnionId } from "./lib/db";
+import {
+  databaseOperationError,
+  invalidSessionError,
+  userFacingError,
+} from "./lib/errors";
 import { getAccountContext, requireManager } from "./lib/organization";
 
 function requireSupabaseUserId(unionId: string) {
   const id = getSupabaseUserIdFromUnionId(unionId);
-  if (!id) throw new Error("Utente Supabase non valido");
+  if (!id) throw invalidSessionError();
   return id;
 }
 
@@ -17,7 +22,8 @@ async function getPlanLimit(plan: string) {
     .eq("code", plan)
     .eq("active", true)
     .maybeSingle();
-  if (error) throw new Error(error.message);
+  if (error)
+    throw databaseOperationError("caricare il limite del piano", error);
   return data?.sheet_limit ?? 5;
 }
 
@@ -32,10 +38,7 @@ export const organizationRouter = createRouter({
       .eq("id", account.ownerUserId)
       .single();
     if (ownerError || !ownerProfile) {
-      throw new TRPCError({
-        code: "INTERNAL_SERVER_ERROR",
-        message: ownerError?.message ?? "Manager non trovato",
-      });
+      throw databaseOperationError("caricare il profilo Manager", ownerError);
     }
 
     const { data: subscription, error: subscriptionError } = await appDb()
@@ -43,7 +46,11 @@ export const organizationRouter = createRouter({
       .select("status,plan,seats_count,current_period_end,cancel_at_period_end")
       .eq("user_id", account.ownerUserId)
       .maybeSingle();
-    if (subscriptionError) throw new Error(subscriptionError.message);
+    if (subscriptionError)
+      throw databaseOperationError(
+        "caricare l’abbonamento del team",
+        subscriptionError
+      );
 
     const plan = subscription?.plan ?? ownerProfile.piano ?? "trial";
     const limit = await getPlanLimit(plan);
@@ -54,10 +61,13 @@ export const organizationRouter = createRouter({
 
     const { data: memberRows, error: memberError } = await appDb()
       .from("seat_assignments")
-      .select("member_user_id,created_at,profiles!seat_assignments_member_user_id_fkey(email,name)")
+      .select(
+        "member_user_id,created_at,profiles!seat_assignments_member_user_id_fkey(email,name)"
+      )
       .eq("owner_user_id", account.ownerUserId)
       .order("created_at", { ascending: false });
-    if (memberError) throw new Error(memberError.message);
+    if (memberError)
+      throw databaseOperationError("caricare i membri del team", memberError);
 
     const memberIds = (memberRows ?? []).map(row => row.member_user_id);
     const teamUserIds = [account.ownerUserId, ...memberIds];
@@ -66,7 +76,11 @@ export const organizationRouter = createRouter({
       .from("sheets")
       .select("id", { count: "exact", head: true })
       .in("user_id", teamUserIds);
-    if (teamCountError) throw new Error(teamCountError.message);
+    if (teamCountError)
+      throw databaseOperationError(
+        "contare le schede del team",
+        teamCountError
+      );
 
     const { data: recentSheets, error: recentError } = await appDb()
       .from("sheets")
@@ -74,14 +88,22 @@ export const organizationRouter = createRouter({
       .in("user_id", teamUserIds)
       .order("created_at", { ascending: false })
       .limit(10);
-    if (recentError) throw new Error(recentError.message);
+    if (recentError)
+      throw databaseOperationError(
+        "caricare le schede recenti del team",
+        recentError
+      );
 
     const { data: invitations, error: invitationError } = await appDb()
       .from("organization_invitations")
       .select("id,email,status,created_at,accepted_at,revoked_at")
       .eq("owner_user_id", account.ownerUserId)
       .order("created_at", { ascending: false });
-    if (invitationError) throw new Error(invitationError.message);
+    if (invitationError)
+      throw databaseOperationError(
+        "caricare gli inviti del team",
+        invitationError
+      );
 
     return {
       role: account.role,
@@ -137,16 +159,20 @@ export const organizationRouter = createRouter({
   }),
 
   invite: authedQuery
-    .input(z.object({ email: z.email().transform(value => value.trim().toLowerCase()) }))
+    .input(
+      z.object({
+        email: z.email().transform(value => value.trim().toLowerCase()),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
       const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
       await requireManager(supabaseUserId);
 
       if (input.email === ctx.user.email.toLowerCase()) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Non puoi invitare il tuo stesso account.",
-        });
+        throw userFacingError(
+          "BAD_REQUEST",
+          "Non puoi invitare il tuo stesso account."
+        );
       }
 
       const { data, error } = await appDb()
@@ -165,7 +191,8 @@ export const organizationRouter = createRouter({
         )
         .select("id,email,status,token,created_at")
         .single();
-      if (error || !data) throw new Error(error?.message ?? "Invito non creato");
+      if (error || !data)
+        throw databaseOperationError("creare l’invito", error);
       return {
         id: data.id,
         email: data.email,
@@ -185,7 +212,7 @@ export const organizationRouter = createRouter({
         .update({ status: "revoked", revoked_at: new Date().toISOString() })
         .eq("id", input.id)
         .eq("owner_user_id", supabaseUserId);
-      if (error) throw new Error(error.message);
+      if (error) throw databaseOperationError("revocare l’invito", error);
       return { success: true };
     }),
 
@@ -195,10 +222,10 @@ export const organizationRouter = createRouter({
       const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
       const account = await getAccountContext(supabaseUserId);
       if (account.role === "staff") {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Questo account è già collegato a un Manager.",
-        });
+        throw userFacingError(
+          "BAD_REQUEST",
+          "Questo account è già collegato a un Manager."
+        );
       }
 
       const { data: invitation, error: invitationError } = await appDb()
@@ -207,7 +234,11 @@ export const organizationRouter = createRouter({
         .eq("token", input.token)
         .eq("status", "pending")
         .maybeSingle();
-      if (invitationError) throw new Error(invitationError.message);
+      if (invitationError)
+        throw databaseOperationError(
+          "caricare gli inviti del team",
+          invitationError
+        );
       if (!invitation || invitation.email !== ctx.user.email.toLowerCase()) {
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -215,11 +246,17 @@ export const organizationRouter = createRouter({
         });
       }
 
-      const { error: seatError } = await appDb().from("seat_assignments").insert({
-        owner_user_id: invitation.owner_user_id,
-        member_user_id: supabaseUserId,
-      });
-      if (seatError) throw new Error(seatError.message);
+      const { error: seatError } = await appDb()
+        .from("seat_assignments")
+        .insert({
+          owner_user_id: invitation.owner_user_id,
+          member_user_id: supabaseUserId,
+        });
+      if (seatError)
+        throw databaseOperationError(
+          "collegare l’account al Manager",
+          seatError
+        );
 
       const now = new Date().toISOString();
       const { error: updateError } = await appDb()
@@ -230,7 +267,11 @@ export const organizationRouter = createRouter({
           accepted_at: now,
         })
         .eq("id", invitation.id);
-      if (updateError) throw new Error(updateError.message);
+      if (updateError)
+        throw databaseOperationError(
+          "aggiornare lo stato dell’invito",
+          updateError
+        );
       return { success: true };
     }),
 
@@ -244,7 +285,8 @@ export const organizationRouter = createRouter({
         .delete()
         .eq("owner_user_id", supabaseUserId)
         .eq("member_user_id", input.memberUserId);
-      if (error) throw new Error(error.message);
+      if (error)
+        throw databaseOperationError("rimuovere il membro dal team", error);
       return { success: true };
     }),
 });

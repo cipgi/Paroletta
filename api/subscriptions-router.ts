@@ -1,12 +1,18 @@
 import { createRouter, authedQuery } from "./middleware";
 import { z } from "zod";
 import { appDb, getSupabaseUserIdFromUnionId } from "./lib/db";
+import {
+  databaseOperationError,
+  invalidSessionError,
+  missingResourceError,
+  userFacingError,
+} from "./lib/errors";
 import { getAccountContext, requireManager } from "./lib/organization";
 import type { Plan } from "./store";
 
 function requireSupabaseUserId(unionId: string) {
   const id = getSupabaseUserIdFromUnionId(unionId);
-  if (!id) throw new Error("Utente Supabase non valido");
+  if (!id) throw invalidSessionError();
   return id;
 }
 
@@ -33,7 +39,8 @@ export const subscriptionsRouter = createRouter({
         },
         { onConflict: "user_id" }
       );
-    if (subError) throw new Error(subError.message);
+    if (subError)
+      throw databaseOperationError("annullare l’abbonamento", subError);
     return { success: true };
   }),
   mySubscription: authedQuery.query(async ({ ctx }) => {
@@ -46,7 +53,7 @@ export const subscriptionsRouter = createRouter({
       )
       .eq("user_id", account.ownerUserId)
       .maybeSingle();
-    if (error) throw new Error(error.message);
+    if (error) throw databaseOperationError("caricare l’abbonamento", error);
     if (!data) return null;
     return {
       accountRole: account.role,
@@ -70,7 +77,8 @@ export const subscriptionsRouter = createRouter({
       .eq("active", true)
       .neq("code", "dev")
       .order("is_trial", { ascending: false });
-    if (error) throw new Error(error.message);
+    if (error)
+      throw databaseOperationError("caricare i piani disponibili", error);
     return (data ?? []).map(plan => ({
       code: plan.code,
       name: plan.name,
@@ -98,18 +106,27 @@ export const subscriptionsRouter = createRouter({
         .eq("code", input.piano)
         .eq("active", true)
         .maybeSingle();
-      if (selectedPlanError) throw new Error(selectedPlanError.message);
-      if (!selectedPlan) throw new Error("Piano non valido o non disponibile");
+      if (selectedPlanError)
+        throw databaseOperationError(
+          "verificare il piano selezionato",
+          selectedPlanError
+        );
+      if (!selectedPlan) throw missingResourceError("Piano selezionato");
 
       const { data: existingSub, error: existingSubError } = await appDb()
         .from("subscriptions")
         .select("status,plan,created_at,current_period_start")
         .eq("user_id", supabaseUserId)
         .maybeSingle();
-      if (existingSubError) throw new Error(existingSubError.message);
+      if (existingSubError)
+        throw databaseOperationError(
+          "verificare il tuo abbonamento attuale",
+          existingSubError
+        );
       if (selectedPlan.is_trial && existingSub) {
-        throw new Error(
-          "Il trial può essere attivato una sola volta per account"
+        throw userFacingError(
+          "BAD_REQUEST",
+          "Il trial può essere attivato una sola volta per account."
         );
       }
 
@@ -118,7 +135,11 @@ export const subscriptionsRouter = createRouter({
         .from("profiles")
         .update({ piano: plan, seats: seatsCount })
         .eq("id", supabaseUserId);
-      if (profileError) throw new Error(profileError.message);
+      if (profileError)
+        throw databaseOperationError(
+          "aggiornare il profilo con il nuovo piano",
+          profileError
+        );
       const status = selectedPlan.is_trial ? "trial" : "attivo";
       const now = new Date().toISOString();
       const periodEnd = new Date(
@@ -138,7 +159,8 @@ export const subscriptionsRouter = createRouter({
           },
           { onConflict: "user_id" }
         );
-      if (subError) throw new Error(subError.message);
+      if (subError)
+        throw databaseOperationError("salvare il nuovo abbonamento", subError);
       ctx.user.piano = plan;
       ctx.user.seats = seatsCount;
       return { piano: plan, limit: selectedPlan.sheet_limit };

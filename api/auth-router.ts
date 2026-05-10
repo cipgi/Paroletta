@@ -16,6 +16,11 @@ import { supabase } from "./lib/supabase";
 import { supabaseConfigured } from "./lib/env";
 import { appDb } from "./lib/db";
 import {
+  databaseOperationError,
+  missingResourceError,
+  userFacingError,
+} from "./lib/errors";
+import {
   MAX_PROFILE_NAME_LENGTH,
   sanitizeProfileNameOrFallback,
 } from "./lib/sanitize";
@@ -39,7 +44,7 @@ async function ensureUserProfile(userId: string, email: string, name: string) {
   );
 
   if (error) {
-    throw new Error(error.message);
+    throw databaseOperationError("creare o aggiornare il profilo", error);
   }
 }
 
@@ -67,7 +72,10 @@ export const authRouter = createRouter({
     .input(credentialsSchema)
     .mutation(async ({ input }) => {
       if (!supabaseConfigured) {
-        throw new Error("Autenticazione con Supabase non configurata");
+        throw userFacingError(
+          "SERVICE_UNAVAILABLE",
+          "Accesso temporaneamente non disponibile: autenticazione non configurata."
+        );
       }
       const profileName = sanitizeProfileNameOrFallback(
         input.name,
@@ -79,7 +87,13 @@ export const authRouter = createRouter({
         options: { data: { name: profileName } },
       });
       if (error || !data.user)
-        throw new Error(error?.message ?? "Registrazione fallita");
+        throw userFacingError(
+          "BAD_REQUEST",
+          error?.message
+            ? `Registrazione non riuscita: ${error.message}`
+            : "Registrazione non riuscita: controlla email e password e riprova.",
+          error
+        );
 
       const unionId = `supabase:${data.user.id}`;
       await upsertUser({
@@ -96,10 +110,17 @@ export const authRouter = createRouter({
         .eq("code", requestedPlan)
         .eq("active", true)
         .maybeSingle();
-      if (selectedPlanError) throw new Error(selectedPlanError.message);
-      if (!selectedPlan) throw new Error("Piano iniziale non valido");
+      if (selectedPlanError)
+        throw databaseOperationError(
+          "verificare il piano iniziale",
+          selectedPlanError
+        );
+      if (!selectedPlan) throw missingResourceError("Piano iniziale");
       if (!selectedPlan.is_trial)
-        throw new Error("Il piano iniziale deve essere trial");
+        throw userFacingError(
+          "BAD_REQUEST",
+          "Il piano iniziale deve essere un piano trial."
+        );
 
       const initialPlan = selectedPlan.code;
       await ensureUserProfile(data.user.id, input.email, profileName);
@@ -107,7 +128,11 @@ export const authRouter = createRouter({
         .from("profiles")
         .update({ piano: initialPlan, seats: 1 })
         .eq("id", data.user.id);
-      if (profileError) throw new Error(profileError.message);
+      if (profileError)
+        throw databaseOperationError(
+          "salvare il piano sul profilo",
+          profileError
+        );
       const now = new Date().toISOString();
       const periodEnd = new Date(
         Date.now() + selectedPlan.duration_days * 24 * 60 * 60 * 1000
@@ -126,7 +151,11 @@ export const authRouter = createRouter({
           },
           { onConflict: "user_id" }
         );
-      if (subError) throw new Error(subError.message);
+      if (subError)
+        throw databaseOperationError(
+          "attivare l’abbonamento iniziale",
+          subError
+        );
 
       return { success: true, verificationRequired: true };
     }),
@@ -134,7 +163,10 @@ export const authRouter = createRouter({
     .input(loginCredentialsSchema)
     .mutation(async ({ input, ctx }) => {
       if (!supabaseConfigured) {
-        throw new Error("Autenticazione con Supabase non configurata");
+        throw userFacingError(
+          "SERVICE_UNAVAILABLE",
+          "Accesso temporaneamente non disponibile: autenticazione non configurata."
+        );
       }
 
       assertLoginAllowed({
@@ -150,7 +182,10 @@ export const authRouter = createRouter({
       });
       if (error || !data.user) {
         recordFailedLogin(ctx.clientIp, input.email);
-        throw new Error("Credenziali non valide");
+        throw userFacingError(
+          "UNAUTHORIZED",
+          "Email o password non corretti. Verifica le credenziali e riprova."
+        );
       }
 
       recordSuccessfulLogin(ctx.clientIp, input.email);

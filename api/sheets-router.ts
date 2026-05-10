@@ -3,11 +3,16 @@ import { z } from "zod";
 import { createDidacticPdf } from "./lib/pdf";
 import { illustrations } from "./store";
 import { appDb, getSupabaseUserIdFromUnionId } from "./lib/db";
+import {
+  databaseOperationError,
+  invalidSessionError,
+  missingResourceError,
+} from "./lib/errors";
 import { sanitizeProfileNameOrFallback } from "./lib/sanitize";
 
 function requireSupabaseUserId(unionId: string) {
   const id = getSupabaseUserIdFromUnionId(unionId);
-  if (!id) throw new Error("Utente Supabase non valido");
+  if (!id) throw invalidSessionError();
   return id;
 }
 
@@ -46,7 +51,7 @@ export const sheetsRouter = createRouter({
       .from("sheets")
       .select("id", { count: "exact", head: true })
       .eq("user_id", supabaseUserId);
-    if (error) throw new Error(error.message);
+    if (error) throw databaseOperationError("caricare le schede", error);
     return count ?? 0;
   }),
   list: authedQuery.query(async ({ ctx }) => {
@@ -56,7 +61,8 @@ export const sheetsRouter = createRouter({
       .select("*")
       .eq("user_id", supabaseUserId)
       .order("created_at", { ascending: false });
-    if (error) throw new Error(error.message);
+    if (error)
+      throw databaseOperationError("caricare l’elenco delle schede", error);
     return (data ?? []).map(mapSheet);
   }),
   detail: authedQuery
@@ -69,7 +75,7 @@ export const sheetsRouter = createRouter({
         .eq("id", input.id)
         .eq("user_id", supabaseUserId)
         .single();
-      if (error || !data) throw new Error("Sheet not found");
+      if (error || !data) throw missingResourceError("Scheda");
       return mapSheet(data);
     }),
   generatePdf: authedQuery
@@ -82,7 +88,7 @@ export const sheetsRouter = createRouter({
         .eq("id", input.id)
         .eq("user_id", supabaseUserId)
         .single();
-      if (error || !data) throw new Error("Sheet not found");
+      if (error || !data) throw missingResourceError("Scheda");
       const sheet = mapSheet(data);
       let illustrationLabel = sheet.tagImmagine ?? "generico";
       if (sheet.tagImmagine) {
