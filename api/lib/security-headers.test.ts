@@ -66,7 +66,7 @@ describe("security headers", () => {
     expect(policy).toContain("https://*.supabase.co");
     expect(policy).toContain("wss://*.supabase.co");
     expect(policy).toContain("https://api.openai.com");
-    expect(policy).toContain("https://accounts.google.com");
+    expect(policy).not.toContain("https://accounts.google.com");
     expect(policy).toContain("frame-ancestors 'none'");
     expect(policy).toContain("frame-src 'none'");
     expect(policy).toContain("object-src 'none'");
