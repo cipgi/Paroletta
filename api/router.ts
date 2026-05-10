@@ -3,6 +3,7 @@ import { sheetsRouter } from "./sheets-router";
 import { illustrationsRouter } from "./illustrations-router";
 import { subscriptionsRouter } from "./subscriptions-router";
 import { aiRouter } from "./ai-router";
+import { organizationRouter } from "./organization-router";
 import { createRouter, publicQuery } from "./middleware";
 
 export const appRouter = createRouter({
@@ -12,6 +13,7 @@ export const appRouter = createRouter({
   illustrations: illustrationsRouter,
   subscriptions: subscriptionsRouter,
   ai: aiRouter,
+  organization: organizationRouter,
 });
 
 export type AppRouter = typeof appRouter;

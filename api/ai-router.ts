@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { TRPCError } from "@trpc/server";
 import { appDb, getSupabaseUserIdFromUnionId } from "./lib/db";
+import { getAccountContext } from "./lib/organization";
 import { sanitizePlainText } from "./lib/sanitize";
 
 const ALLOWED_INTERESSI = [
@@ -397,10 +398,11 @@ export const aiRouter = createRouter({
           message: "Utente Supabase non valido",
         });
       }
+      const account = await getAccountContext(supabaseUserId);
       const { data: subscription, error: subscriptionError } = await appDb()
         .from("subscriptions")
         .select("status,plan,created_at,current_period_end")
-        .eq("user_id", supabaseUserId)
+        .eq("user_id", account.ownerUserId)
         .maybeSingle();
       if (subscriptionError)
         throw new TRPCError({
@@ -442,7 +444,7 @@ export const aiRouter = createRouter({
       const { data: profileUsage, error: profileUsageError } = await appDb()
         .from("profiles")
         .select("trial_schede_usate,schede_mese")
-        .eq("id", supabaseUserId)
+        .eq("id", account.ownerUserId)
         .single();
       if (profileUsageError)
         throw new TRPCError({
@@ -536,7 +538,7 @@ export const aiRouter = createRouter({
       const { data: updatedUsage, error: updatedUsageError } = await appDb()
         .from("profiles")
         .select("trial_schede_usate,schede_mese")
-        .eq("id", supabaseUserId)
+        .eq("id", account.ownerUserId)
         .single();
       if (updatedUsageError)
         throw new TRPCError({

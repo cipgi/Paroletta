@@ -36,6 +36,9 @@ export default function Dashboard() {
   const { data: subscription } = trpc.subscriptions.mySubscription.useQuery(undefined, {
     enabled: isAuthenticated,
   });
+  const { data: organizationOverview } = trpc.organization.overview.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
 
   if (isLoading) {
     return <div className="text-slate-500">Caricamento dashboard...</div>;
@@ -87,9 +90,11 @@ export default function Dashboard() {
                 {planLabels[subscription?.status ?? "trial"]}
               </p>
               <p className="text-sm text-slate-500">
-                {user?.piano === "trial"
-                  ? `${user?.trialSchedeUsate ?? 0}/15 schede prova`
-                  : `${user?.schedeMese ?? 0}/100 schede mese`}
+                {organizationOverview
+                  ? `${organizationOverview.usage.used}/${organizationOverview.usage.limit} pool condiviso`
+                  : user?.piano === "trial"
+                    ? `${user?.trialSchedeUsate ?? 0}/15 schede prova`
+                    : `${user?.schedeMese ?? 0}/100 schede mese`}
               </p>
             </div>
           </CardContent>

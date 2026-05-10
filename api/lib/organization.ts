@@ -1,0 +1,37 @@
+import { TRPCError } from "@trpc/server";
+import { appDb } from "./db";
+
+export type AccountRole = "manager" | "staff";
+
+export type AccountContext = {
+  userId: string;
+  ownerUserId: string;
+  role: AccountRole;
+};
+
+export async function getAccountContext(userId: string): Promise<AccountContext> {
+  const { data, error } = await appDb()
+    .from("seat_assignments")
+    .select("owner_user_id")
+    .eq("member_user_id", userId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+
+  return {
+    userId,
+    ownerUserId: data?.owner_user_id ?? userId,
+    role: data?.owner_user_id ? "staff" : "manager",
+  };
+}
+
+export async function requireManager(userId: string): Promise<AccountContext> {
+  const account = await getAccountContext(userId);
+  if (account.role !== "manager") {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Solo l'account Manager può accedere a questa funzione.",
+    });
+  }
+  return account;
+}

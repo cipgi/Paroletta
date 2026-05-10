@@ -8,7 +8,8 @@ import {
   Sparkles,
   Settings,
   CircleHelp,
-  UserX
+  UserX,
+  Users
 } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import {
@@ -40,6 +41,9 @@ export default function Layout({ children }: { children: ReactNode }) {
   const { data: subscription } = trpc.subscriptions.mySubscription.useQuery(undefined, {
     enabled: isAuthenticated,
   });
+  const { data: organizationOverview } = trpc.organization.overview.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
 
   const utils = trpc.useUtils();
 
@@ -55,15 +59,21 @@ export default function Layout({ children }: { children: ReactNode }) {
     { path: "/", label: "Dashboard", icon: LayoutDashboard },
     { path: "/generator", label: "Genera Scheda", icon: Sparkles },
     { path: "/sheets", label: "Schede", icon: FileText },
+    ...(user?.accountRole === "manager"
+      ? [{ path: "/management", label: "Gestione", icon: Users }]
+      : []),
   ];
 
   const usageLeftLabel = useMemo(() => {
+    if (organizationOverview) {
+      return `Pool condiviso rimanente: ${organizationOverview.usage.remaining}`;
+    }
     if (!user) return "";
     if (user.piano === "trial") {
       return `Schede prova rimanenti: ${Math.max(15 - (user.trialSchedeUsate ?? 0), 0)}`;
     }
     return `Schede mensili rimanenti: ${Math.max(100 - (user.schedeMese ?? 0), 0)}`;
-  }, [user]);
+  }, [organizationOverview, user]);
 
   if (isLoading) {
     return (
@@ -140,9 +150,15 @@ export default function Layout({ children }: { children: ReactNode }) {
                 <CircleHelp className="w-4 h-4" />
                 FAQ
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate("/abbonamento")}>
-                Gestisci abbonamento
-              </DropdownMenuItem>
+              {user?.accountRole === "manager" ? (
+                <DropdownMenuItem onClick={() => navigate("/abbonamento")}>
+                  Gestisci abbonamento
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem disabled>
+                  Abbonamento gestito dal Manager
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem variant="destructive" onClick={() => setOpenDeleteDialog(true)}>
                 <UserX className="w-4 h-4" />
                 Cancella account

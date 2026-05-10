@@ -25,6 +25,27 @@ export default function SubscriptionPage() {
     ? new Date(subscription.currentPeriodEnd).toLocaleDateString("it-IT")
     : "-";
   const canActivateTrial = !subscription;
+  const isStaff = subscription?.accountRole === "staff";
+
+  if (isStaff) {
+    return (
+      <div className="max-w-2xl mx-auto space-y-6">
+        <Button variant="ghost" onClick={() => navigate(-1)}>
+          <ArrowLeft className="w-4 h-4 mr-2" /> Torna indietro
+        </Button>
+        <Card>
+          <CardHeader>
+            <CardTitle>Abbonamento gestito dal Manager</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm text-slate-600">
+            <p>Il tuo account staff usa gli stessi strumenti del Manager e consuma il pool condiviso dell'organizzazione.</p>
+            <p>Billing, upgrade, disdetta e pacchetti top-up sono visibili solo all'account Manager.</p>
+            <p><strong>Piano corrente:</strong> {subscription?.plan ?? "-"}</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">

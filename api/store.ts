@@ -11,6 +11,8 @@ export type User = {
   firstName?: string | null;
   lastName?: string | null;
   role?: string;
+  accountRole?: "manager" | "staff";
+  organizationOwnerId?: string;
   piano: Plan;
   seats: number;
   trialSchedeUsate: number;
