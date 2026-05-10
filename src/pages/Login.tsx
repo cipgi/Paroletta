@@ -89,18 +89,6 @@ export default function Login() {
           <CardTitle>Accedi</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <>
-            <Button
-              className="w-full"
-              size="lg"
-              onClick={() => (window.location.href = "/api/auth/google")}
-            >
-              Continua con Google
-            </Button>
-            <div className="text-center text-xs text-muted-foreground">
-              oppure
-            </div>
-          </>
           {isRegister && (
             <div className="space-y-2">
               <Label htmlFor="name">Nome</Label>

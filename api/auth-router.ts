@@ -20,6 +20,10 @@ import {
   sanitizeProfileNameOrFallback,
 } from "./lib/sanitize";
 
+// Supabase email/password authentication lives in this router. OAuth provider
+// handlers are intentionally separate so removing Google OAuth does not affect
+// credentials-based registration or login.
+
 async function ensureUserProfile(userId: string, email: string, name: string) {
   const safeName = sanitizeProfileNameOrFallback(
     name,

@@ -5,10 +5,6 @@ import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./router";
 import { createContext } from "./context";
 import { env } from "./lib/env";
-import {
-  handleSupabaseGoogleAuth,
-  handleSupabaseGoogleCallback,
-} from "./supabase-oauth";
 import { getSafeHttpErrorBody, logServerError } from "./lib/errors";
 import { securityHeaders } from "./lib/security-headers";
 
@@ -22,8 +18,6 @@ app.use(
   })
 );
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
-app.get("/api/auth/google", handleSupabaseGoogleAuth);
-app.get("/api/auth/google/callback", handleSupabaseGoogleCallback);
 app.use("/api/trpc/*", async c => {
   return fetchRequestHandler({
     endpoint: "/api/trpc",
