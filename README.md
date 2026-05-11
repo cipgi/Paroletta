@@ -46,6 +46,13 @@ La service-role key è usata solo lato server. Non esporla mai al client e non
 prefissarla con `VITE_`, perché le variabili `VITE_*` vengono incluse nel bundle
 frontend.
 
+Se nei log compare invece `permission denied for schema app`, le chiavi sono
+state accettate ma il ruolo PostgREST non ha i permessi SQL sullo schema
+custom `app`. Applica le migrazioni fino a `db/migrations/016_app_schema_grants.sql`
+per concedere `usage` sullo schema e i privilegi necessari a `authenticated` e
+`service_role`; le policy RLS continuano comunque a limitare le righe accessibili
+agli utenti.
+
 ## React Compiler
 
 The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
