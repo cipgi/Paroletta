@@ -116,13 +116,34 @@ export const organizationRouter = createRouter({
     );
     const db = adminAppDb();
 
-    const { data: ownerProfile, error: ownerError } = await db
+    const { data: dbOwnerProfile, error: ownerError } = await db
       .from("profiles")
       .select("id,email,name,piano,seats,trial_schede_usate,schede_mese")
       .eq("id", account.ownerUserId)
-      .single();
-    if (ownerError || !ownerProfile) {
+      .maybeSingle();
+    if (ownerError) {
       throw databaseOperationError("caricare il profilo Manager", ownerError);
+    }
+
+    // Some older authenticated accounts may predate the profile trigger or have
+    // an out-of-sync app profile. Keep the management overview available for
+    // the current standalone user instead of failing on a missing row.
+    const ownerProfile =
+      dbOwnerProfile ??
+      (account.ownerUserId === supabaseUserId
+        ? {
+            id: supabaseUserId,
+            email: ctx.user.email,
+            name: ctx.user.name,
+            piano: ctx.user.piano ?? "trial",
+            seats: ctx.user.seats ?? 1,
+            trial_schede_usate: ctx.user.trialSchedeUsate ?? 0,
+            schede_mese: ctx.user.schedeMese ?? 0,
+          }
+        : null);
+
+    if (!ownerProfile) {
+      throw databaseOperationError("caricare il profilo Manager");
     }
 
     const { data: subscription, error: subscriptionError } = await db
