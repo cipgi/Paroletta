@@ -9,11 +9,36 @@ import {
   missingResourceError,
 } from "./lib/errors";
 import { sanitizeProfileNameOrFallback } from "./lib/sanitize";
+import { getAccountContext } from "./lib/organization";
 
 function requireSupabaseUserId(unionId: string) {
   const id = getSupabaseUserIdFromUnionId(unionId);
   if (!id) throw invalidSessionError();
   return id;
+}
+
+async function assertCanManageSheetOwner(
+  currentUserId: string,
+  sheetOwnerUserId: string,
+  accessToken?: string
+) {
+  if (currentUserId === sheetOwnerUserId) return;
+
+  const account = await getAccountContext(currentUserId, accessToken);
+  if (account.role !== "manager" || account.ownerUserId !== currentUserId) {
+    throw missingResourceError("Scheda");
+  }
+
+  const { data, error } = await appDb(accessToken)
+    .from("seat_assignments")
+    .select("id")
+    .eq("owner_user_id", currentUserId)
+    .eq("member_user_id", sheetOwnerUserId)
+    .maybeSingle();
+
+  if (error)
+    throw databaseOperationError("verificare l'accesso al team", error);
+  if (!data) throw missingResourceError("Scheda");
 }
 
 type DbSheet = {
@@ -44,27 +69,49 @@ const mapSheet = (s: DbSheet) => ({
   createdAt: new Date(s.created_at),
 });
 
+const managedSheetListInput = z
+  .object({
+    userId: z.string().uuid().optional(),
+  })
+  .optional();
+
 export const sheetsRouter = createRouter({
-  count: authedQuery.query(async ({ ctx }) => {
-    const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
-    const { count, error } = await appDb(ctx.supabaseAccessToken)
-      .from("sheets")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", supabaseUserId);
-    if (error) throw databaseOperationError("caricare le schede", error);
-    return count ?? 0;
-  }),
-  list: authedQuery.query(async ({ ctx }) => {
-    const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
-    const { data, error } = await appDb(ctx.supabaseAccessToken)
-      .from("sheets")
-      .select("*")
-      .eq("user_id", supabaseUserId)
-      .order("created_at", { ascending: false });
-    if (error)
-      throw databaseOperationError("caricare l’elenco delle schede", error);
-    return (data ?? []).map(mapSheet);
-  }),
+  count: authedQuery
+    .input(managedSheetListInput)
+    .query(async ({ ctx, input }) => {
+      const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
+      const targetUserId = input?.userId ?? supabaseUserId;
+      await assertCanManageSheetOwner(
+        supabaseUserId,
+        targetUserId,
+        ctx.supabaseAccessToken
+      );
+      const { count, error } = await appDb(ctx.supabaseAccessToken)
+        .from("sheets")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", targetUserId);
+      if (error) throw databaseOperationError("caricare le schede", error);
+      return count ?? 0;
+    }),
+  list: authedQuery
+    .input(managedSheetListInput)
+    .query(async ({ ctx, input }) => {
+      const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
+      const targetUserId = input?.userId ?? supabaseUserId;
+      await assertCanManageSheetOwner(
+        supabaseUserId,
+        targetUserId,
+        ctx.supabaseAccessToken
+      );
+      const { data, error } = await appDb(ctx.supabaseAccessToken)
+        .from("sheets")
+        .select("*")
+        .eq("user_id", targetUserId)
+        .order("created_at", { ascending: false });
+      if (error)
+        throw databaseOperationError("caricare l’elenco delle schede", error);
+      return (data ?? []).map(mapSheet);
+    }),
   detail: authedQuery
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
@@ -73,9 +120,13 @@ export const sheetsRouter = createRouter({
         .from("sheets")
         .select("*")
         .eq("id", input.id)
-        .eq("user_id", supabaseUserId)
         .single();
       if (error || !data) throw missingResourceError("Scheda");
+      await assertCanManageSheetOwner(
+        supabaseUserId,
+        data.user_id,
+        ctx.supabaseAccessToken
+      );
       return mapSheet(data);
     }),
   generatePdf: authedQuery
@@ -86,9 +137,13 @@ export const sheetsRouter = createRouter({
         .from("sheets")
         .select("*")
         .eq("id", input.id)
-        .eq("user_id", supabaseUserId)
         .single();
       if (error || !data) throw missingResourceError("Scheda");
+      await assertCanManageSheetOwner(
+        supabaseUserId,
+        data.user_id,
+        ctx.supabaseAccessToken
+      );
       const sheet = mapSheet(data);
       let illustrationLabel = sheet.tagImmagine ?? "generico";
       if (sheet.tagImmagine) {
