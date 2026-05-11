@@ -39,7 +39,7 @@ export default function Login() {
   };
 
   const loginMutation = trpc.auth.loginWithCredentials.useMutation({
-    onSuccess: () => {
+    onSuccess: async () => {
       setFailedLoginAttempts(0);
       setCaptchaAnswer("");
       refreshAuthStateAfterLogin();
