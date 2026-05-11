@@ -1,5 +1,6 @@
 import { createRouter, authedQuery } from "./middleware";
 import { z } from "zod";
+import { TeamLimits } from "@contracts/constants";
 import { appDb, getSupabaseUserIdFromUnionId } from "./lib/db";
 import {
   databaseOperationError,
@@ -129,7 +130,7 @@ export const subscriptionsRouter = createRouter({
     .input(
       z.object({
         piano: z.enum(["trial", "base", "dev"]),
-        seatsCount: z.number().min(1).max(50).optional(),
+        seatsCount: z.number().min(1).max(TeamLimits.maxSeats).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {

@@ -19,3 +19,8 @@ export const PasswordPolicy = {
   alphanumericMessage: "La password deve contenere solo lettere e numeri.",
   helpText: "Minimo 8 caratteri, solo lettere e numeri.",
 } as const;
+
+export const TeamLimits = {
+  maxSeats: 4,
+  maxStaffAccounts: 3,
+} as const;

@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/providers/trpc";
 import { ArrowLeft } from "lucide-react";
+import { TeamLimits } from "@contracts/constants";
 import { useNavigate } from "react-router";
 
 export default function SubscriptionPage() {
@@ -77,17 +78,21 @@ export default function SubscriptionPage() {
               id="seats-count"
               type="number"
               min={1}
-              max={50}
+              max={TeamLimits.maxSeats}
               value={seatsCount}
               onChange={event =>
                 setCustomSeatsCount(
-                  Math.max(1, Number(event.target.value) || 1)
+                  Math.min(
+                    TeamLimits.maxSeats,
+                    Math.max(1, Number(event.target.value) || 1)
+                  )
                 )
               }
             />
             <p className="text-xs text-slate-600">
-              Il Manager occupa un posto; ogni terapeuta invitato occupa un
-              posto aggiuntivo.
+              Il Manager occupa un posto; puoi aggiungere al massimo
+              {TeamLimits.maxStaffAccounts} account staff, per un totale di
+              {TeamLimits.maxSeats} account.
             </p>
           </div>
           {(plans ?? []).map(plan => (
