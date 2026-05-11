@@ -17,6 +17,42 @@ per l'accesso.
 Il login Google/OAuth non è esposto: non ci sono route HTTP dedicate a Google in
 `api/boot.ts` e la schermata di login mostra solo il form email/password.
 
+
+## Variabili d’ambiente di produzione
+
+In produzione il server richiede le credenziali Supabase prima di avviarsi, così
+da evitare deploy apparentemente online ma con query TRPC che falliscono a runtime
+con `Invalid API key`. Configura queste variabili nel provider di hosting:
+
+- `SUPABASE_URL`
+- `SUPABASE_PUBLISHABLE_KEY` (oppure `SUPABASE_ANON_KEY` per configurazioni legacy)
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+### Perché servono tutte e tre
+
+L’errore mostrato nei log non indica un problema nella query
+`organization.overview`: quella query arriva fino a Supabase, ma Supabase rifiuta
+la chiave configurata sul server. In particolare:
+
+- la publishable/anon key serve per le operazioni utente e per far valutare le
+  policy RLS con il token della sessione;
+- la service-role key serve solo al backend per operazioni amministrative
+  limitate, ad esempio leggere gli inviti ricevuti e i profili dei Manager;
+- se la service-role key manca, è vuota o è stata copiata male in Render, il
+  client admin Supabase viene creato con una chiave non valida e le chiamate
+  server-side falliscono con `Invalid API key`.
+
+La service-role key è usata solo lato server. Non esporla mai al client e non
+prefissarla con `VITE_`, perché le variabili `VITE_*` vengono incluse nel bundle
+frontend.
+
+Se nei log compare invece `permission denied for schema app`, le chiavi sono
+state accettate ma il ruolo PostgREST non ha i permessi SQL sullo schema
+custom `app`. Applica le migrazioni fino a `db/migrations/016_app_schema_grants.sql`
+per concedere `usage` sullo schema e i privilegi necessari a `authenticated` e
+`service_role`; le policy RLS continuano comunque a limitare le righe accessibili
+agli utenti.
+
 ## React Compiler
 
 The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).

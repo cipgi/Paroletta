@@ -225,12 +225,11 @@ export const organizationRouter = createRouter({
       invitations = data ?? [];
     }
 
-    // Received invites are scoped to the authenticated user's verified email.
-    // Read them with the admin client and load owner profiles separately so the
-    // page does not depend on nested RLS/embed permissions for this optional
-    // invite card.
+    // Received invites are scoped to the authenticated user's verified email by
+    // RLS. Use the signed-in user's token here so opening Gestione does not
+    // depend on elevated service-role access to the custom `app` schema.
     const { data: receivedInvitations, error: receivedInvitationError } =
-      await adminAppDb()
+      await db
         .from("organization_invitations")
         .select("id,owner_user_id,token,status,created_at")
         .eq("email", ctx.user.email.toLowerCase())
@@ -253,11 +252,10 @@ export const organizationRouter = createRouter({
     >();
 
     if (receivedInvitationOwnerIds.length > 0) {
-      const { data: ownerProfiles, error: ownerProfilesError } =
-        await adminAppDb()
-          .from("profiles")
-          .select("id,email,name")
-          .in("id", receivedInvitationOwnerIds);
+      const { data: ownerProfiles, error: ownerProfilesError } = await db
+        .from("profiles")
+        .select("id,email,name")
+        .in("id", receivedInvitationOwnerIds);
       if (ownerProfilesError)
         throw databaseOperationError(
           "caricare i Manager degli inviti ricevuti",

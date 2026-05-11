@@ -1,9 +1,15 @@
 import { createClient } from "@supabase/supabase-js";
-import { env, supabaseConfigured } from "./env";
+import { env, supabaseAdminConfigured, supabaseConfigured } from "./env";
 
 if (!supabaseConfigured) {
   console.warn(
     "[supabase] SUPABASE_URL or SUPABASE_PUBLISHABLE_KEY is missing."
+  );
+}
+
+if (!supabaseAdminConfigured) {
+  console.warn(
+    "[supabase] SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing; admin database operations will fail."
   );
 }
 

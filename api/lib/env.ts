@@ -27,8 +27,27 @@ export const supabaseConfigured = Boolean(
   env.supabaseUrl && env.supabasePublishableKey
 );
 
-if (env.isProduction && !supabaseConfigured) {
+export const supabaseAdminConfigured = Boolean(
+  env.supabaseUrl && env.supabaseServiceRoleKey
+);
+
+export function getMissingProductionEnvVars(config = env) {
+  const missing: string[] = [];
+  if (!config.supabaseUrl) missing.push("SUPABASE_URL");
+  if (!config.supabasePublishableKey)
+    missing.push("SUPABASE_PUBLISHABLE_KEY (or SUPABASE_ANON_KEY)");
+  if (!config.supabaseServiceRoleKey) missing.push("SUPABASE_SERVICE_ROLE_KEY");
+  return missing;
+}
+
+const missingProductionEnvVars = env.isProduction
+  ? getMissingProductionEnvVars()
+  : [];
+
+if (missingProductionEnvVars.length > 0) {
   throw new Error(
-    "SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY are required in production."
+    `Missing required Supabase environment variables in production: ${missingProductionEnvVars.join(
+      ", "
+    )}. Configure them in Render before starting the service.`
   );
 }
