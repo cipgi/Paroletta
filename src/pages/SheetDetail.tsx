@@ -36,10 +36,10 @@ function getVisualOptionCount(words: string[]) {
   return Math.min(Math.max(count || 4, 2), 4);
 }
 
-function collectPrintableStyles() {
-  return Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
-    .map(el => el.outerHTML)
-    .join("\n");
+function clonePrintableStyles(printDocument: Document) {
+  document.querySelectorAll('link[rel="stylesheet"], style').forEach(el => {
+    printDocument.head.appendChild(el.cloneNode(true));
+  });
 }
 
 function waitForPrintableAssets(doc: Document) {
@@ -61,85 +61,96 @@ function waitForPrintableAssets(doc: Document) {
   return Promise.all([...imagePromises, fontsReady]).then(() => undefined);
 }
 
-function createPrintableSheetHtml(params: {
-  markup: string;
-  styles: string;
+function populatePrintableSheetDocument(params: {
+  printDocument: Document;
+  sheetNode: Node;
   title: string;
   sheetWidth: number;
   sheetHeight: number;
 }) {
   const pageWidth = params.sheetWidth + 48;
   const pageHeight = params.sheetHeight + 48;
+  const { printDocument } = params;
 
-  return `
-    <!doctype html>
-    <html lang="it">
-      <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>${params.title}</title>
-        ${params.styles}
-        <style>
-          html,
-          body {
-            margin: 0;
-            min-height: 100%;
-            background: #f8fafc;
-          }
+  printDocument.documentElement.lang = "it";
 
-          *,
-          *::before,
-          *::after {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
+  const charset = printDocument.createElement("meta");
+  charset.setAttribute("charset", "UTF-8");
+  printDocument.head.appendChild(charset);
 
-          body {
-            padding: 24px;
-          }
+  const viewport = printDocument.createElement("meta");
+  viewport.name = "viewport";
+  viewport.content = "width=device-width, initial-scale=1.0";
+  printDocument.head.appendChild(viewport);
 
-          .pdf-page {
-            width: ${params.sheetWidth}px;
-            max-width: 100%;
-            margin: 0 auto;
-          }
+  const title = printDocument.createElement("title");
+  title.textContent = params.title;
+  printDocument.head.appendChild(title);
 
-          .pdf-page > * {
-            width: 100%;
-          }
+  clonePrintableStyles(printDocument);
 
-          @page {
-            size: ${pageWidth}px ${pageHeight}px;
-            margin: 0;
-          }
+  const printStyle = printDocument.createElement("style");
+  printStyle.textContent = `
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background: #f8fafc;
+    }
 
-          @media print {
-            html,
-            body {
-              width: ${pageWidth}px;
-              min-height: ${pageHeight}px;
-              background: #ffffff;
-            }
+    *,
+    *::before,
+    *::after {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
 
-            body {
-              padding: 24px;
-            }
+    body {
+      padding: 24px;
+    }
 
-            .pdf-page {
-              width: ${params.sheetWidth}px;
-              max-width: none;
-              margin: 0 auto;
-              break-inside: avoid;
-              page-break-inside: avoid;
-            }
-          }
-        </style>
-      </head>
-      <body>
-        <main class="pdf-page">${params.markup}</main>
-      </body>
-    </html>
+    .pdf-page {
+      width: ${params.sheetWidth}px;
+      max-width: 100%;
+      margin: 0 auto;
+    }
+
+    .pdf-page > * {
+      width: 100%;
+    }
+
+    @page {
+      size: ${pageWidth}px ${pageHeight}px;
+      margin: 0;
+    }
+
+    @media print {
+      html,
+      body {
+        width: ${pageWidth}px;
+        min-height: ${pageHeight}px;
+        background: #ffffff;
+      }
+
+      body {
+        padding: 24px;
+      }
+
+      .pdf-page {
+        width: ${params.sheetWidth}px;
+        max-width: none;
+        margin: 0 auto;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+    }
   `;
+  printDocument.head.appendChild(printStyle);
+
+  const main = printDocument.createElement("main");
+  main.className = "pdf-page";
+  main.appendChild(params.sheetNode);
+  printDocument.body.replaceChildren(main);
 }
 
 export default function SheetDetail() {
@@ -168,6 +179,7 @@ export default function SheetDetail() {
     printFrame.style.border = "0";
     printFrame.style.opacity = "0";
     printFrame.style.pointerEvents = "none";
+    printFrame.setAttribute("sandbox", "allow-modals allow-same-origin");
 
     const cleanup = () => {
       window.setTimeout(() => printFrame.remove(), 250);
@@ -197,17 +209,13 @@ export default function SheetDetail() {
       return;
     }
 
-    printDocument.open();
-    printDocument.write(
-      createPrintableSheetHtml({
-        markup: sheetElement.outerHTML,
-        styles: collectPrintableStyles(),
-        title: `Scheda ${sheetId}`,
-        sheetWidth: Math.ceil(sheetElement.getBoundingClientRect().width),
-        sheetHeight: Math.ceil(sheetElement.getBoundingClientRect().height),
-      })
-    );
-    printDocument.close();
+    populatePrintableSheetDocument({
+      printDocument,
+      sheetNode: sheetElement.cloneNode(true),
+      title: `Scheda ${sheetId}`,
+      sheetWidth: Math.ceil(sheetElement.getBoundingClientRect().width),
+      sheetHeight: Math.ceil(sheetElement.getBoundingClientRect().height),
+    });
   };
 
   if (isLoading) {

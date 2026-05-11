@@ -5,18 +5,18 @@ import type { SessionPayload } from "./types";
 const JWT_ALG = "HS256";
 
 export async function signSessionToken(
-  payload: SessionPayload,
+  payload: SessionPayload
 ): Promise<string> {
   const secret = new TextEncoder().encode(env.sessionSecret);
   return new jose.SignJWT(payload)
     .setProtectedHeader({ alg: JWT_ALG })
     .setIssuedAt()
-    .setExpirationTime("1 year")
+    .setExpirationTime("15 minutes")
     .sign(secret);
 }
 
 export async function verifySessionToken(
-  token: string,
+  token: string
 ): Promise<SessionPayload | null> {
   if (!token) {
     console.warn("[session] No token provided for verification.");

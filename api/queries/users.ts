@@ -9,7 +9,7 @@ type InsertUser = Omit<
 > &
   Partial<Pick<User, "piano" | "seats" | "trialSchedeUsate" | "schedeMese">>;
 
-export async function findUserByUnionId(unionId: string) {
+export async function findUserByUnionId(unionId: string, accessToken?: string) {
   const cachedUser = users.find(u => u.unionId === unionId);
 
   if (!unionId.startsWith("supabase:")) {
@@ -21,7 +21,7 @@ export async function findUserByUnionId(unionId: string) {
     return cachedUser;
   }
 
-  const { data: profile, error } = await appDb()
+  const { data: profile, error } = await appDb(accessToken)
     .from("profiles")
     .select(
       "email,name,first_name,last_name,role,piano,seats,trial_schede_usate,schede_mese"
@@ -40,7 +40,7 @@ export async function findUserByUnionId(unionId: string) {
     return cachedUser;
   }
 
-  const account = await getAccountContext(supabaseUserId);
+  const account = await getAccountContext(supabaseUserId, accessToken);
 
   return {
     id: cachedUser?.id ?? nextUserId(),

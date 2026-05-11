@@ -9,6 +9,7 @@ import {
   userFacingError,
 } from "./lib/errors";
 import { getAccountContext } from "./lib/organization";
+import { assertActiveSubscription } from "./lib/subscription";
 import { sanitizePlainText } from "./lib/sanitize";
 
 const ALLOWED_INTERESSI = [
@@ -419,38 +420,18 @@ export const aiRouter = createRouter({
       if (!supabaseUserId) {
         throw invalidSessionError();
       }
-      const account = await getAccountContext(supabaseUserId);
-      const { data: subscription, error: subscriptionError } = await appDb()
-        .from("subscriptions")
-        .select("status,plan,created_at,current_period_end")
-        .eq("user_id", account.ownerUserId)
-        .maybeSingle();
-      if (subscriptionError)
-        throw databaseOperationError(
-          "verificare il tuo abbonamento",
-          subscriptionError
-        );
-      const nowMs = Date.now();
-      const trialStartedAt = subscription?.created_at
-        ? new Date(subscription.created_at).getTime()
-        : nowMs;
-      const trialEndsAt = trialStartedAt + 15 * 24 * 60 * 60 * 1000;
-      const hasTrialAccess =
-        subscription?.status === "trial" && nowMs <= trialEndsAt;
-      const hasActiveSubscription =
-        subscription?.status === "attivo" &&
-        (subscription.current_period_end
-          ? new Date(subscription.current_period_end).getTime() >= nowMs
-          : true);
-      if (!hasActiveSubscription && !hasTrialAccess) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message:
-            "Il tuo abbonamento non è attivo. Riattivalo dalle impostazioni per continuare.",
-        });
-      }
-      const piano = subscription?.plan ?? "trial";
-      const { data: planData, error: planError } = await appDb()
+      const account = await getAccountContext(
+        supabaseUserId,
+        ctx.supabaseAccessToken
+      );
+      const subscription = await assertActiveSubscription({
+        ownerUserId: account.ownerUserId,
+        accessToken: ctx.supabaseAccessToken,
+      });
+      const piano = subscription.plan ?? "trial";
+      const { data: planData, error: planError } = await appDb(
+        ctx.supabaseAccessToken
+      )
         .from("subscription_plans")
         .select("sheet_limit")
         .eq("code", piano)
@@ -459,7 +440,9 @@ export const aiRouter = createRouter({
       if (planError)
         throw databaseOperationError("caricare il limite del piano", planError);
       const limit = planData?.sheet_limit ?? 5;
-      const { data: profileUsage, error: profileUsageError } = await appDb()
+      const { data: profileUsage, error: profileUsageError } = await appDb(
+        ctx.supabaseAccessToken
+      )
         .from("profiles")
         .select("trial_schede_usate,schede_mese")
         .eq("id", account.ownerUserId)
@@ -510,7 +493,7 @@ export const aiRouter = createRouter({
               data.listaParole,
               sanitizedInput.fonema
             );
-      const { data: inserted, error } = await appDb()
+      const { data: inserted, error } = await appDb(ctx.supabaseAccessToken)
         .from("sheets")
         .insert({
           user_id: supabaseUserId,
@@ -550,7 +533,9 @@ export const aiRouter = createRouter({
         createdAt: new Date(inserted.created_at),
       };
 
-      const { data: updatedUsage, error: updatedUsageError } = await appDb()
+      const { data: updatedUsage, error: updatedUsageError } = await appDb(
+        ctx.supabaseAccessToken
+      )
         .from("profiles")
         .select("trial_schede_usate,schede_mese")
         .eq("id", account.ownerUserId)

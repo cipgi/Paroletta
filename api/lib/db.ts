@@ -1,6 +1,11 @@
-import { createSupabaseUserDb, supabaseServerDb } from "./supabase";
+import {
+  createSupabaseUserDb,
+  supabaseAdmin,
+  supabaseServerDb,
+} from "./supabase";
 
 const appSchemaDb = supabaseServerDb.schema("app");
+const adminAppSchemaDb = supabaseAdmin.schema("app");
 
 function getErrorField(error: unknown, field: "message" | "details") {
   if (!error || typeof error !== "object" || !(field in error)) return "";
@@ -16,12 +21,18 @@ function isInvalidAppSchemaError(error: unknown) {
 }
 
 /**
- * Default app DB accessor (schema switching).
+ * Default app DB accessor (schema switching). Uses the caller's Supabase
+ * access token when available so PostgREST evaluates RLS policies instead of
+ * bypassing them with the service-role key.
  */
-export const appDb = () => appSchemaDb;
-
 export const appDbForAccessToken = (accessToken: string) =>
   createSupabaseUserDb(accessToken).schema("app");
+
+export const appDb = (accessToken?: string) =>
+  accessToken ? appDbForAccessToken(accessToken) : appSchemaDb;
+
+/** Elevated app DB accessor for tightly-scoped administrative operations only. */
+export const adminAppDb = () => adminAppSchemaDb;
 
 /**
  * Runs a query against schema `app` first, then retries using fully-qualified

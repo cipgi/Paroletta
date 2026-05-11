@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { CheckCircle2, LogIn, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,17 +17,10 @@ export default function Invitation() {
     },
   });
 
-  useEffect(() => {
-    if (
-      token &&
-      isAuthenticated &&
-      !acceptInvitation.isPending &&
-      !acceptInvitation.isSuccess &&
-      !acceptInvitation.error
-    ) {
-      acceptInvitation.mutate({ token });
-    }
-  }, [acceptInvitation, isAuthenticated, token]);
+  const confirmInvitation = () => {
+    if (!token || !isAuthenticated || acceptInvitation.isPending) return;
+    acceptInvitation.mutate({ token });
+  };
 
   if (!token) {
     return (
@@ -72,6 +64,24 @@ export default function Invitation() {
                 </Link>
               </Button>
             </>
+          ) : null}
+
+          {isAuthenticated &&
+          !acceptInvitation.isPending &&
+          !acceptInvitation.isSuccess &&
+          !acceptInvitation.error ? (
+            <div className="space-y-3 rounded-md border border-teal-100 bg-teal-50 p-4">
+              <p>
+                Stai per collegare l'account <strong>{user?.email}</strong> a
+                questo team. Conferma solo se riconosci l'invito ricevuto.
+              </p>
+              <Button
+                className="bg-teal-600 hover:bg-teal-700"
+                onClick={confirmInvitation}
+              >
+                Conferma e accetta invito
+              </Button>
+            </div>
           ) : null}
 
           {isAuthenticated && acceptInvitation.isPending ? (

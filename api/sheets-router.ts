@@ -47,7 +47,7 @@ const mapSheet = (s: DbSheet) => ({
 export const sheetsRouter = createRouter({
   count: authedQuery.query(async ({ ctx }) => {
     const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
-    const { count, error } = await appDb()
+    const { count, error } = await appDb(ctx.supabaseAccessToken)
       .from("sheets")
       .select("id", { count: "exact", head: true })
       .eq("user_id", supabaseUserId);
@@ -56,7 +56,7 @@ export const sheetsRouter = createRouter({
   }),
   list: authedQuery.query(async ({ ctx }) => {
     const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
-    const { data, error } = await appDb()
+    const { data, error } = await appDb(ctx.supabaseAccessToken)
       .from("sheets")
       .select("*")
       .eq("user_id", supabaseUserId)
@@ -69,7 +69,7 @@ export const sheetsRouter = createRouter({
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
-      const { data, error } = await appDb()
+      const { data, error } = await appDb(ctx.supabaseAccessToken)
         .from("sheets")
         .select("*")
         .eq("id", input.id)
@@ -82,7 +82,7 @@ export const sheetsRouter = createRouter({
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
-      const { data, error } = await appDb()
+      const { data, error } = await appDb(ctx.supabaseAccessToken)
         .from("sheets")
         .select("*")
         .eq("id", input.id)
