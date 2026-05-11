@@ -11,3 +11,11 @@ export const ErrorMessages = {
 export const Paths = {
   login: "/login",
 } as const;
+
+export const PasswordPolicy = {
+  minLength: 8,
+  alphanumericPattern: /^[A-Za-z0-9]+$/,
+  minLengthMessage: "La password deve contenere almeno 8 caratteri.",
+  alphanumericMessage: "La password deve contenere solo lettere e numeri.",
+  helpText: "Minimo 8 caratteri, solo lettere e numeri.",
+} as const;

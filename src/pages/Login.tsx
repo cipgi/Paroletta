@@ -6,6 +6,7 @@ import { useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { useNavigate } from "react-router";
 import { z } from "zod";
+import { PasswordPolicy } from "@contracts/constants";
 
 const CAPTCHA_FAILURE_THRESHOLD = 3;
 
@@ -14,11 +15,11 @@ const registrationSchema = z.object({
   name: z.string().trim().min(2, "Inserisci un nome di almeno 2 caratteri."),
   password: z
     .string()
-    .min(12, "La password deve contenere almeno 12 caratteri.")
-    .regex(/[a-z]/, "La password deve includere una lettera minuscola.")
-    .regex(/[A-Z]/, "La password deve includere una lettera maiuscola.")
-    .regex(/[0-9]/, "La password deve includere un numero.")
-    .regex(/[^A-Za-z0-9]/, "La password deve includere un simbolo."),
+    .min(PasswordPolicy.minLength, PasswordPolicy.minLengthMessage)
+    .regex(
+      PasswordPolicy.alphanumericPattern,
+      PasswordPolicy.alphanumericMessage
+    ),
 });
 
 export default function Login() {
@@ -146,8 +147,8 @@ export default function Login() {
             />
             {isRegister ? (
               <p className="text-xs text-slate-500">
-                Minimo 12 caratteri con maiuscola, minuscola, numero e simbolo.
-                Il piano iniziale viene sempre impostato su trial.
+                {PasswordPolicy.helpText} Il piano iniziale viene sempre
+                impostato su trial.
               </p>
             ) : null}
           </div>

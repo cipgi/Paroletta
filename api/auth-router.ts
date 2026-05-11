@@ -1,6 +1,6 @@
 import * as cookie from "cookie";
 import { z } from "zod";
-import { Session } from "@contracts/constants";
+import { PasswordPolicy, Session } from "@contracts/constants";
 import { getSessionCookieOptions } from "./lib/cookies";
 import { createRouter, authedQuery, publicQuery } from "./middleware";
 import {
@@ -68,11 +68,11 @@ const credentialsSchema = z.object({
   email: z.email().transform(value => value.trim().toLowerCase()),
   password: z
     .string()
-    .min(12)
-    .regex(/[a-z]/)
-    .regex(/[A-Z]/)
-    .regex(/[0-9]/)
-    .regex(/[^A-Za-z0-9]/),
+    .min(PasswordPolicy.minLength, PasswordPolicy.minLengthMessage)
+    .regex(
+      PasswordPolicy.alphanumericPattern,
+      PasswordPolicy.alphanumericMessage
+    ),
   name: z
     .string()
     .transform(value => sanitizeProfileNameOrFallback(value, "Utente"))
