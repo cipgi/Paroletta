@@ -12,9 +12,13 @@ import {
 import { signSessionToken } from "./oauth/session";
 import { upsertUser } from "./queries/users";
 import { subscriptions, sheets, users } from "./store";
-import { supabase } from "./lib/supabase";
+import { supabase, supabaseAdmin } from "./lib/supabase";
 import { supabaseConfigured } from "./lib/env";
-import { appDb, appDbForAccessToken } from "./lib/db";
+import {
+  adminAppDb,
+  appDbForAccessToken,
+  getSupabaseUserIdFromUnionId,
+} from "./lib/db";
 import {
   databaseOperationError,
   missingResourceError,
@@ -24,12 +28,13 @@ import {
   MAX_PROFILE_NAME_LENGTH,
   sanitizeProfileNameOrFallback,
 } from "./lib/sanitize";
+import { SUPABASE_ACCESS_COOKIE } from "./lib/session-cookies";
 
 // Supabase email/password authentication lives in this router. OAuth provider
 // handlers are intentionally separate so removing Google OAuth does not affect
 // credentials-based registration or login.
 
-type AppDbClient = ReturnType<typeof appDb>;
+type AppDbClient = ReturnType<typeof appDbForAccessToken>;
 
 async function ensureUserProfile(
   db: AppDbClient,
@@ -56,18 +61,24 @@ async function ensureUserProfile(
 }
 
 function getAppDbForSession(accessToken?: string) {
-  return accessToken ? appDbForAccessToken(accessToken) : appDb();
+  return accessToken ? appDbForAccessToken(accessToken) : adminAppDb();
 }
 
 const credentialsSchema = z.object({
   email: z.email().transform(value => value.trim().toLowerCase()),
-  password: z.string().min(8),
+  password: z
+    .string()
+    .min(12)
+    .regex(/[a-z]/)
+    .regex(/[A-Z]/)
+    .regex(/[0-9]/)
+    .regex(/[^A-Za-z0-9]/),
   name: z
     .string()
     .transform(value => sanitizeProfileNameOrFallback(value, "Utente"))
     .pipe(z.string().min(2).max(MAX_PROFILE_NAME_LENGTH))
     .optional(),
-  initialPlan: z.string().min(1).optional(),
+  initialPlan: z.literal("trial").optional(),
 });
 
 const loginCredentialsSchema = credentialsSchema
@@ -115,7 +126,7 @@ export const authRouter = createRouter({
         lastSignInAt: new Date(),
         role: "user",
       });
-      const requestedPlan = input.initialPlan ?? "trial";
+      const requestedPlan = "trial";
       const { data: selectedPlan, error: selectedPlanError } = await appDatabase
         .from("subscription_plans")
         .select("code,duration_days,is_trial,active")
@@ -233,11 +244,34 @@ export const authRouter = createRouter({
           maxAge: Session.maxAgeMs / 1000,
         })
       );
+      if (data.session?.access_token) {
+        ctx.resHeaders.append(
+          "set-cookie",
+          cookie.serialize(SUPABASE_ACCESS_COOKIE, data.session.access_token, {
+            httpOnly: true,
+            path: opts.path,
+            sameSite: opts.sameSite?.toLowerCase() as "lax" | "none" | "strict",
+            secure: opts.secure,
+            maxAge: 15 * 60,
+          })
+        );
+      }
       return { success: true };
     }),
   me: authedQuery.query(opts => opts.ctx.user),
 
   deleteAccount: authedQuery.mutation(async ({ ctx }) => {
+    const supabaseUserId = getSupabaseUserIdFromUnionId(ctx.user.unionId);
+    if (!supabaseUserId) throw missingResourceError("Account");
+
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(supabaseUserId);
+    if (error) {
+      throw databaseOperationError(
+        "eliminare definitivamente l'account",
+        error
+      );
+    }
+
     for (let i = sheets.length - 1; i >= 0; i--)
       if (sheets[i].userId === ctx.user.id) sheets.splice(i, 1);
     for (let i = subscriptions.length - 1; i >= 0; i--)
@@ -256,6 +290,16 @@ export const authRouter = createRouter({
         maxAge: 0,
       })
     );
+    ctx.resHeaders.append(
+      "set-cookie",
+      cookie.serialize(SUPABASE_ACCESS_COOKIE, "", {
+        httpOnly: true,
+        path: opts.path,
+        sameSite: opts.sameSite?.toLowerCase() as "lax" | "none" | "strict",
+        secure: opts.secure,
+        maxAge: 0,
+      })
+    );
 
     return { success: true };
   }),
@@ -265,6 +309,16 @@ export const authRouter = createRouter({
       "set-cookie",
       cookie.serialize(Session.cookieName, "", {
         httpOnly: opts.httpOnly,
+        path: opts.path,
+        sameSite: opts.sameSite?.toLowerCase() as "lax" | "none" | "strict",
+        secure: opts.secure,
+        maxAge: 0,
+      })
+    );
+    ctx.resHeaders.append(
+      "set-cookie",
+      cookie.serialize(SUPABASE_ACCESS_COOKIE, "", {
+        httpOnly: true,
         path: opts.path,
         sameSite: opts.sameSite?.toLowerCase() as "lax" | "none" | "strict",
         secure: opts.secure,

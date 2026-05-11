@@ -5,8 +5,21 @@ import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { useNavigate } from "react-router";
+import { z } from "zod";
 
 const CAPTCHA_FAILURE_THRESHOLD = 3;
+
+const registrationSchema = z.object({
+  email: z.email("Inserisci un indirizzo email valido."),
+  name: z.string().trim().min(2, "Inserisci un nome di almeno 2 caratteri."),
+  password: z
+    .string()
+    .min(12, "La password deve contenere almeno 12 caratteri.")
+    .regex(/[a-z]/, "La password deve includere una lettera minuscola.")
+    .regex(/[A-Z]/, "La password deve includere una lettera maiuscola.")
+    .regex(/[0-9]/, "La password deve includere un numero.")
+    .regex(/[^A-Za-z0-9]/, "La password deve includere un simbolo."),
+});
 
 export default function Login() {
   const navigate = useNavigate();
@@ -14,7 +27,6 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [isRegister, setIsRegister] = useState(false);
-  const [initialPlan, setInitialPlan] = useState<"trial" | "base">("trial");
   const [failedLoginAttempts, setFailedLoginAttempts] = useState(0);
   const [captchaAnswer, setCaptchaAnswer] = useState("");
   const [registrationMessage, setRegistrationMessage] = useState<string | null>(
@@ -59,7 +71,6 @@ export default function Login() {
       setIsRegister(false);
       setPassword("");
       setName("");
-      setInitialPlan("trial");
       navigate("/login");
     },
   });
@@ -71,7 +82,23 @@ export default function Login() {
   const onCredentialsSubmit = () => {
     setRegistrationMessage(null);
     if (isRegister) {
-      registerMutation.mutate({ email, password, name, initialPlan });
+      const parsedRegistration = registrationSchema.safeParse({
+        email,
+        password,
+        name,
+      });
+      if (!parsedRegistration.success) {
+        setRegistrationMessage(
+          parsedRegistration.error.issues[0]?.message ??
+            "Controlla i dati di registrazione."
+        );
+        return;
+      }
+
+      registerMutation.mutate({
+        ...parsedRegistration.data,
+        initialPlan: "trial",
+      });
       return;
     }
 
@@ -100,27 +127,6 @@ export default function Login() {
               />
             </div>
           )}
-          {isRegister && (
-            <div className="space-y-2">
-              <Label>Scelta iniziale</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  type="button"
-                  variant={initialPlan === "trial" ? "default" : "outline"}
-                  onClick={() => setInitialPlan("trial")}
-                >
-                  Trial
-                </Button>
-                <Button
-                  type="button"
-                  variant={initialPlan === "base" ? "default" : "outline"}
-                  onClick={() => setInitialPlan("base")}
-                >
-                  Abbonamento
-                </Button>
-              </div>
-            </div>
-          )}
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input
@@ -138,6 +144,12 @@ export default function Login() {
               value={password}
               onChange={e => setPassword(e.target.value)}
             />
+            {isRegister ? (
+              <p className="text-xs text-slate-500">
+                Minimo 12 caratteri con maiuscola, minuscola, numero e simbolo.
+                Il piano iniziale viene sempre impostato su trial.
+              </p>
+            ) : null}
           </div>
           {registrationMessage && !isRegister && (
             <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800">

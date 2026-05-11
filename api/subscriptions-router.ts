@@ -19,13 +19,13 @@ function requireSupabaseUserId(unionId: string) {
 export const subscriptionsRouter = createRouter({
   cancel: authedQuery.mutation(async ({ ctx }) => {
     const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
-    await requireManager(supabaseUserId);
-    const { data: currentSub } = await appDb()
+    await requireManager(supabaseUserId, ctx.supabaseAccessToken);
+    const { data: currentSub } = await appDb(ctx.supabaseAccessToken)
       .from("subscriptions")
       .select("plan,current_period_end")
       .eq("user_id", supabaseUserId)
       .maybeSingle();
-    const { error: subError } = await appDb()
+    const { error: subError } = await appDb(ctx.supabaseAccessToken)
       .from("subscriptions")
       .upsert(
         {
@@ -45,8 +45,11 @@ export const subscriptionsRouter = createRouter({
   }),
   mySubscription: authedQuery.query(async ({ ctx }) => {
     const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
-    const account = await getAccountContext(supabaseUserId);
-    const { data, error } = await appDb()
+    const account = await getAccountContext(
+      supabaseUserId,
+      ctx.supabaseAccessToken
+    );
+    const { data, error } = await appDb(ctx.supabaseAccessToken)
       .from("subscriptions")
       .select(
         "id,user_id,status,plan,seats_count,current_period_start,current_period_end,cancel_at_period_end,created_at,updated_at"
@@ -55,7 +58,9 @@ export const subscriptionsRouter = createRouter({
       .maybeSingle();
     if (error) throw databaseOperationError("caricare l’abbonamento", error);
     if (!data) {
-      const { data: ownerProfile, error: profileError } = await appDb()
+      const { data: ownerProfile, error: profileError } = await appDb(
+        ctx.supabaseAccessToken
+      )
         .from("profiles")
         .select("piano,seats,created_at,updated_at")
         .eq("id", account.ownerUserId)
@@ -101,8 +106,8 @@ export const subscriptionsRouter = createRouter({
       updatedAt: data.updated_at,
     };
   }),
-  plans: authedQuery.query(async () => {
-    const { data, error } = await appDb()
+  plans: authedQuery.query(async ({ ctx }) => {
+    const { data, error } = await appDb(ctx.supabaseAccessToken)
       .from("subscription_plans")
       .select("code,name,description,sheet_limit,duration_days,is_trial,active")
       .eq("active", true)
@@ -129,9 +134,11 @@ export const subscriptionsRouter = createRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
-      await requireManager(supabaseUserId);
+      await requireManager(supabaseUserId, ctx.supabaseAccessToken);
       const seatsCount = input.seatsCount ?? 1;
-      const { data: selectedPlan, error: selectedPlanError } = await appDb()
+      const { data: selectedPlan, error: selectedPlanError } = await appDb(
+        ctx.supabaseAccessToken
+      )
         .from("subscription_plans")
         .select("code,sheet_limit,duration_days,is_trial,active")
         .eq("code", input.piano)
@@ -144,7 +151,9 @@ export const subscriptionsRouter = createRouter({
         );
       if (!selectedPlan) throw missingResourceError("Piano selezionato");
 
-      const { data: existingSub, error: existingSubError } = await appDb()
+      const { data: existingSub, error: existingSubError } = await appDb(
+        ctx.supabaseAccessToken
+      )
         .from("subscriptions")
         .select("status,plan,created_at,current_period_start")
         .eq("user_id", supabaseUserId)
@@ -162,7 +171,7 @@ export const subscriptionsRouter = createRouter({
       }
 
       const plan = input.piano satisfies Plan;
-      const { error: profileError } = await appDb()
+      const { error: profileError } = await appDb(ctx.supabaseAccessToken)
         .from("profiles")
         .update({ piano: plan, seats: seatsCount })
         .eq("id", supabaseUserId);
@@ -176,7 +185,7 @@ export const subscriptionsRouter = createRouter({
       const periodEnd = new Date(
         Date.now() + selectedPlan.duration_days * 24 * 60 * 60 * 1000
       ).toISOString();
-      const { error: subError } = await appDb()
+      const { error: subError } = await appDb(ctx.supabaseAccessToken)
         .from("subscriptions")
         .upsert(
           {

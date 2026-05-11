@@ -11,9 +11,10 @@ export type AccountContext = {
 };
 
 export async function getAccountContext(
-  userId: string
+  userId: string,
+  accessToken?: string
 ): Promise<AccountContext> {
-  const { data, error } = await appDb()
+  const { data, error } = await appDb(accessToken)
     .from("seat_assignments")
     .select("owner_user_id")
     .eq("member_user_id", userId)
@@ -32,8 +33,11 @@ export async function getAccountContext(
   };
 }
 
-export async function requireManager(userId: string): Promise<AccountContext> {
-  const account = await getAccountContext(userId);
+export async function requireManager(
+  userId: string,
+  accessToken?: string
+): Promise<AccountContext> {
+  const account = await getAccountContext(userId, accessToken);
   if (account.role !== "manager") {
     throw new TRPCError({
       code: "FORBIDDEN",

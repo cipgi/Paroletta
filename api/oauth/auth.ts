@@ -2,6 +2,7 @@ import * as cookie from "cookie";
 import { Session } from "@contracts/constants";
 import { verifySessionToken } from "./session";
 import { findUserByUnionId } from "../queries/users";
+import { getSupabaseAccessTokenFromHeaders } from "../lib/session-cookies";
 
 export async function authenticateRequest(headers: Headers) {
   const cookieHeader = headers.get("cookie");
@@ -20,5 +21,8 @@ export async function authenticateRequest(headers: Headers) {
     return undefined;
   }
 
-  return findUserByUnionId(payload.unionId);
+  return findUserByUnionId(
+    payload.unionId,
+    getSupabaseAccessTokenFromHeaders(headers)
+  );
 }

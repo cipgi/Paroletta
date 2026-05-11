@@ -15,8 +15,8 @@ function requireSupabaseUserId(unionId: string) {
   return id;
 }
 
-async function getPlanLimit(plan: string) {
-  const { data, error } = await appDb()
+async function getPlanLimit(plan: string, accessToken?: string) {
+  const { data, error } = await appDb(accessToken)
     .from("subscription_plans")
     .select("sheet_limit")
     .eq("code", plan)
@@ -27,8 +27,10 @@ async function getPlanLimit(plan: string) {
   return data?.sheet_limit ?? 5;
 }
 
-async function getSeatCapacity(ownerUserId: string) {
-  const { data: subscription, error: subscriptionError } = await appDb()
+async function getSeatCapacity(ownerUserId: string, accessToken?: string) {
+  const { data: subscription, error: subscriptionError } = await appDb(
+    accessToken
+  )
     .from("subscriptions")
     .select("seats_count")
     .eq("user_id", ownerUserId)
@@ -41,7 +43,7 @@ async function getSeatCapacity(ownerUserId: string) {
 
   if (subscription?.seats_count) return subscription.seats_count;
 
-  const { data: profile, error: profileError } = await appDb()
+  const { data: profile, error: profileError } = await appDb(accessToken)
     .from("profiles")
     .select("seats")
     .eq("id", ownerUserId)
@@ -56,8 +58,8 @@ async function getSeatCapacity(ownerUserId: string) {
   return profile.seats ?? 1;
 }
 
-async function getTeamOccupancy(ownerUserId: string) {
-  const { count: membersCount, error: membersError } = await appDb()
+async function getTeamOccupancy(ownerUserId: string, accessToken?: string) {
+  const { count: membersCount, error: membersError } = await appDb(accessToken)
     .from("seat_assignments")
     .select("id", { count: "exact", head: true })
     .eq("owner_user_id", ownerUserId);
@@ -65,7 +67,7 @@ async function getTeamOccupancy(ownerUserId: string) {
     throw databaseOperationError("contare i membri del team", membersError);
 
   const { count: pendingInvitationsCount, error: invitationsError } =
-    await appDb()
+    await appDb(accessToken)
       .from("organization_invitations")
       .select("id", { count: "exact", head: true })
       .eq("owner_user_id", ownerUserId)
@@ -84,11 +86,14 @@ async function getTeamOccupancy(ownerUserId: string) {
 
 async function assertTeamHasSeat(
   ownerUserId: string,
-  options: { includePendingInvitations: boolean }
+  options: { includePendingInvitations: boolean },
+  accessToken?: string
 ) {
-  const seatsCount = await getSeatCapacity(ownerUserId);
-  const { membersCount, pendingInvitationsCount } =
-    await getTeamOccupancy(ownerUserId);
+  const seatsCount = await getSeatCapacity(ownerUserId, accessToken);
+  const { membersCount, pendingInvitationsCount } = await getTeamOccupancy(
+    ownerUserId,
+    accessToken
+  );
   const occupiedSeats =
     1 +
     membersCount +
@@ -105,9 +110,14 @@ async function assertTeamHasSeat(
 export const organizationRouter = createRouter({
   overview: authedQuery.query(async ({ ctx }) => {
     const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
-    const account = await getAccountContext(supabaseUserId);
+    const account = await getAccountContext(
+      supabaseUserId,
+      ctx.supabaseAccessToken
+    );
 
-    const { data: ownerProfile, error: ownerError } = await appDb()
+    const { data: ownerProfile, error: ownerError } = await appDb(
+      ctx.supabaseAccessToken
+    )
       .from("profiles")
       .select("id,email,name,piano,seats,trial_schede_usate,schede_mese")
       .eq("id", account.ownerUserId)
@@ -116,7 +126,9 @@ export const organizationRouter = createRouter({
       throw databaseOperationError("caricare il profilo Manager", ownerError);
     }
 
-    const { data: subscription, error: subscriptionError } = await appDb()
+    const { data: subscription, error: subscriptionError } = await appDb(
+      ctx.supabaseAccessToken
+    )
       .from("subscriptions")
       .select("status,plan,seats_count,current_period_end,cancel_at_period_end")
       .eq("user_id", account.ownerUserId)
@@ -128,13 +140,15 @@ export const organizationRouter = createRouter({
       );
 
     const plan = subscription?.plan ?? ownerProfile.piano ?? "trial";
-    const limit = await getPlanLimit(plan);
+    const limit = await getPlanLimit(plan, ctx.supabaseAccessToken);
     const used =
       plan === "trial"
         ? (ownerProfile.trial_schede_usate ?? 0)
         : (ownerProfile.schede_mese ?? 0);
 
-    const { data: memberRows, error: memberError } = await appDb()
+    const { data: memberRows, error: memberError } = await appDb(
+      ctx.supabaseAccessToken
+    )
       .from("seat_assignments")
       .select(
         "member_user_id,created_at,profiles!seat_assignments_member_user_id_fkey(email,name)"
@@ -147,7 +161,9 @@ export const organizationRouter = createRouter({
     const memberIds = (memberRows ?? []).map(row => row.member_user_id);
     const teamUserIds = [account.ownerUserId, ...memberIds];
 
-    const { count: teamSheetsCount, error: teamCountError } = await appDb()
+    const { count: teamSheetsCount, error: teamCountError } = await appDb(
+      ctx.supabaseAccessToken
+    )
       .from("sheets")
       .select("id", { count: "exact", head: true })
       .in("user_id", teamUserIds);
@@ -157,7 +173,9 @@ export const organizationRouter = createRouter({
         teamCountError
       );
 
-    const { data: recentSheets, error: recentError } = await appDb()
+    const { data: recentSheets, error: recentError } = await appDb(
+      ctx.supabaseAccessToken
+    )
       .from("sheets")
       .select("id,user_id,tipo_output,fonema,interesse,created_at")
       .in("user_id", teamUserIds)
@@ -169,7 +187,9 @@ export const organizationRouter = createRouter({
         recentError
       );
 
-    const { data: invitations, error: invitationError } = await appDb()
+    const { data: invitations, error: invitationError } = await appDb(
+      ctx.supabaseAccessToken
+    )
       .from("organization_invitations")
       .select("id,email,token,status,created_at,accepted_at,revoked_at")
       .eq("owner_user_id", account.ownerUserId)
@@ -256,7 +276,7 @@ export const organizationRouter = createRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
-      await requireManager(supabaseUserId);
+      await requireManager(supabaseUserId, ctx.supabaseAccessToken);
 
       if (input.email === ctx.user.email.toLowerCase()) {
         throw userFacingError(
@@ -265,11 +285,15 @@ export const organizationRouter = createRouter({
         );
       }
 
-      await assertTeamHasSeat(supabaseUserId, {
-        includePendingInvitations: true,
-      });
+      await assertTeamHasSeat(
+        supabaseUserId,
+        {
+          includePendingInvitations: true,
+        },
+        ctx.supabaseAccessToken
+      );
 
-      const { data, error } = await appDb()
+      const { data, error } = await appDb(ctx.supabaseAccessToken)
         .from("organization_invitations")
         .upsert(
           {
@@ -300,8 +324,8 @@ export const organizationRouter = createRouter({
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
-      await requireManager(supabaseUserId);
-      const { error } = await appDb()
+      await requireManager(supabaseUserId, ctx.supabaseAccessToken);
+      const { error } = await appDb(ctx.supabaseAccessToken)
         .from("organization_invitations")
         .update({ status: "revoked", revoked_at: new Date().toISOString() })
         .eq("id", input.id)
@@ -314,7 +338,10 @@ export const organizationRouter = createRouter({
     .input(z.object({ token: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
-      const account = await getAccountContext(supabaseUserId);
+      const account = await getAccountContext(
+        supabaseUserId,
+        ctx.supabaseAccessToken
+      );
       if (account.role === "staff") {
         throw userFacingError(
           "BAD_REQUEST",
@@ -322,7 +349,9 @@ export const organizationRouter = createRouter({
         );
       }
 
-      const { data: invitation, error: invitationError } = await appDb()
+      const { data: invitation, error: invitationError } = await appDb(
+        ctx.supabaseAccessToken
+      )
         .from("organization_invitations")
         .select("id,owner_user_id,email,status")
         .eq("token", input.token)
@@ -340,11 +369,15 @@ export const organizationRouter = createRouter({
         });
       }
 
-      await assertTeamHasSeat(invitation.owner_user_id, {
-        includePendingInvitations: false,
-      });
+      await assertTeamHasSeat(
+        invitation.owner_user_id,
+        {
+          includePendingInvitations: false,
+        },
+        ctx.supabaseAccessToken
+      );
 
-      const { error: seatError } = await appDb()
+      const { error: seatError } = await appDb(ctx.supabaseAccessToken)
         .from("seat_assignments")
         .insert({
           owner_user_id: invitation.owner_user_id,
@@ -357,7 +390,7 @@ export const organizationRouter = createRouter({
         );
 
       const now = new Date().toISOString();
-      const { error: updateError } = await appDb()
+      const { error: updateError } = await appDb(ctx.supabaseAccessToken)
         .from("organization_invitations")
         .update({
           status: "accepted",
@@ -377,8 +410,8 @@ export const organizationRouter = createRouter({
     .input(z.object({ memberUserId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
-      await requireManager(supabaseUserId);
-      const { error } = await appDb()
+      await requireManager(supabaseUserId, ctx.supabaseAccessToken);
+      const { error } = await appDb(ctx.supabaseAccessToken)
         .from("seat_assignments")
         .delete()
         .eq("owner_user_id", supabaseUserId)

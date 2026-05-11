@@ -9,7 +9,7 @@ import {
   Settings,
   CircleHelp,
   UserX,
-  Users
+  Users,
 } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import {
@@ -31,20 +31,22 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { trpc } from "@/providers/trpc";
-import { isSubscriptionCurrentlyValid } from "@/lib/subscription";
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { user, logout, isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
-  const { data: subscription, isLoading: isSubscriptionLoading } =
+  const { isLoading: isSubscriptionLoading } =
     trpc.subscriptions.mySubscription.useQuery(undefined, {
       enabled: isAuthenticated,
     });
-  const { data: organizationOverview } = trpc.organization.overview.useQuery(undefined, {
-    enabled: isAuthenticated,
-  });
+  const { data: organizationOverview } = trpc.organization.overview.useQuery(
+    undefined,
+    {
+      enabled: isAuthenticated,
+    }
+  );
 
   const utils = trpc.useUtils();
 
@@ -100,17 +102,6 @@ export default function Layout({ children }: { children: ReactNode }) {
     );
   }
 
-  const hasValidSubscription = isSubscriptionCurrentlyValid(subscription);
-  const mustChooseSubscription =
-    isAuthenticated &&
-    !isSubscriptionLoading &&
-    !hasValidSubscription &&
-    location.pathname !== "/abbonamento";
-
-  if (mustChooseSubscription) {
-    return <Navigate to="/abbonamento" replace />;
-  }
-
   return (
     <div className="min-h-screen bg-slate-50 flex">
       <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col">
@@ -123,7 +114,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           </Link>
         </div>
         <nav className="flex-1 p-4 space-y-1">
-          {navItems.map((item) => {
+          {navItems.map(item => {
             const Icon = item.icon;
             const active = location.pathname === item.path;
             return (
@@ -148,14 +139,22 @@ export default function Layout({ children }: { children: ReactNode }) {
               {user?.name?.[0] ?? "U"}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-800 truncate">{user?.name ?? "Utente"}</p>
-              <p className="text-xs text-slate-500 truncate">{user?.email ?? ""}</p>
+              <p className="text-sm font-medium text-slate-800 truncate">
+                {user?.name ?? "Utente"}
+              </p>
+              <p className="text-xs text-slate-500 truncate">
+                {user?.email ?? ""}
+              </p>
             </div>
           </div>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="w-full justify-start">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-start"
+              >
                 <Settings className="w-4 h-4 mr-2" />
                 Impostazioni account
               </Button>
@@ -164,7 +163,15 @@ export default function Layout({ children }: { children: ReactNode }) {
               <DropdownMenuLabel>Account</DropdownMenuLabel>
               <DropdownMenuItem disabled>{usageLeftLabel}</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => window.open("https://www.notion.so/help", "_blank", "noopener,noreferrer")}>
+              <DropdownMenuItem
+                onClick={() =>
+                  window.open(
+                    "https://www.notion.so/help",
+                    "_blank",
+                    "noopener,noreferrer"
+                  )
+                }
+              >
                 <CircleHelp className="w-4 h-4" />
                 FAQ
               </DropdownMenuItem>
@@ -177,14 +184,22 @@ export default function Layout({ children }: { children: ReactNode }) {
                   Abbonamento gestito dal Manager
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem variant="destructive" onClick={() => setOpenDeleteDialog(true)}>
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() => setOpenDeleteDialog(true)}
+              >
                 <UserX className="w-4 h-4" />
                 Cancella account
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button variant="ghost" size="sm" className="w-full justify-start text-slate-500 hover:text-red-600" onClick={logout}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start text-slate-500 hover:text-red-600"
+            onClick={logout}
+          >
             <LogOut className="w-4 h-4 mr-2" />
             Esci
           </Button>
@@ -205,7 +220,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         </header>
 
         <nav className="md:hidden bg-white border-b border-slate-200 flex overflow-x-auto">
-          {navItems.map((item) => {
+          {navItems.map(item => {
             const Icon = item.icon;
             const active = location.pathname === item.path;
             return (
@@ -225,22 +240,26 @@ export default function Layout({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        <main className="flex-1 p-6 md:p-8 overflow-auto">
-          {children}
-        </main>
+        <main className="flex-1 p-6 md:p-8 overflow-auto">{children}</main>
       </div>
 
       <AlertDialog open={openDeleteDialog} onOpenChange={setOpenDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancellare definitivamente l'account?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Cancellare definitivamente l'account?
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Questa azione elimina account, schede e abbonamento associati. Non può essere annullata.
+              Questa azione elimina account, schede e abbonamento associati. Non
+              può essere annullata.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Annulla</AlertDialogCancel>
-            <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={() => deleteAccount.mutate()}>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => deleteAccount.mutate()}
+            >
               Elimina account
             </AlertDialogAction>
           </AlertDialogFooter>
