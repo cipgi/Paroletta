@@ -21,6 +21,7 @@ export function useAuth(options?: UseAuthOptions) {
     isLoading,
     error,
     refetch,
+    isFetching,
   } = trpc.auth.me.useQuery(undefined, {
     staleTime: 1000 * 60 * 5,
     retry: false,
@@ -35,24 +36,26 @@ export function useAuth(options?: UseAuthOptions) {
 
   const logout = useCallback(() => logoutMutation.mutate(), [logoutMutation]);
 
+  const isResolvingAuth = isLoading || (!user && isFetching);
+
   useEffect(() => {
-    if (redirectOnUnauthenticated && !isLoading && !user) {
+    if (redirectOnUnauthenticated && !isResolvingAuth && !user) {
       const currentPath = window.location.pathname;
       if (currentPath !== redirectPath) {
         navigate(redirectPath);
       }
     }
-  }, [redirectOnUnauthenticated, isLoading, user, navigate, redirectPath]);
+  }, [redirectOnUnauthenticated, isResolvingAuth, user, navigate, redirectPath]);
 
   return useMemo(
     () => ({
       user: user ?? null,
       isAuthenticated: !!user,
-      isLoading: isLoading || logoutMutation.isPending,
+      isLoading: isResolvingAuth || logoutMutation.isPending,
       error,
       logout,
       refresh: refetch,
     }),
-    [user, isLoading, logoutMutation.isPending, error, logout, refetch],
+    [user, isResolvingAuth, logoutMutation.isPending, error, logout, refetch],
   );
 }

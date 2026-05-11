@@ -5,7 +5,6 @@ import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { useNavigate } from "react-router";
-import { isSubscriptionCurrentlyValid } from "@/lib/subscription";
 
 const CAPTCHA_FAILURE_THRESHOLD = 3;
 
@@ -29,26 +28,22 @@ export default function Login() {
     staleTime: 0,
   });
 
-  const redirectAfterAuth = async () => {
-    await Promise.all([
+  const refreshAuthStateAfterLogin = () => {
+    void Promise.all([
       utils.auth.me.invalidate(),
       utils.subscriptions.mySubscription.invalidate(),
       utils.organization.overview.invalidate(),
-    ]);
-    await utils.auth.me.fetch();
-    const subscription = await utils.subscriptions.mySubscription.fetch();
-    if (isSubscriptionCurrentlyValid(subscription)) {
-      navigate("/");
-      return;
-    }
-    navigate("/abbonamento");
+    ]).catch(error => {
+      console.warn("Post-login cache refresh failed", error);
+    });
   };
 
   const loginMutation = trpc.auth.loginWithCredentials.useMutation({
     onSuccess: async () => {
       setFailedLoginAttempts(0);
       setCaptchaAnswer("");
-      await redirectAfterAuth();
+      refreshAuthStateAfterLogin();
+      navigate("/");
     },
     onError: () => {
       setFailedLoginAttempts(value => value + 1);
