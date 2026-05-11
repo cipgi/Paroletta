@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { createRouter, authedQuery } from "./middleware";
-import { appDb, getSupabaseUserIdFromUnionId } from "./lib/db";
+import { adminAppDb, appDb, getSupabaseUserIdFromUnionId } from "./lib/db";
 import {
   databaseOperationError,
   invalidSessionError,
@@ -114,10 +114,9 @@ export const organizationRouter = createRouter({
       supabaseUserId,
       ctx.supabaseAccessToken
     );
+    const db = adminAppDb();
 
-    const { data: ownerProfile, error: ownerError } = await appDb(
-      ctx.supabaseAccessToken
-    )
+    const { data: ownerProfile, error: ownerError } = await db
       .from("profiles")
       .select("id,email,name,piano,seats,trial_schede_usate,schede_mese")
       .eq("id", account.ownerUserId)
@@ -126,9 +125,7 @@ export const organizationRouter = createRouter({
       throw databaseOperationError("caricare il profilo Manager", ownerError);
     }
 
-    const { data: subscription, error: subscriptionError } = await appDb(
-      ctx.supabaseAccessToken
-    )
+    const { data: subscription, error: subscriptionError } = await db
       .from("subscriptions")
       .select("status,plan,seats_count,current_period_end,cancel_at_period_end")
       .eq("user_id", account.ownerUserId)
@@ -146,9 +143,7 @@ export const organizationRouter = createRouter({
         ? (ownerProfile.trial_schede_usate ?? 0)
         : (ownerProfile.schede_mese ?? 0);
 
-    const { data: memberRows, error: memberError } = await appDb(
-      ctx.supabaseAccessToken
-    )
+    const { data: memberRows, error: memberError } = await db
       .from("seat_assignments")
       .select(
         "member_user_id,created_at,profiles!seat_assignments_member_user_id_fkey(email,name)"
@@ -161,9 +156,7 @@ export const organizationRouter = createRouter({
     const memberIds = (memberRows ?? []).map(row => row.member_user_id);
     const teamUserIds = [account.ownerUserId, ...memberIds];
 
-    const { count: teamSheetsCount, error: teamCountError } = await appDb(
-      ctx.supabaseAccessToken
-    )
+    const { count: teamSheetsCount, error: teamCountError } = await db
       .from("sheets")
       .select("id", { count: "exact", head: true })
       .in("user_id", teamUserIds);
@@ -173,9 +166,7 @@ export const organizationRouter = createRouter({
         teamCountError
       );
 
-    const { data: recentSheets, error: recentError } = await appDb(
-      ctx.supabaseAccessToken
-    )
+    const { data: recentSheets, error: recentError } = await db
       .from("sheets")
       .select("id,user_id,tipo_output,fonema,interesse,created_at")
       .in("user_id", teamUserIds)
@@ -187,9 +178,7 @@ export const organizationRouter = createRouter({
         recentError
       );
 
-    const { data: invitations, error: invitationError } = await appDb(
-      ctx.supabaseAccessToken
-    )
+    const { data: invitations, error: invitationError } = await db
       .from("organization_invitations")
       .select("id,email,token,status,created_at,accepted_at,revoked_at")
       .eq("owner_user_id", account.ownerUserId)
@@ -198,6 +187,21 @@ export const organizationRouter = createRouter({
       throw databaseOperationError(
         "caricare gli inviti del team",
         invitationError
+      );
+
+    const { data: receivedInvitations, error: receivedInvitationError } =
+      await db
+        .from("organization_invitations")
+        .select(
+          "id,email,token,status,created_at,profiles!organization_invitations_owner_user_id_fkey(id,email,name)"
+        )
+        .eq("email", ctx.user.email.toLowerCase())
+        .eq("status", "pending")
+        .order("created_at", { ascending: false });
+    if (receivedInvitationError)
+      throw databaseOperationError(
+        "caricare gli inviti ricevuti",
+        receivedInvitationError
       );
 
     const seatsCount = subscription?.seats_count ?? ownerProfile.seats ?? 1;
@@ -257,6 +261,22 @@ export const organizationRouter = createRouter({
         acceptedAt: invitation.accepted_at,
         revokedAt: invitation.revoked_at,
       })),
+      receivedInvitations: (receivedInvitations ?? []).map(invitation => {
+        const owner = Array.isArray(invitation.profiles)
+          ? invitation.profiles[0]
+          : invitation.profiles;
+        return {
+          id: invitation.id,
+          token: invitation.token,
+          status: invitation.status,
+          createdAt: invitation.created_at,
+          owner: {
+            id: owner?.id ?? "",
+            email: owner?.email ?? "",
+            name: owner?.name ?? "Team",
+          },
+        };
+      }),
       recentSheets: (recentSheets ?? []).map(sheet => ({
         id: sheet.id,
         userId: sheet.user_id,
@@ -282,6 +302,47 @@ export const organizationRouter = createRouter({
         throw userFacingError(
           "BAD_REQUEST",
           "Non puoi invitare il tuo stesso account."
+        );
+      }
+
+      const { data: invitedProfile, error: invitedProfileError } =
+        await adminAppDb()
+          .from("profiles")
+          .select("id,email,is_team_manager")
+          .eq("email", input.email)
+          .maybeSingle();
+      if (invitedProfileError)
+        throw databaseOperationError(
+          "verificare l’account invitato",
+          invitedProfileError
+        );
+      if (!invitedProfile) {
+        throw userFacingError(
+          "NOT_FOUND",
+          "Puoi invitare solo email già registrate e con accesso a Paroletta."
+        );
+      }
+      if (invitedProfile.is_team_manager) {
+        throw userFacingError(
+          "BAD_REQUEST",
+          "Questo account è già impostato come Manager di un team."
+        );
+      }
+
+      const { data: invitedSeat, error: invitedSeatError } = await adminAppDb()
+        .from("seat_assignments")
+        .select("id")
+        .eq("member_user_id", invitedProfile.id)
+        .maybeSingle();
+      if (invitedSeatError)
+        throw databaseOperationError(
+          "verificare il team dell’account invitato",
+          invitedSeatError
+        );
+      if (invitedSeat) {
+        throw userFacingError(
+          "BAD_REQUEST",
+          "Questo account appartiene già a un team."
         );
       }
 

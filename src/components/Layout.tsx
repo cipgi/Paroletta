@@ -62,9 +62,7 @@ export default function Layout({ children }: { children: ReactNode }) {
     { path: "/", label: "Dashboard", icon: LayoutDashboard },
     { path: "/generator", label: "Genera Scheda", icon: Sparkles },
     { path: "/sheets", label: "Schede", icon: FileText },
-    ...(user?.accountRole === "manager"
-      ? [{ path: "/management", label: "Gestione", icon: Users }]
-      : []),
+    { path: "/management", label: "Gestione", icon: Users },
   ];
 
   const usageLeftLabel = useMemo(() => {
@@ -175,7 +173,7 @@ export default function Layout({ children }: { children: ReactNode }) {
                 <CircleHelp className="w-4 h-4" />
                 FAQ
               </DropdownMenuItem>
-              {user?.accountRole === "manager" ? (
+              {user?.accountRole !== "staff" ? (
                 <DropdownMenuItem onClick={() => navigate("/abbonamento")}>
                   Gestisci abbonamento
                 </DropdownMenuItem>

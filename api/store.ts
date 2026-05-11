@@ -11,8 +11,9 @@ export type User = {
   firstName?: string | null;
   lastName?: string | null;
   role?: string;
-  accountRole?: "manager" | "staff";
+  accountRole?: "manager" | "staff" | "single";
   organizationOwnerId?: string;
+  isTeamManager?: boolean;
   piano: Plan;
   seats: number;
   trialSchedeUsate: number;
