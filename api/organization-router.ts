@@ -225,12 +225,14 @@ export const organizationRouter = createRouter({
       invitations = data ?? [];
     }
 
+    // Received invites are scoped to the authenticated user's verified email.
+    // Read them with the admin client and load owner profiles separately so the
+    // page does not depend on nested RLS/embed permissions for this optional
+    // invite card.
     const { data: receivedInvitations, error: receivedInvitationError } =
-      await db
+      await adminAppDb()
         .from("organization_invitations")
-        .select(
-          "id,email,token,status,created_at,profiles!organization_invitations_owner_user_id_fkey(id,email,name)"
-        )
+        .select("id,owner_user_id,token,status,created_at")
         .eq("email", ctx.user.email.toLowerCase())
         .eq("status", "pending")
         .order("created_at", { ascending: false });
@@ -239,6 +241,33 @@ export const organizationRouter = createRouter({
         "caricare gli inviti ricevuti",
         receivedInvitationError
       );
+
+    const receivedInvitationOwnerIds = [
+      ...new Set(
+        (receivedInvitations ?? []).map(invitation => invitation.owner_user_id)
+      ),
+    ];
+    const receivedInvitationOwners = new Map<
+      string,
+      { id: string; email: string | null; name: string | null }
+    >();
+
+    if (receivedInvitationOwnerIds.length > 0) {
+      const { data: ownerProfiles, error: ownerProfilesError } =
+        await adminAppDb()
+          .from("profiles")
+          .select("id,email,name")
+          .in("id", receivedInvitationOwnerIds);
+      if (ownerProfilesError)
+        throw databaseOperationError(
+          "caricare i Manager degli inviti ricevuti",
+          ownerProfilesError
+        );
+
+      for (const ownerProfile of ownerProfiles ?? []) {
+        receivedInvitationOwners.set(ownerProfile.id, ownerProfile);
+      }
+    }
 
     const seatsCount = Math.min(
       subscription?.seats_count ?? ownerProfile.seats ?? 1,
@@ -301,16 +330,14 @@ export const organizationRouter = createRouter({
         revokedAt: invitation.revoked_at,
       })),
       receivedInvitations: (receivedInvitations ?? []).map(invitation => {
-        const owner = Array.isArray(invitation.profiles)
-          ? invitation.profiles[0]
-          : invitation.profiles;
+        const owner = receivedInvitationOwners.get(invitation.owner_user_id);
         return {
           id: invitation.id,
           token: invitation.token,
           status: invitation.status,
           createdAt: invitation.created_at,
           owner: {
-            id: owner?.id ?? "",
+            id: owner?.id ?? invitation.owner_user_id,
             email: owner?.email ?? "",
             name: owner?.name ?? "Team",
           },
