@@ -1,7 +1,7 @@
 // Logical app schema (stored in Postgres schema: app)
 export type Plan = "trial" | "base" | "dev";
 export type SubscriptionStatus = "trial" | "attivo" | "cancellato";
-export type AccountRole = "manager" | "staff";
+export type AccountRole = "manager" | "staff" | "single";
 export type SheetOutputType =
   | "storia"
   | "filastrocca"
@@ -17,6 +17,7 @@ export interface Profile {
   firstName: string | null;
   lastName: string | null;
   role: string;
+  isTeamManager: boolean;
   accountRole?: AccountRole;
   organizationOwnerId?: string;
   piano: Plan;
@@ -69,7 +70,6 @@ export interface SeatAssignment {
   memberUserId: string;
   createdAt: string;
 }
-
 
 export type InvitationStatus = "pending" | "accepted" | "revoked";
 

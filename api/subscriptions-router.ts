@@ -7,7 +7,7 @@ import {
   missingResourceError,
   userFacingError,
 } from "./lib/errors";
-import { getAccountContext, requireManager } from "./lib/organization";
+import { getAccountContext, requireAccountOwner } from "./lib/organization";
 import type { Plan } from "./store";
 
 function requireSupabaseUserId(unionId: string) {
@@ -19,7 +19,7 @@ function requireSupabaseUserId(unionId: string) {
 export const subscriptionsRouter = createRouter({
   cancel: authedQuery.mutation(async ({ ctx }) => {
     const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
-    await requireManager(supabaseUserId, ctx.supabaseAccessToken);
+    await requireAccountOwner(supabaseUserId, ctx.supabaseAccessToken);
     const { data: currentSub } = await appDb(ctx.supabaseAccessToken)
       .from("subscriptions")
       .select("plan,current_period_end")
@@ -134,7 +134,7 @@ export const subscriptionsRouter = createRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
-      await requireManager(supabaseUserId, ctx.supabaseAccessToken);
+      await requireAccountOwner(supabaseUserId, ctx.supabaseAccessToken);
       const seatsCount = input.seatsCount ?? 1;
       const { data: selectedPlan, error: selectedPlanError } = await appDb(
         ctx.supabaseAccessToken

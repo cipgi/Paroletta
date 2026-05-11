@@ -24,7 +24,7 @@ export async function findUserByUnionId(unionId: string, accessToken?: string) {
   const { data: profile, error } = await appDb(accessToken)
     .from("profiles")
     .select(
-      "email,name,first_name,last_name,role,piano,seats,trial_schede_usate,schede_mese"
+      "email,name,first_name,last_name,role,is_team_manager,piano,seats,trial_schede_usate,schede_mese"
     )
     .eq("id", supabaseUserId)
     .maybeSingle();
@@ -55,6 +55,7 @@ export async function findUserByUnionId(unionId: string, accessToken?: string) {
     role: profile.role ?? cachedUser?.role ?? "user",
     accountRole: account.role,
     organizationOwnerId: account.ownerUserId,
+    isTeamManager: profile.is_team_manager ?? false,
     piano: (profile.piano ?? "trial") as User["piano"],
     seats: profile.seats ?? 1,
     trialSchedeUsate: profile.trial_schede_usate ?? 0,
@@ -85,6 +86,7 @@ export async function upsertUser(data: InsertUser) {
     firstName: data.firstName ?? null,
     lastName: data.lastName ?? null,
     role: data.role ?? "user",
+    isTeamManager: data.isTeamManager ?? false,
     piano: data.piano ?? "trial",
     seats: data.seats ?? 1,
     trialSchedeUsate: data.trialSchedeUsate ?? 0,

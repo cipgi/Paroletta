@@ -308,7 +308,7 @@ export const organizationRouter = createRouter({
       const { data: invitedProfile, error: invitedProfileError } =
         await adminAppDb()
           .from("profiles")
-          .select("id,email")
+          .select("id,email,is_team_manager")
           .eq("email", input.email)
           .maybeSingle();
       if (invitedProfileError)
@@ -320,6 +320,12 @@ export const organizationRouter = createRouter({
         throw userFacingError(
           "NOT_FOUND",
           "Puoi invitare solo email già registrate e con accesso a Paroletta."
+        );
+      }
+      if (invitedProfile.is_team_manager) {
+        throw userFacingError(
+          "BAD_REQUEST",
+          "Questo account è già impostato come Manager di un team."
         );
       }
 

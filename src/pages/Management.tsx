@@ -153,11 +153,7 @@ export default function Management() {
   }
 
   const isTeamOwner = overview.role === "manager";
-  const hasTeam =
-    overview.role === "staff" ||
-    overview.members.length > 0 ||
-    overview.seats.total > 1 ||
-    overview.invitations.length > 0;
+  const hasTeam = overview.role === "manager" || overview.role === "staff";
   const usagePercent = percent(overview.usage.used, overview.usage.limit);
   const seatsSummary = `${overview.seats.used}/${overview.seats.total} posti attivi`;
 

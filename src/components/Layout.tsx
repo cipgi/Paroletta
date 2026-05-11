@@ -173,7 +173,7 @@ export default function Layout({ children }: { children: ReactNode }) {
                 <CircleHelp className="w-4 h-4" />
                 FAQ
               </DropdownMenuItem>
-              {user?.accountRole === "manager" ? (
+              {user?.accountRole !== "staff" ? (
                 <DropdownMenuItem onClick={() => navigate("/abbonamento")}>
                   Gestisci abbonamento
                 </DropdownMenuItem>
