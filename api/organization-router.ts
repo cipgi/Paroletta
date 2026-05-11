@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import { TeamLimits } from "@contracts/constants";
 import { z } from "zod";
 import { createRouter, authedQuery } from "./middleware";
 import { adminAppDb, appDb, getSupabaseUserIdFromUnionId } from "./lib/db";
@@ -41,7 +42,9 @@ async function getSeatCapacity(ownerUserId: string, accessToken?: string) {
       subscriptionError
     );
 
-  if (subscription?.seats_count) return subscription.seats_count;
+  if (subscription?.seats_count) {
+    return Math.min(subscription.seats_count, TeamLimits.maxSeats);
+  }
 
   const { data: profile, error: profileError } = await appDb(accessToken)
     .from("profiles")
@@ -102,7 +105,7 @@ async function assertTeamHasSeat(
   if (occupiedSeats >= seatsCount) {
     throw userFacingError(
       "FORBIDDEN",
-      `Non ci sono posti disponibili nel team (${occupiedSeats}/${seatsCount}). Aumenta i posti dell'abbonamento o rimuovi un invito pendente.`
+      `Non ci sono posti disponibili nel team (${occupiedSeats}/${seatsCount}). Ogni team può includere al massimo ${TeamLimits.maxStaffAccounts} account staff oltre al Manager.`
     );
   }
 }
@@ -114,7 +117,7 @@ export const organizationRouter = createRouter({
       supabaseUserId,
       ctx.supabaseAccessToken
     );
-    const db = adminAppDb();
+    const db = appDb(ctx.supabaseAccessToken);
 
     const { data: dbOwnerProfile, error: ownerError } = await db
       .from("profiles")
@@ -225,7 +228,10 @@ export const organizationRouter = createRouter({
         receivedInvitationError
       );
 
-    const seatsCount = subscription?.seats_count ?? ownerProfile.seats ?? 1;
+    const seatsCount = Math.min(
+      subscription?.seats_count ?? ownerProfile.seats ?? 1,
+      TeamLimits.maxSeats
+    );
     const pendingInvitationsCount = (invitations ?? []).filter(
       invitation => invitation.status === "pending"
     ).length;

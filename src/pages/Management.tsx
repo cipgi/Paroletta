@@ -18,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { TeamLimits } from "@contracts/constants";
 
 function percent(value: number, total: number) {
   if (total <= 0) return 0;
@@ -95,14 +96,6 @@ export default function Management() {
       await utils.auth.me.invalidate();
     },
   });
-  const removeMember = trpc.organization.removeMember.useMutation({
-    onSuccess: async () => {
-      setSelectedAccountId("");
-      await utils.organization.overview.invalidate();
-      await utils.sheets.list.invalidate();
-    },
-  });
-
   if (isLoading) {
     return <div className="text-slate-500">Caricamento gestione...</div>;
   }
@@ -228,8 +221,8 @@ export default function Management() {
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-slate-600">
             <p>
-              Al momento non fai parte di nessun team e non hai un team attivo
-              da gestire.
+              Al momento non fai parte di nessun team. Questa sezione diventerà
+              utile quando un Manager ti inviterà a collaborare.
             </p>
             <p>
               Quando un account principale ti inviterà, troverai qui la
@@ -449,7 +442,8 @@ export default function Management() {
                 {overview.seats.available === 0 && (
                   <p className="text-xs text-amber-700">
                     Tutti i posti sono occupati o riservati da inviti pendenti.
-                    Aumenta i posti dall'abbonamento o revoca un invito.
+                    Ogni team può includere al massimo {TeamLimits.maxStaffAccounts}
+                    account staff oltre al Manager.
                   </p>
                 )}
               </form>
@@ -558,24 +552,13 @@ export default function Management() {
                   </p>
                 </div>
                 {isTeamOwner && (
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelectedAccountId(member.id)}
-                    >
-                      Vedi archivio
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        removeMember.mutate({ memberUserId: member.id })
-                      }
-                    >
-                      Rimuovi
-                    </Button>
-                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedAccountId(member.id)}
+                  >
+                    Vedi archivio
+                  </Button>
                 )}
               </div>
             ))}
@@ -600,8 +583,9 @@ export default function Management() {
             del pool mensile.
           </p>
           <p>
-            Solo l'account principale può invitare utenti già registrati,
-            rimuovere membri e aprire gli archivi dei sub-account collegati.
+            Solo l'account principale può invitare utenti già registrati, fino a
+            {TeamLimits.maxStaffAccounts} account staff, e aprire gli archivi dei
+            sub-account collegati.
           </p>
         </CardContent>
       </Card>
