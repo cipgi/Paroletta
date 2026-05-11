@@ -209,10 +209,10 @@ export const organizationRouter = createRouter({
 
     // Only managers need the full sent-invitation list. Staff and standalone
     // users should not depend on team-invitation read permissions just to open
-    // the Gestione page, and using the admin client keeps this manager-scoped
-    // read independent from RLS policy drift in deployed databases.
+    // the Gestione page. Use the signed-in user's token so RLS validates the
+    // manager-scoped read without requiring the service-role admin client.
     if (account.role === "manager") {
-      const { data, error: invitationError } = await adminAppDb()
+      const { data, error: invitationError } = await db
         .from("organization_invitations")
         .select("id,email,token,status,created_at,accepted_at,revoked_at")
         .eq("owner_user_id", account.ownerUserId)
@@ -226,7 +226,7 @@ export const organizationRouter = createRouter({
     }
 
     const { data: receivedInvitations, error: receivedInvitationError } =
-      await adminAppDb()
+      await db
         .from("organization_invitations")
         .select(
           "id,email,token,status,created_at,profiles!organization_invitations_owner_user_id_fkey(id,email,name)"
