@@ -28,10 +28,8 @@ async function getPlanLimit(plan: string, accessToken?: string) {
   return data?.sheet_limit ?? 5;
 }
 
-async function getSeatCapacity(ownerUserId: string, accessToken?: string) {
-  const { data: subscription, error: subscriptionError } = await appDb(
-    accessToken
-  )
+async function getSeatCapacity(ownerUserId: string) {
+  const { data: subscription, error: subscriptionError } = await adminAppDb()
     .from("subscriptions")
     .select("seats_count")
     .eq("user_id", ownerUserId)
@@ -46,7 +44,7 @@ async function getSeatCapacity(ownerUserId: string, accessToken?: string) {
     return Math.min(subscription.seats_count, TeamLimits.maxSeats);
   }
 
-  const { data: profile, error: profileError } = await appDb(accessToken)
+  const { data: profile, error: profileError } = await adminAppDb()
     .from("profiles")
     .select("seats")
     .eq("id", ownerUserId)
@@ -61,8 +59,8 @@ async function getSeatCapacity(ownerUserId: string, accessToken?: string) {
   return profile.seats ?? 1;
 }
 
-async function getTeamOccupancy(ownerUserId: string, accessToken?: string) {
-  const { count: membersCount, error: membersError } = await appDb(accessToken)
+async function getTeamOccupancy(ownerUserId: string) {
+  const { count: membersCount, error: membersError } = await adminAppDb()
     .from("seat_assignments")
     .select("id", { count: "exact", head: true })
     .eq("owner_user_id", ownerUserId);
@@ -70,7 +68,7 @@ async function getTeamOccupancy(ownerUserId: string, accessToken?: string) {
     throw databaseOperationError("contare i membri del team", membersError);
 
   const { count: pendingInvitationsCount, error: invitationsError } =
-    await appDb(accessToken)
+    await adminAppDb()
       .from("organization_invitations")
       .select("id", { count: "exact", head: true })
       .eq("owner_user_id", ownerUserId)
@@ -89,14 +87,11 @@ async function getTeamOccupancy(ownerUserId: string, accessToken?: string) {
 
 async function assertTeamHasSeat(
   ownerUserId: string,
-  options: { includePendingInvitations: boolean },
-  accessToken?: string
+  options: { includePendingInvitations: boolean }
 ) {
-  const seatsCount = await getSeatCapacity(ownerUserId, accessToken);
-  const { membersCount, pendingInvitationsCount } = await getTeamOccupancy(
-    ownerUserId,
-    accessToken
-  );
+  const seatsCount = await getSeatCapacity(ownerUserId);
+  const { membersCount, pendingInvitationsCount } =
+    await getTeamOccupancy(ownerUserId);
   const occupiedSeats =
     1 +
     membersCount +
@@ -202,19 +197,36 @@ export const organizationRouter = createRouter({
         recentError
       );
 
-    const { data: invitations, error: invitationError } = await db
-      .from("organization_invitations")
-      .select("id,email,token,status,created_at,accepted_at,revoked_at")
-      .eq("owner_user_id", account.ownerUserId)
-      .order("created_at", { ascending: false });
-    if (invitationError)
-      throw databaseOperationError(
-        "caricare gli inviti del team",
-        invitationError
-      );
+    let invitations: Array<{
+      id: string;
+      email: string;
+      token: string;
+      status: string;
+      created_at: string;
+      accepted_at: string | null;
+      revoked_at: string | null;
+    }> = [];
+
+    // Only managers need the full sent-invitation list. Staff and standalone
+    // users should not depend on team-invitation read permissions just to open
+    // the Gestione page, and using the admin client keeps this manager-scoped
+    // read independent from RLS policy drift in deployed databases.
+    if (account.role === "manager") {
+      const { data, error: invitationError } = await adminAppDb()
+        .from("organization_invitations")
+        .select("id,email,token,status,created_at,accepted_at,revoked_at")
+        .eq("owner_user_id", account.ownerUserId)
+        .order("created_at", { ascending: false });
+      if (invitationError)
+        throw databaseOperationError(
+          "caricare gli inviti del team",
+          invitationError
+        );
+      invitations = data ?? [];
+    }
 
     const { data: receivedInvitations, error: receivedInvitationError } =
-      await db
+      await adminAppDb()
         .from("organization_invitations")
         .select(
           "id,email,token,status,created_at,profiles!organization_invitations_owner_user_id_fkey(id,email,name)"
@@ -373,15 +385,11 @@ export const organizationRouter = createRouter({
         );
       }
 
-      await assertTeamHasSeat(
-        supabaseUserId,
-        {
-          includePendingInvitations: true,
-        },
-        ctx.supabaseAccessToken
-      );
+      await assertTeamHasSeat(supabaseUserId, {
+        includePendingInvitations: true,
+      });
 
-      const { data, error } = await appDb(ctx.supabaseAccessToken)
+      const { data, error } = await adminAppDb()
         .from("organization_invitations")
         .upsert(
           {
@@ -413,7 +421,7 @@ export const organizationRouter = createRouter({
     .mutation(async ({ ctx, input }) => {
       const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
       await requireManager(supabaseUserId, ctx.supabaseAccessToken);
-      const { error } = await appDb(ctx.supabaseAccessToken)
+      const { error } = await adminAppDb()
         .from("organization_invitations")
         .update({ status: "revoked", revoked_at: new Date().toISOString() })
         .eq("id", input.id)
@@ -437,9 +445,7 @@ export const organizationRouter = createRouter({
         );
       }
 
-      const { data: invitation, error: invitationError } = await appDb(
-        ctx.supabaseAccessToken
-      )
+      const { data: invitation, error: invitationError } = await adminAppDb()
         .from("organization_invitations")
         .select("id,owner_user_id,email,status")
         .eq("token", input.token)
@@ -457,15 +463,11 @@ export const organizationRouter = createRouter({
         });
       }
 
-      await assertTeamHasSeat(
-        invitation.owner_user_id,
-        {
-          includePendingInvitations: false,
-        },
-        ctx.supabaseAccessToken
-      );
+      await assertTeamHasSeat(invitation.owner_user_id, {
+        includePendingInvitations: false,
+      });
 
-      const { error: seatError } = await appDb(ctx.supabaseAccessToken)
+      const { error: seatError } = await adminAppDb()
         .from("seat_assignments")
         .insert({
           owner_user_id: invitation.owner_user_id,
@@ -478,7 +480,7 @@ export const organizationRouter = createRouter({
         );
 
       const now = new Date().toISOString();
-      const { error: updateError } = await appDb(ctx.supabaseAccessToken)
+      const { error: updateError } = await adminAppDb()
         .from("organization_invitations")
         .update({
           status: "accepted",
