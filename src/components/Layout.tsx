@@ -62,9 +62,7 @@ export default function Layout({ children }: { children: ReactNode }) {
     { path: "/", label: "Dashboard", icon: LayoutDashboard },
     { path: "/generator", label: "Genera Scheda", icon: Sparkles },
     { path: "/sheets", label: "Schede", icon: FileText },
-    ...(user?.accountRole === "manager"
-      ? [{ path: "/management", label: "Gestione", icon: Users }]
-      : []),
+    { path: "/management", label: "Gestione", icon: Users },
   ];
 
   const usageLeftLabel = useMemo(() => {
