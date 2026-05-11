@@ -30,6 +30,12 @@ export default function Login() {
   });
 
   const redirectAfterAuth = async () => {
+    await Promise.all([
+      utils.auth.me.invalidate(),
+      utils.subscriptions.mySubscription.invalidate(),
+      utils.organization.overview.invalidate(),
+    ]);
+    await utils.auth.me.fetch();
     const subscription = await utils.subscriptions.mySubscription.fetch();
     if (isSubscriptionCurrentlyValid(subscription)) {
       navigate("/");
@@ -39,10 +45,10 @@ export default function Login() {
   };
 
   const loginMutation = trpc.auth.loginWithCredentials.useMutation({
-    onSuccess: () => {
+    onSuccess: async () => {
       setFailedLoginAttempts(0);
       setCaptchaAnswer("");
-      void redirectAfterAuth();
+      await redirectAfterAuth();
     },
     onError: () => {
       setFailedLoginAttempts(value => value + 1);
