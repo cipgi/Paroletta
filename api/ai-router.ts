@@ -218,6 +218,28 @@ function sanitizeWordsFromText(
   });
 }
 
+function extractTargetWordsFromText(text: string, fonema: string): string[] {
+  const targetFonema = normalizeFonemaForMatch(fonema);
+  if (!targetFonema) return [];
+
+  const words = text.match(/[\p{L}]+(?:['’][\p{L}]+)?/gu) ?? [];
+  const uniqueWords = new Map<string, string>();
+
+  for (const word of words) {
+    const normalizedWord = word
+      .toLocaleLowerCase("it-IT")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z]/g, "");
+
+    if (normalizedWord.includes(targetFonema)) {
+      uniqueWords.set(normalizedWord, word.toLocaleLowerCase("it-IT"));
+    }
+  }
+
+  return Array.from(uniqueWords.values());
+}
+
 export function buildPromptMessages(params: GenerationParams): PromptMessage[] {
   const sanitizedVariables = {
     eta: params.eta,
@@ -258,8 +280,9 @@ ISTRUZIONI DI GENERAZIONE:
 1. Se il tipo è "storia": scrivi una storia brevissima (max 150 parole) sul tema indicato dal campo "interesse". Se il campo "interesse" vale "libero", non c'è un interesse specifico: scegli liberamente un tema tra gli interessi disponibili nel messaggio utente. Inserisci in modo naturale le parole contenenti il fonema indicato dal campo "fonema".
 2. Se il tipo è "filastrocca": componi una filastrocca facile e ritmata (8-12 versi) a tema indicato dal campo "interesse". Se il campo "interesse" vale "libero", scegli liberamente un tema tra gli interessi disponibili nel messaggio utente. Usa parole con il fonema indicato dal campo "fonema".
 3. Se il tipo è "lista": crea una lista di 15-20 parole con il fonema indicato dal campo "fonema", divise per difficoltà (semplici, medie, complesse) e vicine agli interessi del bambino. Se il campo "interesse" vale "libero", usa liberamente uno degli interessi disponibili nel messaggio utente.
-4. Se il tipo è "discriminazione_visiva": crea una scheda di comprensione visiva con una sola immagine target corretta e 1-3 distrattori coerenti. Usa lo stesso contesto visivo per tutte le opzioni. Nel testoGenerato includi sezioni in italiano: "Obiettivo clinico", "Consegna", "Target", "Distrattori" e "Prompt immagini". I prompt immagini devono essere pronti per una API di generazione immagini, con descrizioni concrete e non ambigue.
+4. Se il tipo è "discriminazione_visiva": crea una scheda "Trova l'intruso" per categorizzazione semantica o attenzione visiva, con una sola immagine target corretta e 1-3 distrattori coerenti. Usa lo stesso contesto visivo per tutte le opzioni. Nel testoGenerato includi sezioni in italiano: "Obiettivo clinico", "Consegna", "Target", "Distrattori" e "Prompt immagini". I prompt immagini devono essere pronti per una API di generazione immagini, con descrizioni concrete e non ambigue.
 5. Se il tipo è "morfosintassi_complessa": crea una scheda su morfosintassi complessa partendo da elemento grammaticale, complessità e scena. Nel testoGenerato includi sezioni in italiano: "Obiettivo morfosintattico", "Frase target", "Scena da illustrare", "Domande di comprensione" e "Prompt immagine". Accetta strutture come pronomi clitici, relative e subordinate quando richieste.
+6. Se il tipo è "storia" o "filastrocca", aggiungi in fondo al testoGenerato una sezione "Domande di comprensione" con 3-5 domande semplici e coerenti con il testo.
 
 Devi rispondere ESCLUSIVAMENTE in formato JSON valido con questa struttura esatta:
 {
@@ -323,8 +346,8 @@ function mockAIResponse(params: GenerationParams) {
     ].slice(0, Math.max(options - 1, 1));
 
     return {
-      testoGenerato: `Obiettivo clinico: discriminazione visiva e comprensione della frase.\nConsegna: Guarda le immagini e indica quella giusta.\nTarget: ${scenario}.\nDistrattori: ${distractors.join("; ")}.\nPrompt immagini: Mantieni lo stesso ambiente, lo stesso stile illustrato chiaro e cambia solo il dettaglio discriminante tra target e distrattori.`,
-      tagImmagine: "discriminazione visiva",
+      testoGenerato: `Obiettivo clinico: Trova l'intruso per categorizzazione semantica o attenzione visiva.\nConsegna: Guarda le immagini e indica quella che non appartiene al gruppo.\nTarget: ${scenario}.\nDistrattori: ${distractors.join("; ")}.\nPrompt immagini: Mantieni lo stesso ambiente, lo stesso stile illustrato chiaro e cambia solo il dettaglio discriminante tra target e distrattori.`,
+      tagImmagine: "trova intruso",
       listaParole: [
         "Target",
         ...distractors.map((_, index) => `Distrattore ${index + 1}`),
@@ -383,8 +406,18 @@ function mockAIResponse(params: GenerationParams) {
     "torre",
   ];
 
+  const textWithQuestions =
+    params.tipoOutput === "storia" || params.tipoOutput === "filastrocca"
+      ? `${text}
+
+Domande di comprensione:
+1. Chi è il protagonista?
+2. Dove si svolge la scena?
+3. Che cosa succede alla fine?`
+      : text;
+
   return {
-    testoGenerato: text,
+    testoGenerato: textWithQuestions,
     tagImmagine: effectiveInterest,
     listaParole: words,
     difficolta: "media" as const,
@@ -488,11 +521,19 @@ export const aiRouter = createRouter({
           ? Array.from(
               new Set(data.listaParole.map(word => word.trim()).filter(Boolean))
             ).slice(0, 8)
-          : sanitizeWordsFromText(
-              data.testoGenerato,
-              data.listaParole,
-              sanitizedInput.fonema
-            );
+          : extractTargetWordsFromText(
+                data.testoGenerato,
+                sanitizedInput.fonema
+              ).length > 0
+            ? extractTargetWordsFromText(
+                data.testoGenerato,
+                sanitizedInput.fonema
+              )
+            : sanitizeWordsFromText(
+                data.testoGenerato,
+                data.listaParole,
+                sanitizedInput.fonema
+              );
       const { data: inserted, error } = await appDb(ctx.supabaseAccessToken)
         .from("sheets")
         .insert({

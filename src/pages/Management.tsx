@@ -30,7 +30,7 @@ function getSheetTypeLabel(tipoOutput: string) {
     storia: "Storia",
     filastrocca: "Filastrocca",
     lista: "Lista parole",
-    discriminazione_visiva: "Discriminazione visiva",
+    discriminazione_visiva: "Trova l'intruso",
     morfosintassi_complessa: "Morfosintassi complessa",
   };
   return labels[tipoOutput] ?? tipoOutput;
@@ -39,7 +39,6 @@ function getSheetTypeLabel(tipoOutput: string) {
 export default function Management() {
   const { user, isLoading, isAuthenticated } = useAuth();
   const [email, setEmail] = useState("");
-  const [selectedAccountId, setSelectedAccountId] = useState("");
   const utils = trpc.useUtils();
   const invitationBaseUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
@@ -69,17 +68,17 @@ export default function Management() {
       })),
     ];
   }, [overview]);
-  const activeAccountId = selectedAccountId || teamAccounts[0]?.id || "";
-  const activeAccount = teamAccounts.find(
-    account => account.id === activeAccountId
+  const accountById = useMemo(
+    () => new Map(teamAccounts.map(account => [account.id, account])),
+    [teamAccounts]
   );
   const {
     data: managedSheets,
     isLoading: isManagedSheetsLoading,
     error: managedSheetsError,
   } = trpc.sheets.list.useQuery(
-    { userId: activeAccountId },
-    { enabled: Boolean(overview?.role === "manager" && activeAccountId) }
+    { allTeam: true },
+    { enabled: Boolean(overview?.role === "manager") }
   );
   const invite = trpc.organization.invite.useMutation({
     onSuccess: async () => {
@@ -321,47 +320,26 @@ export default function Management() {
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <FileText className="w-5 h-5 text-teal-600" />
-              Archivio completo dei sub-account
+              Dashboard aggregata del team
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-slate-600">
-              Come Manager puoi entrare nell'archivio del tuo account e di ogni
-              sub-account collegato, aprire le schede e generare il PDF.
+              Come Manager vedi in un'unica dashboard le schede del tuo account
+              e di tutti i sub-account collegati, così puoi aprirle e generare
+              il PDF senza entrare account per account.
             </p>
-            <div className="flex flex-wrap gap-2">
-              {teamAccounts.map(account => (
-                <Button
-                  key={account.id}
-                  type="button"
-                  variant={
-                    account.id === activeAccountId ? "default" : "outline"
-                  }
-                  size="sm"
-                  className={
-                    account.id === activeAccountId
-                      ? "bg-teal-600 hover:bg-teal-700"
-                      : ""
-                  }
-                  onClick={() => setSelectedAccountId(account.id)}
-                >
-                  {account.role}: {account.name}
-                </Button>
-              ))}
-            </div>
 
             <div className="rounded-lg border border-slate-100">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4">
                 <div>
-                  <p className="font-medium text-slate-800">
-                    {activeAccount?.name ?? "Account"}
-                  </p>
+                  <p className="font-medium text-slate-800">Tutto il team</p>
                   <p className="text-xs text-slate-500">
-                    {activeAccount?.role} · {activeAccount?.email}
+                    {teamAccounts.length} account aggregati
                   </p>
                 </div>
                 <Badge variant="secondary">
-                  {managedSheets?.length ?? 0} schede visibili
+                  {managedSheets?.length ?? 0} schede totali visibili
                 </Badge>
               </div>
               <div className="divide-y divide-slate-100">
@@ -375,7 +353,7 @@ export default function Management() {
                   </p>
                 ) : !managedSheets || managedSheets.length === 0 ? (
                   <p className="p-4 text-sm text-slate-500">
-                    Nessuna scheda generata da questo account.
+                    Nessuna scheda generata dal team.
                   </p>
                 ) : (
                   managedSheets.map(sheet => (
@@ -388,6 +366,7 @@ export default function Management() {
                           {getSheetTypeLabel(sheet.tipoOutput)}
                         </p>
                         <p className="text-sm text-slate-500 truncate">
+                          {accountById.get(sheet.userId)?.name ?? "Account"} ·{" "}
                           {sheet.interesse} · /{sheet.fonema}/ ·{" "}
                           {new Date(sheet.createdAt).toLocaleDateString(
                             "it-IT"
@@ -442,7 +421,8 @@ export default function Management() {
                 {overview.seats.available === 0 && (
                   <p className="text-xs text-amber-700">
                     Tutti i posti sono occupati o riservati da inviti pendenti.
-                    Ogni team può includere al massimo {TeamLimits.maxStaffAccounts}
+                    Ogni team può includere al massimo{" "}
+                    {TeamLimits.maxStaffAccounts}
                     account staff oltre al Manager.
                   </p>
                 )}
@@ -552,13 +532,7 @@ export default function Management() {
                   </p>
                 </div>
                 {isTeamOwner && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSelectedAccountId(member.id)}
-                  >
-                    Vedi archivio
-                  </Button>
+                  <Badge variant="secondary">Incluso nella dashboard</Badge>
                 )}
               </div>
             ))}
@@ -584,8 +558,8 @@ export default function Management() {
           </p>
           <p>
             Solo l'account principale può invitare utenti già registrati, fino a
-            {TeamLimits.maxStaffAccounts} account staff, e aprire gli archivi dei
-            sub-account collegati.
+            {TeamLimits.maxStaffAccounts} account staff, e aprire gli archivi
+            dei sub-account collegati.
           </p>
         </CardContent>
       </Card>

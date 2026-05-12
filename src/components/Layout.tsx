@@ -1,6 +1,8 @@
 import { Link, Navigate, useLocation, useNavigate } from "react-router";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   LayoutDashboard,
   FileText,
@@ -37,6 +39,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
   const { isLoading: isSubscriptionLoading } =
     trpc.subscriptions.mySubscription.useQuery(undefined, {
       enabled: isAuthenticated,
@@ -53,6 +56,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const deleteAccount = trpc.auth.deleteAccount.useMutation({
     onSuccess: async () => {
       await utils.invalidate();
+      setDeletePassword("");
       setOpenDeleteDialog(false);
       navigate("/login");
     },
@@ -182,6 +186,8 @@ export default function Layout({ children }: { children: ReactNode }) {
                   Abbonamento gestito dal Manager
                 </DropdownMenuItem>
               )}
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Zona pericolosa</DropdownMenuLabel>
               <DropdownMenuItem
                 variant="destructive"
                 onClick={() => setOpenDeleteDialog(true)}
@@ -249,16 +255,40 @@ export default function Layout({ children }: { children: ReactNode }) {
             </AlertDialogTitle>
             <AlertDialogDescription>
               Questa azione elimina account, schede e abbonamento associati. Non
-              può essere annullata.
+              può essere annullata. Per continuare inserisci la password del tuo
+              account.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="delete-account-password">Password</Label>
+            <Input
+              id="delete-account-password"
+              type="password"
+              value={deletePassword}
+              onChange={event => setDeletePassword(event.target.value)}
+              placeholder="Conferma con la password"
+              autoComplete="current-password"
+            />
+            {deleteAccount.error && (
+              <p className="text-sm text-red-600">
+                {deleteAccount.error.message}
+              </p>
+            )}
+          </div>
           <AlertDialogFooter>
-            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => setDeletePassword("")}>
+              Annulla
+            </AlertDialogCancel>
             <AlertDialogAction
               className="bg-red-600 hover:bg-red-700"
-              onClick={() => deleteAccount.mutate()}
+              disabled={!deletePassword.trim() || deleteAccount.isPending}
+              onClick={event => {
+                event.preventDefault();
+                if (!deletePassword.trim()) return;
+                deleteAccount.mutate({ password: deletePassword });
+              }}
             >
-              Elimina account
+              {deleteAccount.isPending ? "Eliminazione..." : "Elimina account"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

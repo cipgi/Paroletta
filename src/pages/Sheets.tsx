@@ -10,7 +10,7 @@ function getSheetTypeLabel(tipoOutput: string) {
     storia: "Storia",
     filastrocca: "Filastrocca",
     lista: "Lista parole",
-    discriminazione_visiva: "Discriminazione visiva",
+    discriminazione_visiva: "Trova l'intruso",
     morfosintassi_complessa: "Morfosintassi complessa",
   };
   return labels[tipoOutput] ?? tipoOutput;
@@ -46,7 +46,9 @@ export default function Sheets() {
       <Card>
         <CardContent className="p-6">
           {isLoading ? (
-            <div className="text-center py-8 text-slate-400">Caricamento...</div>
+            <div className="text-center py-8 text-slate-400">
+              Caricamento...
+            </div>
           ) : !sheets || sheets.length === 0 ? (
             <div className="text-center py-8 text-slate-400">
               <FileText className="w-10 h-10 mx-auto mb-3 opacity-50" />
@@ -59,37 +61,43 @@ export default function Sheets() {
             </div>
           ) : (
             <div className="space-y-3">
-              {sheets && sheets.map((sheet) => (
-                <div
-                  key={sheet.id}
-                  className="flex items-center justify-between p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-white border border-slate-200 rounded-lg flex items-center justify-center">
-                      <FileText className="w-5 h-5 text-teal-600" />
+              {sheets &&
+                sheets.map(sheet => (
+                  <div
+                    key={sheet.id}
+                    className="flex items-center justify-between p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-white border border-slate-200 rounded-lg flex items-center justify-center">
+                        <FileText className="w-5 h-5 text-teal-600" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-slate-800 flex items-center gap-2">
+                          {getSheetTypeLabel(sheet.tipoOutput)}
+                          {isTextWithPhonemeSheet(sheet.tipoOutput) && (
+                            <Badge
+                              variant="outline"
+                              className="capitalize text-xs"
+                            >
+                              /{sheet.fonema}/
+                            </Badge>
+                          )}
+                        </p>
+                        <p className="text-sm text-slate-500">
+                          {sheet.interesse} •{" "}
+                          {new Date(sheet.createdAt).toLocaleDateString(
+                            "it-IT"
+                          )}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium text-slate-800 flex items-center gap-2">
-                        {getSheetTypeLabel(sheet.tipoOutput)}
-                        {isTextWithPhonemeSheet(sheet.tipoOutput) && (
-                          <Badge variant="outline" className="capitalize text-xs">
-                            /{sheet.fonema}/
-                          </Badge>
-                        )}
-                      </p>
-                      <p className="text-sm text-slate-500">
-                        {sheet.interesse} •{" "}
-                        {new Date(sheet.createdAt).toLocaleDateString("it-IT")}
-                      </p>
-                    </div>
+                    <Link to={`/sheets/${sheet.id}`}>
+                      <Button variant="ghost" size="sm">
+                        <ArrowRight className="w-4 h-4" />
+                      </Button>
+                    </Link>
                   </div>
-                  <Link to={`/sheets/${sheet.id}`}>
-                    <Button variant="ghost" size="sm">
-                      <ArrowRight className="w-4 h-4" />
-                    </Button>
-                  </Link>
-                </div>
-              ))}
+                ))}
             </div>
           )}
         </CardContent>

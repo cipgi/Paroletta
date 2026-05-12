@@ -260,49 +260,67 @@ export const authRouter = createRouter({
     }),
   me: authedQuery.query(opts => opts.ctx.user),
 
-  deleteAccount: authedQuery.mutation(async ({ ctx }) => {
-    const supabaseUserId = getSupabaseUserIdFromUnionId(ctx.user.unionId);
-    if (!supabaseUserId) throw missingResourceError("Account");
+  deleteAccount: authedQuery
+    .input(z.object({ password: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const supabaseUserId = getSupabaseUserIdFromUnionId(ctx.user.unionId);
+      if (!supabaseUserId) throw missingResourceError("Account");
 
-    const { error } = await supabaseAdmin.auth.admin.deleteUser(supabaseUserId);
-    if (error) {
-      throw databaseOperationError(
-        "eliminare definitivamente l'account",
-        error
+      const email = ctx.user.email;
+      if (!email) throw missingResourceError("Account");
+
+      const { error: passwordError } = await supabase.auth.signInWithPassword({
+        email,
+        password: input.password,
+      });
+      if (passwordError) {
+        throw userFacingError(
+          "UNAUTHORIZED",
+          "Password non corretta. L'account non è stato eliminato.",
+          passwordError
+        );
+      }
+
+      const { error } =
+        await supabaseAdmin.auth.admin.deleteUser(supabaseUserId);
+      if (error) {
+        throw databaseOperationError(
+          "eliminare definitivamente l'account",
+          error
+        );
+      }
+
+      for (let i = sheets.length - 1; i >= 0; i--)
+        if (sheets[i].userId === ctx.user.id) sheets.splice(i, 1);
+      for (let i = subscriptions.length - 1; i >= 0; i--)
+        if (subscriptions[i].userId === ctx.user.id) subscriptions.splice(i, 1);
+      for (let i = users.length - 1; i >= 0; i--)
+        if (users[i].id === ctx.user.id) users.splice(i, 1);
+
+      const opts = getSessionCookieOptions(ctx.req.headers);
+      ctx.resHeaders.append(
+        "set-cookie",
+        cookie.serialize(Session.cookieName, "", {
+          httpOnly: opts.httpOnly,
+          path: opts.path,
+          sameSite: opts.sameSite?.toLowerCase() as "lax" | "none" | "strict",
+          secure: opts.secure,
+          maxAge: 0,
+        })
       );
-    }
+      ctx.resHeaders.append(
+        "set-cookie",
+        cookie.serialize(SUPABASE_ACCESS_COOKIE, "", {
+          httpOnly: true,
+          path: opts.path,
+          sameSite: opts.sameSite?.toLowerCase() as "lax" | "none" | "strict",
+          secure: opts.secure,
+          maxAge: 0,
+        })
+      );
 
-    for (let i = sheets.length - 1; i >= 0; i--)
-      if (sheets[i].userId === ctx.user.id) sheets.splice(i, 1);
-    for (let i = subscriptions.length - 1; i >= 0; i--)
-      if (subscriptions[i].userId === ctx.user.id) subscriptions.splice(i, 1);
-    for (let i = users.length - 1; i >= 0; i--)
-      if (users[i].id === ctx.user.id) users.splice(i, 1);
-
-    const opts = getSessionCookieOptions(ctx.req.headers);
-    ctx.resHeaders.append(
-      "set-cookie",
-      cookie.serialize(Session.cookieName, "", {
-        httpOnly: opts.httpOnly,
-        path: opts.path,
-        sameSite: opts.sameSite?.toLowerCase() as "lax" | "none" | "strict",
-        secure: opts.secure,
-        maxAge: 0,
-      })
-    );
-    ctx.resHeaders.append(
-      "set-cookie",
-      cookie.serialize(SUPABASE_ACCESS_COOKIE, "", {
-        httpOnly: true,
-        path: opts.path,
-        sameSite: opts.sameSite?.toLowerCase() as "lax" | "none" | "strict",
-        secure: opts.secure,
-        maxAge: 0,
-      })
-    );
-
-    return { success: true };
-  }),
+      return { success: true };
+    }),
   logout: authedQuery.mutation(async ({ ctx }) => {
     const opts = getSessionCookieOptions(ctx.req.headers);
     ctx.resHeaders.append(

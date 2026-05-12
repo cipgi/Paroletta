@@ -60,7 +60,7 @@ export function createDidacticPdf(params: {
     storia: "Storia",
     filastrocca: "Filastrocca",
     lista: "Lista parole",
-    discriminazione_visiva: "Discriminazione visiva",
+    discriminazione_visiva: "Trova l'intruso",
     morfosintassi_complessa: "Morfosintassi complessa",
   };
 

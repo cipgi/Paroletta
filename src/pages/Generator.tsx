@@ -89,9 +89,9 @@ const tipoSchedaConfig: Record<
   { titolo: string; descrizione: string; icona: typeof FileText }
 > = {
   discriminazione_visiva: {
-    titolo: "Discriminazione visiva",
+    titolo: "Trova l'intruso",
     descrizione:
-      "Target corretto e distrattori coordinati per allenare comprensione e scelta tra immagini.",
+      "Categorizzazione semantica o attenzione visiva: un target corretto e distrattori coordinati.",
     icona: Eye,
   },
   morfosintassi_complessa: {
@@ -131,7 +131,7 @@ export default function Generator() {
         numeroOpzioni?: number;
       };
       return {
-        eta: parsed.eta ?? "6 anni",
+        eta: parsed.eta ?? "6-8 anni",
         fonema:
           parsed.fonema && fonemi.includes(parsed.fonema) ? parsed.fonema : "r",
         interesse:
@@ -152,7 +152,7 @@ export default function Generator() {
     }
   })();
 
-  const [eta, setEta] = useState(savedPreferences?.eta ?? "6 anni");
+  const [eta, setEta] = useState(savedPreferences?.eta ?? "6-8 anni");
   const [fonema, setFonema] = useState(savedPreferences?.fonema ?? "r");
   const [interesse, setInteresse] = useState(
     savedPreferences?.interesse ?? "libero"
@@ -536,14 +536,20 @@ export default function Generator() {
             <div className="space-y-2">
               <Label htmlFor="eta" className="flex items-center gap-2">
                 <Baby className="w-4 h-4 text-teal-600" />
-                Età di riferimento
+                Fascia d'età
               </Label>
-              <Input
-                id="eta"
-                value={eta}
-                onChange={e => setEta(e.target.value)}
-                placeholder="es. 6 anni"
-              />
+              <Select value={eta} onValueChange={setEta}>
+                <SelectTrigger id="eta">
+                  <SelectValue placeholder="Seleziona fascia d'età" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="3-5 anni">3-5 anni</SelectItem>
+                  <SelectItem value="6-8 anni">6-8 anni</SelectItem>
+                  <SelectItem value="9-11 anni">9-11 anni</SelectItem>
+                  <SelectItem value="12-14 anni">12-14 anni</SelectItem>
+                  <SelectItem value="adulto">Adulto</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">

@@ -1,5 +1,5 @@
 import { useParams, Link } from "react-router";
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 import { trpc } from "@/providers/trpc";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ function getSheetTypeLabel(tipoOutput: string) {
     storia: "Storia",
     filastrocca: "Filastrocca",
     lista: "Lista di parole",
-    discriminazione_visiva: "Discriminazione visiva",
+    discriminazione_visiva: "Trova l'intruso",
     morfosintassi_complessa: "Morfosintassi complessa",
   };
   return labels[tipoOutput] ?? tipoOutput;
@@ -27,6 +27,55 @@ function getSheetTypeLabel(tipoOutput: string) {
 
 function isTextWithPhonemeSheet(tipoOutput: string) {
   return ["storia", "filastrocca", "lista"].includes(tipoOutput);
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function getFonemaPositionLabel(word: string, fonema: string) {
+  const normalizedWord = word
+    .toLocaleLowerCase("it-IT")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+  const normalizedFonema = fonema
+    .toLocaleLowerCase("it-IT")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+  const index = normalizedWord.indexOf(normalizedFonema);
+
+  if (index === -1) return "posizione non rilevata";
+  if (index === 0) return "iniziale";
+  if (index + normalizedFonema.length >= normalizedWord.length) return "finale";
+  return "mediana";
+}
+
+function getWordLabel(word: string) {
+  return word.split("—")[0]?.trim() || word.trim();
+}
+
+function renderHighlightedPhonemeText(
+  text: string,
+  fonema: string
+): ReactNode[] {
+  const target = fonema.trim();
+  if (!target) return [text];
+
+  const regex = new RegExp(`(${escapeRegExp(target)})`, "giu");
+  return text.split(regex).map((part, index) => {
+    if (part.toLocaleLowerCase("it-IT") !== target.toLocaleLowerCase("it-IT")) {
+      return part;
+    }
+
+    return (
+      <mark
+        key={`${part}-${index}`}
+        className="rounded bg-amber-100 px-0.5 font-bold text-teal-700"
+      >
+        {part}
+      </mark>
+    );
+  });
 }
 
 function getVisualOptionCount(words: string[]) {
@@ -245,6 +294,7 @@ export default function SheetDetail() {
   const isComplexMorphosyntax = sheet.tipoOutput === "morfosintassi_complessa";
   const showPhonemeTarget = isTextWithPhonemeSheet(sheet.tipoOutput);
   const visualOptionCount = getVisualOptionCount(words);
+  const targetWords = words.map(getWordLabel).filter(Boolean);
 
   const doctorName =
     [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
@@ -329,7 +379,12 @@ export default function SheetDetail() {
               </h2>
 
               <div className="text-slate-700 leading-relaxed whitespace-pre-line text-lg">
-                {sheet.testoGenerato}
+                {showPhonemeTarget
+                  ? renderHighlightedPhonemeText(
+                      sheet.testoGenerato,
+                      sheet.fonema
+                    )
+                  : sheet.testoGenerato}
               </div>
 
               {words.length > 0 && !isVisualDiscrimination && (
@@ -337,12 +392,17 @@ export default function SheetDetail() {
                   <p className="text-sm font-medium text-slate-500 mb-2">
                     {isComplexMorphosyntax
                       ? "Parametri clinici:"
-                      : "Parole chiave:"}
+                      : "Parole-target estratte:"}
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {words.map(w => (
+                    {targetWords.map(w => (
                       <Badge key={w} variant="secondary" className="text-sm">
-                        {w}
+                        {showPhonemeTarget
+                          ? `${w} · fonema in posizione ${getFonemaPositionLabel(
+                              w,
+                              sheet.fonema
+                            )}`
+                          : w}
                       </Badge>
                     ))}
                   </div>

@@ -72,6 +72,7 @@ const mapSheet = (s: DbSheet) => ({
 const managedSheetListInput = z
   .object({
     userId: z.string().uuid().optional(),
+    allTeam: z.boolean().optional(),
   })
   .optional();
 
@@ -97,13 +98,51 @@ export const sheetsRouter = createRouter({
     .input(managedSheetListInput)
     .query(async ({ ctx, input }) => {
       const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
+      const db = appDb(ctx.supabaseAccessToken);
+
+      if (input?.allTeam) {
+        const account = await getAccountContext(
+          supabaseUserId,
+          ctx.supabaseAccessToken
+        );
+        if (
+          account.role !== "manager" ||
+          account.ownerUserId !== supabaseUserId
+        ) {
+          throw missingResourceError("Schede del team");
+        }
+
+        const { data: members, error: membersError } = await db
+          .from("seat_assignments")
+          .select("member_user_id")
+          .eq("owner_user_id", supabaseUserId);
+        if (membersError)
+          throw databaseOperationError(
+            "caricare i membri del team",
+            membersError
+          );
+
+        const teamUserIds = [
+          supabaseUserId,
+          ...(members ?? []).map(member => member.member_user_id),
+        ];
+        const { data, error } = await db
+          .from("sheets")
+          .select("*")
+          .in("user_id", teamUserIds)
+          .order("created_at", { ascending: false });
+        if (error)
+          throw databaseOperationError("caricare l’elenco delle schede", error);
+        return (data ?? []).map(mapSheet);
+      }
+
       const targetUserId = input?.userId ?? supabaseUserId;
       await assertCanManageSheetOwner(
         supabaseUserId,
         targetUserId,
         ctx.supabaseAccessToken
       );
-      const { data, error } = await appDb(ctx.supabaseAccessToken)
+      const { data, error } = await db
         .from("sheets")
         .select("*")
         .eq("user_id", targetUserId)
