@@ -174,7 +174,7 @@ export const subscriptionsRouter = createRouter({
       const plan = input.piano satisfies Plan;
       const { error: profileError } = await appDb(ctx.supabaseAccessToken)
         .from("profiles")
-        .update({ piano: plan, seats: seatsCount })
+        .update({ piano: plan })
         .eq("id", supabaseUserId);
       if (profileError)
         throw databaseOperationError(
