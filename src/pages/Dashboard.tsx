@@ -3,19 +3,14 @@ import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Sparkles,
-  FileText,
-  TrendingUp,
-  ArrowRight,
-} from "lucide-react";
+import { Sparkles, FileText, TrendingUp, ArrowRight } from "lucide-react";
 
 function getSheetTypeLabel(tipoOutput: string) {
   const labels: Record<string, string> = {
     storia: "Storia",
     filastrocca: "Filastrocca",
     lista: "Lista parole",
-    discriminazione_visiva: "Discriminazione visiva",
+    discriminazione_visiva: "Trova l'intruso",
     morfosintassi_complessa: "Morfosintassi complessa",
   };
   return labels[tipoOutput] ?? tipoOutput;
@@ -33,12 +28,18 @@ export default function Dashboard() {
   const { data: sheetsCount } = trpc.sheets.count.useQuery(undefined, {
     enabled: isAuthenticated,
   });
-  const { data: subscription } = trpc.subscriptions.mySubscription.useQuery(undefined, {
-    enabled: isAuthenticated,
-  });
-  const { data: organizationOverview } = trpc.organization.overview.useQuery(undefined, {
-    enabled: isAuthenticated,
-  });
+  const { data: subscription } = trpc.subscriptions.mySubscription.useQuery(
+    undefined,
+    {
+      enabled: isAuthenticated,
+    }
+  );
+  const { data: organizationOverview } = trpc.organization.overview.useQuery(
+    undefined,
+    {
+      enabled: isAuthenticated,
+    }
+  );
 
   if (isLoading) {
     return <div className="text-slate-500">Caricamento dashboard...</div>;
@@ -129,7 +130,7 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="space-y-3">
-              {recentSheets.map((sheet) => (
+              {recentSheets.map(sheet => (
                 <div
                   key={sheet.id}
                   className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors"
@@ -141,7 +142,8 @@ export default function Dashboard() {
                         ` — /${sheet.fonema}/`}
                     </p>
                     <p className="text-sm text-slate-500">
-                      {sheet.interesse} • {new Date(sheet.createdAt).toLocaleDateString("it-IT")}
+                      {sheet.interesse} •{" "}
+                      {new Date(sheet.createdAt).toLocaleDateString("it-IT")}
                     </p>
                   </div>
                   <Link to={`/sheets/${sheet.id}`}>
