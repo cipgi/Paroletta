@@ -231,7 +231,7 @@ export default function Generator() {
         }
       });
 
-      navigate(`/sheets/${data.sheet.id}`);
+      navigate("/sheets");
     },
   });
 
