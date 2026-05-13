@@ -105,8 +105,8 @@ export default function Layout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
-      <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col">
+    <div className="h-screen overflow-hidden bg-slate-50 flex">
+      <aside className="h-screen w-64 shrink-0 bg-white border-r border-slate-200 hidden md:flex flex-col">
         <div className="p-6 border-b border-slate-100">
           <Link to="/" className="flex items-center gap-2">
             <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center">
@@ -210,7 +210,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         <header className="md:hidden bg-white border-b border-slate-200 p-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
             <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center">
@@ -244,7 +244,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        <main className="flex-1 p-6 md:p-8 overflow-auto">{children}</main>
+        <main className="flex-1 overflow-y-auto p-6 md:p-8">{children}</main>
       </div>
 
       <AlertDialog open={openDeleteDialog} onOpenChange={setOpenDeleteDialog}>
