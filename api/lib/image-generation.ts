@@ -56,6 +56,16 @@ export type CachedIllustration = {
   createdAt?: string;
 };
 
+export type ResolvedImageAsset = {
+  role: ImageRole;
+  label: string;
+  semanticTags: string[];
+  cacheKey: string;
+  filePath: string;
+  source: CachedIllustration["source"];
+  cacheHit: boolean;
+};
+
 export type ImageCacheDb = {
   findByCacheKey(cacheKey: string): Promise<CachedIllustration | null>;
   save(
@@ -202,8 +212,15 @@ async function callGeminiImageApi(prompt: string): Promise<{
   bytes: string;
   mimeType: string;
 }> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
+  const apiKey =
+    process.env.GEMINI_API_KEY ??
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY ??
+    process.env.GOOGLE_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "Gemini API key not configured. Set GEMINI_API_KEY or GOOGLE_GENERATIVE_AI_API_KEY."
+    );
+  }
 
   const endpoint =
     process.env.GEMINI_IMAGE_API_URL ??
@@ -254,7 +271,13 @@ function saveLocalGeneratedImage(bytes: string, mimeType: string): string {
   const fileName = `${nanoid()}.${extension}`;
   const filePath = resolve(dir, fileName);
   writeFileSync(filePath, Buffer.from(bytes, "base64"));
-  return `.data/generated-images/${fileName}`;
+  return `/generated-images/${fileName}`;
+}
+
+function buildMockImageDataUrl(label: string): string {
+  const safeLabel = sanitizeImageText(label, 60) || "Immagine non disponibile";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"><rect width="512" height="512" rx="32" fill="#f1f5f9"/><circle cx="256" cy="214" r="58" fill="#ccfbf1"/><path d="M176 332h160" stroke="#0f766e" stroke-width="18" stroke-linecap="round"/><text x="256" y="394" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#334155">${safeLabel}</text><text x="256" y="438" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#64748b">fallback locale</text></svg>`;
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
 }
 
 export async function resolveImageRequestWithCache(
@@ -266,7 +289,7 @@ export async function resolveImageRequestWithCache(
   );
   const cacheKey = buildSemanticCacheKey(semanticTags);
   const cached = await db.findByCacheKey(cacheKey);
-  if (cached) return { ...cached, cacheHit: true };
+  if (cached && cached.source !== "mock") return { ...cached, cacheHit: true };
 
   const prompt = sanitizeImagePrompt(request.prompt);
   let filePath: string;
@@ -277,12 +300,16 @@ export async function resolveImageRequestWithCache(
     const generated = await callGeminiImageApi(prompt);
     filePath = saveLocalGeneratedImage(generated.bytes, generated.mimeType);
     mimeType = generated.mimeType;
-  } catch {
+  } catch (error) {
+    console.error("[image-generation] Gemini image generation failed", {
+      cacheKey,
+      error,
+    });
     source = "mock";
-    filePath = `mock://nano-banana-2/${encodeURIComponent(cacheKey)}`;
+    filePath = buildMockImageDataUrl(request.label);
   }
 
-  const saved = await db.save({
+  const illustration = {
     tag: request.label,
     semanticTags,
     cacheKey,
@@ -291,7 +318,13 @@ export async function resolveImageRequestWithCache(
     source,
     generationModel: IMAGE_GENERATION_MODEL,
     generatedCostUsd: source === "generated" ? IMAGE_GENERATION_COST_USD : 0,
-  });
+  };
+
+  if (source === "mock") {
+    return { ...illustration, cacheHit: false };
+  }
+
+  const saved = await db.save(illustration);
 
   return { ...saved, cacheHit: false };
 }

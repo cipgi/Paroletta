@@ -14,13 +14,21 @@ type DbIllustration = {
   created_at: string;
 };
 
+function toPublicFilePath(filePath: string) {
+  const localPrefix = ".data/generated-images/";
+  if (filePath.startsWith(localPrefix)) {
+    return `/generated-images/${filePath.slice(localPrefix.length)}`;
+  }
+  return filePath;
+}
+
 function mapDbIllustration(row: DbIllustration): CachedIllustration {
   return {
     id: row.id,
     tag: row.tag,
     semanticTags: row.semantic_tags ?? [row.tag],
     cacheKey: row.cache_key ?? row.tag,
-    filePath: row.file_path,
+    filePath: toPublicFilePath(row.file_path),
     mimeType: row.mime_type,
     source: row.source ?? "uploaded",
     generationModel: row.generation_model,

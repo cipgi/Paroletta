@@ -2,7 +2,7 @@ import { createRouter, authedQuery } from "./middleware";
 import { z } from "zod";
 
 import { TRPCError } from "@trpc/server";
-import { appDb, getSupabaseUserIdFromUnionId } from "./lib/db";
+import { adminAppDb, appDb, getSupabaseUserIdFromUnionId } from "./lib/db";
 import {
   databaseOperationError,
   invalidSessionError,
@@ -180,6 +180,7 @@ const imageAssetSchema = z.object({
   semanticTags: z.array(z.string()),
   cacheKey: z.string(),
   filePath: z.string(),
+  source: z.enum(["generated", "uploaded", "mock"]),
   cacheHit: z.boolean(),
 });
 
@@ -614,9 +615,7 @@ export const aiRouter = createRouter({
         scenarioSmart: sanitizedInput.scenarioSmart,
         descrizioneScena: sanitizedInput.descrizioneScena,
       });
-      const imageCacheDb = createSupabaseImageCacheDb(
-        appDb(ctx.supabaseAccessToken)
-      );
+      const imageCacheDb = createSupabaseImageCacheDb(adminAppDb());
       const imageAssets = await Promise.all(
         imageRequests.map(async request => {
           const illustration = await resolveImageRequestWithCache(
@@ -629,6 +628,7 @@ export const aiRouter = createRouter({
             semanticTags: illustration.semanticTags,
             cacheKey: illustration.cacheKey,
             filePath: illustration.filePath,
+            source: illustration.source,
             cacheHit: illustration.cacheHit,
           });
         })

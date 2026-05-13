@@ -85,6 +85,14 @@ function getVisualOptionCount(words: string[]) {
   return Math.min(Math.max(count || 4, 2), 4);
 }
 
+function isDisplayableImagePath(path: string | null | undefined) {
+  return Boolean(path && /^(https?:|data:image\/|\/)/u.test(path));
+}
+
+function getImageAssetLabel(index: number) {
+  return index === 0 ? "Target corretto" : `Distrattore ${index}`;
+}
+
 function clonePrintableStyles(printDocument: Document) {
   document.querySelectorAll('link[rel="stylesheet"], style').forEach(el => {
     printDocument.head.appendChild(el.cloneNode(true));
@@ -293,7 +301,15 @@ export default function SheetDetail() {
   const isVisualDiscrimination = sheet.tipoOutput === "discriminazione_visiva";
   const isComplexMorphosyntax = sheet.tipoOutput === "morfosintassi_complessa";
   const showPhonemeTarget = isTextWithPhonemeSheet(sheet.tipoOutput);
-  const visualOptionCount = getVisualOptionCount(words);
+  const imageAssets = sheet.imageAssets ?? [];
+  const visualImageAssets = imageAssets.filter(asset =>
+    ["target", "distrattore"].includes(asset.role)
+  );
+  const visualOptionCount = Math.min(
+    Math.max(getVisualOptionCount(words), visualImageAssets.length || 0),
+    4
+  );
+  const primaryImageAsset = imageAssets[0];
   const targetWords = words.map(getWordLabel).filter(Boolean);
 
   const doctorName =
@@ -417,23 +433,39 @@ export default function SheetDetail() {
                   <p className="font-semibold">Scelta multipla visiva</p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  {Array.from({ length: visualOptionCount }, (_, index) => (
-                    <div
-                      key={index}
-                      className="rounded-xl border-2 border-white bg-white p-3 text-center shadow-sm"
-                    >
-                      <div className="flex h-40 items-center justify-center rounded-lg bg-slate-100">
-                        <span className="text-5xl">
-                          {index === 0 ? "🎯" : "🖼️"}
-                        </span>
+                  {Array.from({ length: visualOptionCount }, (_, index) => {
+                    const asset = visualImageAssets[index];
+                    const label = asset?.label ?? getImageAssetLabel(index);
+                    return (
+                      <div
+                        key={asset?.cacheKey ?? index}
+                        className="rounded-xl border-2 border-white bg-white p-3 text-center shadow-sm"
+                      >
+                        <div className="flex h-40 items-center justify-center overflow-hidden rounded-lg bg-slate-100">
+                          {isDisplayableImagePath(asset?.filePath) ? (
+                            <img
+                              src={asset.filePath}
+                              alt={label}
+                              className="h-full w-full object-contain"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <span className="px-4 text-sm font-medium text-slate-500">
+                              Immagine non disponibile
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-3 text-sm font-semibold text-slate-700">
+                          {label}
+                        </p>
+                        {asset?.source === "mock" && (
+                          <p className="mt-1 text-xs text-amber-600">
+                            Fallback locale: controlla la configurazione Gemini.
+                          </p>
+                        )}
                       </div>
-                      <p className="mt-3 text-sm font-semibold text-slate-700">
-                        {index === 0
-                          ? "Target corretto"
-                          : `Distrattore ${index}`}
-                      </p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 <p className="mt-3 text-xs text-slate-500">
                   Le immagini sono generate come set coordinato: stesso contesto
@@ -449,20 +481,45 @@ export default function SheetDetail() {
                   </p>
                 </div>
                 <div className="rounded-xl border-2 border-white bg-white p-5 text-center shadow-sm">
-                  <div className="mx-auto flex h-56 max-w-lg items-center justify-center rounded-lg bg-slate-100">
-                    <span className="text-6xl">🧠</span>
+                  <div className="mx-auto flex h-56 max-w-lg items-center justify-center overflow-hidden rounded-lg bg-slate-100">
+                    {isDisplayableImagePath(primaryImageAsset?.filePath) ? (
+                      <img
+                        src={primaryImageAsset.filePath}
+                        alt={primaryImageAsset.label}
+                        className="h-full w-full object-contain"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <span className="px-4 text-sm font-medium text-slate-500">
+                        Immagine non disponibile
+                      </span>
+                    )}
                   </div>
                   <p className="mt-3 text-sm text-slate-500">
                     Immagine AI vincolata alla frase target e alla struttura
                     grammaticale descritta.
                   </p>
+                  {primaryImageAsset?.source === "mock" && (
+                    <p className="mt-1 text-xs text-amber-600">
+                      Fallback locale: controlla la configurazione Gemini.
+                    </p>
+                  )}
                 </div>
               </div>
             ) : (
               <div className="mt-8 p-6 bg-slate-50 rounded-xl text-center">
                 <p className="text-sm text-slate-500 mb-2">Illustrazione</p>
-                <div className="w-32 h-32 mx-auto bg-slate-200 rounded-lg flex items-center justify-center">
-                  <span className="text-4xl">🎨</span>
+                <div className="w-32 h-32 mx-auto overflow-hidden bg-slate-200 rounded-lg flex items-center justify-center">
+                  {isDisplayableImagePath(primaryImageAsset?.filePath) ? (
+                    <img
+                      src={primaryImageAsset.filePath}
+                      alt={primaryImageAsset.label}
+                      className="h-full w-full object-contain"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <span className="text-xs text-slate-500">N/D</span>
+                  )}
                 </div>
                 <p className="text-xs text-slate-400 mt-2 capitalize">
                   Tag: {sheet.tagImmagine ?? "generico"}
