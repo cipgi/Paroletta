@@ -280,7 +280,7 @@ ISTRUZIONI DI GENERAZIONE:
 1. Se il tipo è "storia": scrivi una storia brevissima (max 150 parole) sul tema indicato dal campo "interesse". Se il campo "interesse" vale "libero", non c'è un interesse specifico: scegli liberamente un tema tra gli interessi disponibili nel messaggio utente. Inserisci in modo naturale le parole contenenti il fonema indicato dal campo "fonema".
 2. Se il tipo è "filastrocca": componi una filastrocca facile e ritmata (8-12 versi) a tema indicato dal campo "interesse". Se il campo "interesse" vale "libero", scegli liberamente un tema tra gli interessi disponibili nel messaggio utente. Usa parole con il fonema indicato dal campo "fonema".
 3. Se il tipo è "lista": crea una lista di 15-20 parole con il fonema indicato dal campo "fonema", divise per difficoltà (semplici, medie, complesse) e vicine agli interessi del bambino. Se il campo "interesse" vale "libero", usa liberamente uno degli interessi disponibili nel messaggio utente.
-4. Se il tipo è "discriminazione_visiva": crea una scheda "Trova l'intruso" per categorizzazione semantica o attenzione visiva, con una sola immagine target corretta e 1-3 distrattori coerenti. Usa lo stesso contesto visivo per tutte le opzioni. Nel testoGenerato includi sezioni in italiano: "Obiettivo clinico", "Consegna", "Target", "Distrattori" e "Prompt immagini". I prompt immagini devono essere pronti per una API di generazione immagini, con descrizioni concrete e non ambigue.
+4. Se il tipo è "discriminazione_visiva": crea una scheda "Trova l'intruso" per categorizzazione semantica o attenzione visiva, con una sola immagine target corretta e 1-3 distrattori coerenti. Il numero totale di opzioni deve rispettare esattamente "numeroOpzioni": 2 significa target + 1 distrattore, 3 significa target + 2 distrattori, 4 significa target + 3 distrattori. Usa lo stesso contesto visivo per tutte le opzioni, ma ogni opzione deve essere una scena separata: non unire target e distrattori nella stessa immagine, non creare collage, griglie o vignette multiple. I distrattori devono avere somiglianza graduata rispetto al target: Distrattore 1 molto simile, Distrattore 2 mediamente simile, Distrattore 3 lontanamente simile. Nel testoGenerato includi sezioni in italiano: "Obiettivo clinico", "Consegna", "Target", "Distrattori", "Contesto comune" e "Prompt immagini". In "Prompt immagini" scrivi una riga separata per Target e una riga separata per ogni Distrattore richiesto. Ogni riga deve descrivere solo una singola immagine, pronta per una API di generazione immagini, con descrizioni concrete e non ambigue.
 5. Se il tipo è "morfosintassi_complessa": crea una scheda su morfosintassi complessa partendo da elemento grammaticale, complessità e scena. Nel testoGenerato includi sezioni in italiano: "Obiettivo morfosintattico", "Frase target", "Scena da illustrare", "Domande di comprensione" e "Prompt immagine". Accetta strutture come pronomi clitici, relative e subordinate quando richieste.
 6. Se il tipo è "storia" o "filastrocca", aggiungi in fondo al testoGenerato una sezione "Domande di comprensione" con 3-5 domande semplici e coerenti con il testo.
 
@@ -346,7 +346,19 @@ function mockAIResponse(params: GenerationParams) {
     ].slice(0, Math.max(options - 1, 1));
 
     return {
-      testoGenerato: `Obiettivo clinico: Trova l'intruso per categorizzazione semantica o attenzione visiva.\nConsegna: Guarda le immagini e indica quella che non appartiene al gruppo.\nTarget: ${scenario}.\nDistrattori: ${distractors.join("; ")}.\nPrompt immagini: Mantieni lo stesso ambiente, lo stesso stile illustrato chiaro e cambia solo il dettaglio discriminante tra target e distrattori.`,
+      testoGenerato: `Obiettivo clinico: Trova l'intruso per categorizzazione semantica o attenzione visiva.
+Consegna: Guarda le immagini e indica quella che non appartiene al gruppo.
+Target: ${scenario}.
+Distrattori: ${distractors.join("; ")}.
+Contesto comune: stanza luminosa, stile illustrato chiaro, stessa inquadratura.
+Prompt immagini:
+Target: singola immagine di ${scenario}, senza altri animali o azioni alternative.
+${distractors
+  .map(
+    (distractor, index) =>
+      `Distrattore ${index + 1}: singola immagine di ${distractor}, senza mostrare il target o altri distrattori.`
+  )
+  .join("\n")}`,
       tagImmagine: "trova intruso",
       listaParole: [
         "Target",
@@ -516,24 +528,33 @@ export const aiRouter = createRouter({
         );
       const data = parsed.data;
       const sanitizedWords =
-        sanitizedInput.tipoOutput === "discriminazione_visiva" ||
-        sanitizedInput.tipoOutput === "morfosintassi_complessa"
-          ? Array.from(
-              new Set(data.listaParole.map(word => word.trim()).filter(Boolean))
-            ).slice(0, 8)
-          : extractTargetWordsFromText(
-                data.testoGenerato,
-                sanitizedInput.fonema
-              ).length > 0
-            ? extractTargetWordsFromText(
-                data.testoGenerato,
-                sanitizedInput.fonema
-              )
-            : sanitizeWordsFromText(
-                data.testoGenerato,
-                data.listaParole,
-                sanitizedInput.fonema
-              );
+        sanitizedInput.tipoOutput === "discriminazione_visiva"
+          ? [
+              "Target",
+              ...Array.from(
+                { length: (sanitizedInput.numeroOpzioni ?? 4) - 1 },
+                (_, index) => `Distrattore ${index + 1}`
+              ),
+            ]
+          : sanitizedInput.tipoOutput === "morfosintassi_complessa"
+            ? Array.from(
+                new Set(
+                  data.listaParole.map(word => word.trim()).filter(Boolean)
+                )
+              ).slice(0, 8)
+            : extractTargetWordsFromText(
+                  data.testoGenerato,
+                  sanitizedInput.fonema
+                ).length > 0
+              ? extractTargetWordsFromText(
+                  data.testoGenerato,
+                  sanitizedInput.fonema
+                )
+              : sanitizeWordsFromText(
+                  data.testoGenerato,
+                  data.listaParole,
+                  sanitizedInput.fonema
+                );
       const { data: inserted, error } = await appDb(ctx.supabaseAccessToken)
         .from("sheets")
         .insert({

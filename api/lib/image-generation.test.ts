@@ -32,15 +32,21 @@ describe("image generation semantic cache", () => {
     ).not.toMatch(/nome|diagnosi|Mario/iu);
   });
 
-  it("builds one target plus up to three distractor image requests", () => {
+  it("builds separated target and graded distractor image requests", () => {
     const requests = buildImageRequests({
       tipoOutput: "discriminazione_visiva",
       interesse: "mare",
       tagImmagine: "trova intruso",
       numeroOpzioni: 4,
       scenarioSmart: "il cane mangia la mela",
-      testoGenerato:
-        "Target: il cane mangia la mela.\nDistrattori: il cane guarda la mela; il gatto mangia la mela; il cane mangia la pera.\nPrompt immagini: ambiente chiaro e coerente",
+      testoGenerato: `Target: il cane mangia la mela.
+Distrattori: il cane guarda la mela; il gatto mangia la mela; il cane mangia la pera.
+Contesto comune: cucina luminosa con tavolo blu.
+Prompt immagini:
+Target: cane che mangia una mela in cucina.
+Distrattore 1: cane che guarda una mela in cucina.
+Distrattore 2: gatto che mangia una mela in cucina.
+Distrattore 3: cane che mangia una pera in cucina.`,
     });
 
     expect(requests).toHaveLength(4);
@@ -48,8 +54,37 @@ describe("image generation semantic cache", () => {
     expect(
       requests.slice(1).every(request => request.role === "distrattore")
     ).toBe(true);
+    expect(requests[0].prompt).toContain("Opzione visiva separata: Target");
+    expect(requests[0].prompt).toContain("Non creare collage");
+    expect(requests[1].prompt).toContain("molto simile");
+    expect(requests[2].prompt).toContain("mediamente simile");
+    expect(requests[3].prompt).toContain("lontanamente simile");
     expect(requests[0].semanticTags.map(normalizeSemanticTag)).toContain(
       "ruolo:target"
+    );
+  });
+
+  it("respects a two-option visual discrimination request", () => {
+    const requests = buildImageRequests({
+      tipoOutput: "discriminazione_visiva",
+      interesse: "animali",
+      tagImmagine: "trova intruso",
+      numeroOpzioni: 2,
+      testoGenerato: `Target: un gatto che gioca con una palla.
+Distrattori: un gatto che dorme.
+Prompt immagini: un gatto giocoso con una palla colorata, un gatto che dorme su un cuscino.`,
+    });
+
+    expect(requests).toHaveLength(2);
+    expect(requests.map(request => request.label)).toEqual([
+      "Target",
+      "Distrattore 1",
+    ]);
+    expect(requests[0].prompt).not.toContain(
+      "un gatto giocoso con una palla colorata, un gatto che dorme"
+    );
+    expect(requests[1].prompt).toContain(
+      "Rappresenta solo questa scena: un gatto che dorme"
     );
   });
 
