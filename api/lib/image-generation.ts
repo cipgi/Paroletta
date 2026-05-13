@@ -226,25 +226,29 @@ async function callGeminiImageApi(prompt: string): Promise<{
 
   const endpoint =
     process.env.GEMINI_IMAGE_API_URL ??
-    `https://generativelanguage.googleapis.com/v1beta/models/${IMAGE_GENERATION_MODEL}:generateContent?key=${apiKey}`;
+    `https://generativelanguage.googleapis.com/v1beta/models/${IMAGE_GENERATION_MODEL}:generateContent`;
 
   const response = await fetch(endpoint, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": apiKey,
+    },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        responseModalities: ["IMAGE"],
-        imageConfig: {
-          aspectRatio: IMAGE_GENERATION_ASPECT_RATIO,
-          imageSize: IMAGE_GENERATION_SIZE,
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: prompt }],
         },
-      },
+      ],
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`Gemini image API error: ${response.status}`);
+    const errorBody = sanitizeImageText(await response.text(), 300);
+    throw new Error(
+      `Gemini image API error: ${response.status}${errorBody ? ` - ${errorBody}` : ""}`
+    );
   }
 
   const data = (await response.json()) as {
