@@ -1,8 +1,10 @@
 import * as jose from "jose";
+import { Session } from "@contracts/constants";
 import { env } from "../lib/env";
 import type { SessionPayload } from "./types";
 
 const JWT_ALG = "HS256";
+const SESSION_MAX_AGE_SECONDS = Math.floor(Session.maxAgeMs / 1000);
 
 export async function signSessionToken(
   payload: SessionPayload
@@ -11,7 +13,7 @@ export async function signSessionToken(
   return new jose.SignJWT(payload)
     .setProtectedHeader({ alg: JWT_ALG })
     .setIssuedAt()
-    .setExpirationTime("15 minutes")
+    .setExpirationTime(Math.floor(Date.now() / 1000) + SESSION_MAX_AGE_SECONDS)
     .sign(secret);
 }
 
@@ -34,6 +36,11 @@ export async function verifySessionToken(
     }
     return { unionId, clientId } as SessionPayload;
   } catch (error) {
+    if (error instanceof jose.errors.JWTExpired) {
+      console.info("[session] Session token expired; clearing auth state.");
+      return null;
+    }
+
     console.warn("[session] JWT verification failed:", error);
     return null;
   }
