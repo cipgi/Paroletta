@@ -35,7 +35,10 @@ export default app;
 
 if (env.isProduction) {
   const { serve } = await import("@hono/node-server");
+  const { serveStatic } = await import("@hono/node-server/serve-static");
   const { serveStaticFiles } = await import("./lib/vite");
+
+  app.use("/generated-images/*", serveStatic({ root: ".data" }));
   serveStaticFiles(app);
 
   const port = parseInt(process.env.PORT || "3000");

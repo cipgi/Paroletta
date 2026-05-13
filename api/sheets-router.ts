@@ -2,7 +2,7 @@ import { createRouter, authedQuery } from "./middleware";
 import { z } from "zod";
 import { createDidacticPdf } from "./lib/pdf";
 import { illustrations } from "./store";
-import { appDb, getSupabaseUserIdFromUnionId } from "./lib/db";
+import { adminAppDb, appDb, getSupabaseUserIdFromUnionId } from "./lib/db";
 import {
   databaseOperationError,
   invalidSessionError,
@@ -10,6 +10,11 @@ import {
 } from "./lib/errors";
 import { sanitizeProfileNameOrFallback } from "./lib/sanitize";
 import { getAccountContext } from "./lib/organization";
+import { createSupabaseImageCacheDb } from "./lib/illustration-cache-db";
+import {
+  buildImageRequests,
+  resolveImageRequestWithCache,
+} from "./lib/image-generation";
 
 function requireSupabaseUserId(unionId: string) {
   const id = getSupabaseUserIdFromUnionId(unionId);
@@ -69,6 +74,44 @@ const mapSheet = (s: DbSheet) => ({
   createdAt: new Date(s.created_at),
 });
 
+function getVisualOptionCount(words: string[] | null) {
+  const count = (words ?? []).filter(word =>
+    /^(target|distrattore)/i.test(word.trim())
+  ).length;
+  return Math.min(Math.max(count || 4, 2), 4);
+}
+
+async function resolveSheetImageAssets(sheet: ReturnType<typeof mapSheet>) {
+  const imageRequests = buildImageRequests({
+    tipoOutput: sheet.tipoOutput,
+    interesse: sheet.interesse,
+    tagImmagine: sheet.tagImmagine,
+    testoGenerato: sheet.testoGenerato,
+    numeroOpzioni:
+      sheet.tipoOutput === "discriminazione_visiva"
+        ? getVisualOptionCount(sheet.listaParole)
+        : undefined,
+  });
+  const imageCacheDb = createSupabaseImageCacheDb(adminAppDb());
+
+  return Promise.all(
+    imageRequests.map(async request => {
+      const illustration = await resolveImageRequestWithCache(
+        request,
+        imageCacheDb
+      );
+      return {
+        role: request.role,
+        label: request.label,
+        semanticTags: illustration.semanticTags,
+        cacheKey: illustration.cacheKey,
+        filePath: illustration.filePath,
+        source: illustration.source,
+        cacheHit: illustration.cacheHit,
+      };
+    })
+  );
+}
 const managedSheetListInput = z
   .object({
     userId: z.string().uuid().optional(),
@@ -166,7 +209,9 @@ export const sheetsRouter = createRouter({
         data.user_id,
         ctx.supabaseAccessToken
       );
-      return mapSheet(data);
+      const sheet = mapSheet(data);
+      const imageAssets = await resolveSheetImageAssets(sheet);
+      return { ...sheet, imageAssets };
     }),
   generatePdf: authedQuery
     .input(z.object({ id: z.string().uuid() }))

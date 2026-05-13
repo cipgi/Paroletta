@@ -60,7 +60,13 @@ export interface Sheet {
 export interface Illustration {
   id: string;
   tag: string;
+  semanticTags: string[];
+  cacheKey: string;
   filePath: string;
+  mimeType: string | null;
+  source: "generated" | "uploaded" | "mock";
+  generationModel: string | null;
+  generatedCostUsd: number;
   createdAt: string;
 }
 
