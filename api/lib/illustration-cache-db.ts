@@ -99,6 +99,7 @@ export function createSupabaseImageCacheDb(
           filePath: fallback.filePath,
           mimeType: fallback.mimeType ?? null,
           source: fallback.source,
+          fallbackReason: fallback.fallbackReason ?? null,
           generationModel: fallback.generationModel ?? null,
           generatedCostUsd: fallback.generatedCostUsd ?? null,
         });
@@ -122,6 +123,7 @@ export function createMemoryImageCacheDb(): ImageCacheDb {
             filePath: found.filePath,
             mimeType: found.mimeType,
             source: found.source,
+            fallbackReason: found.fallbackReason ?? null,
             generationModel: found.generationModel,
             generatedCostUsd: found.generatedCostUsd,
           }

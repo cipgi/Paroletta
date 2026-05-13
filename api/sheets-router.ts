@@ -107,6 +107,7 @@ async function resolveSheetImageAssets(sheet: ReturnType<typeof mapSheet>) {
         cacheKey: illustration.cacheKey,
         filePath: illustration.filePath,
         source: illustration.source,
+        fallbackReason: illustration.fallbackReason ?? null,
         cacheHit: illustration.cacheHit,
       };
     })

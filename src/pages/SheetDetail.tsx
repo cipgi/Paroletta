@@ -29,6 +29,20 @@ function isTextWithPhonemeSheet(tipoOutput: string) {
   return ["storia", "filastrocca", "lista"].includes(tipoOutput);
 }
 
+function renderImageFallbackNotice(fallbackReason?: string | null) {
+  return (
+    <div className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-left text-xs text-amber-700">
+      <p className="font-semibold">
+        Fallback locale: immagine Gemini non generata.
+      </p>
+      <p className="mt-1">
+        {fallbackReason ??
+          "Dettaglio non disponibile: controlla i log del server image-generation."}
+      </p>
+    </div>
+  );
+}
+
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -458,11 +472,8 @@ export default function SheetDetail() {
                         <p className="mt-3 text-sm font-semibold text-slate-700">
                           {label}
                         </p>
-                        {asset?.source === "mock" && (
-                          <p className="mt-1 text-xs text-amber-600">
-                            Fallback locale: controlla la configurazione Gemini.
-                          </p>
-                        )}
+                        {asset?.source === "mock" &&
+                          renderImageFallbackNotice(asset.fallbackReason)}
                       </div>
                     );
                   })}
@@ -499,11 +510,8 @@ export default function SheetDetail() {
                     Immagine AI vincolata alla frase target e alla struttura
                     grammaticale descritta.
                   </p>
-                  {primaryImageAsset?.source === "mock" && (
-                    <p className="mt-1 text-xs text-amber-600">
-                      Fallback locale: controlla la configurazione Gemini.
-                    </p>
-                  )}
+                  {primaryImageAsset?.source === "mock" &&
+                    renderImageFallbackNotice(primaryImageAsset.fallbackReason)}
                 </div>
               </div>
             ) : (
@@ -524,6 +532,8 @@ export default function SheetDetail() {
                 <p className="text-xs text-slate-400 mt-2 capitalize">
                   Tag: {sheet.tagImmagine ?? "generico"}
                 </p>
+                {primaryImageAsset?.source === "mock" &&
+                  renderImageFallbackNotice(primaryImageAsset.fallbackReason)}
               </div>
             )}
 

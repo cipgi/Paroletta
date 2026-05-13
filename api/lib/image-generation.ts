@@ -51,6 +51,7 @@ export type CachedIllustration = {
   filePath: string;
   mimeType?: string | null;
   source: "generated" | "uploaded" | "mock";
+  fallbackReason?: string | null;
   generationModel?: string | null;
   generatedCostUsd?: number | null;
   createdAt?: string;
@@ -63,6 +64,7 @@ export type ResolvedImageAsset = {
   cacheKey: string;
   filePath: string;
   source: CachedIllustration["source"];
+  fallbackReason?: string | null;
   cacheHit: boolean;
 };
 
@@ -264,6 +266,25 @@ async function callGeminiImageApi(prompt: string): Promise<{
   };
 }
 
+function describeImageGenerationError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const httpStatus = message.match(/Gemini image API error: (\d{3})/u)?.[1];
+
+  if (message.includes("Gemini API key not configured")) {
+    return "Chiave API Gemini mancante: configura GEMINI_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY o GOOGLE_API_KEY nell'ambiente server.";
+  }
+
+  if (httpStatus) {
+    return `Gemini ha risposto con errore HTTP ${httpStatus}: controlla chiave API, quota/billing, modello ${IMAGE_GENERATION_MODEL} ed eventuale GEMINI_IMAGE_API_URL.`;
+  }
+
+  if (message.includes("returned no image")) {
+    return "Gemini ha risposto senza dati immagine inline: controlla modello, responseModalities IMAGE e compatibilità dell'endpoint configurato.";
+  }
+
+  return `Errore generazione immagine: ${sanitizeImageText(message, 220) || "controlla i log del server per i dettagli"}.`;
+}
+
 function saveLocalGeneratedImage(bytes: string, mimeType: string): string {
   const extension = mimeType === "image/jpeg" ? "jpg" : "png";
   const dir = resolve(process.cwd(), ".data/generated-images");
@@ -295,6 +316,7 @@ export async function resolveImageRequestWithCache(
   let filePath: string;
   let mimeType = "image/png";
   let source: CachedIllustration["source"] = "generated";
+  let fallbackReason: string | null = null;
 
   try {
     const generated = await callGeminiImageApi(prompt);
@@ -306,6 +328,7 @@ export async function resolveImageRequestWithCache(
       error,
     });
     source = "mock";
+    fallbackReason = describeImageGenerationError(error);
     filePath = buildMockImageDataUrl(request.label);
   }
 
@@ -316,6 +339,7 @@ export async function resolveImageRequestWithCache(
     filePath,
     mimeType,
     source,
+    fallbackReason,
     generationModel: IMAGE_GENERATION_MODEL,
     generatedCostUsd: source === "generated" ? IMAGE_GENERATION_COST_USD : 0,
   };
