@@ -181,6 +181,7 @@ const imageAssetSchema = z.object({
   cacheKey: z.string(),
   filePath: z.string(),
   source: z.enum(["generated", "uploaded", "mock"]),
+  fallbackReason: z.string().nullable().optional(),
   cacheHit: z.boolean(),
 });
 
@@ -629,6 +630,7 @@ export const aiRouter = createRouter({
             cacheKey: illustration.cacheKey,
             filePath: illustration.filePath,
             source: illustration.source,
+            fallbackReason: illustration.fallbackReason ?? null,
             cacheHit: illustration.cacheHit,
           });
         })

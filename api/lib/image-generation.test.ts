@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   buildImageRequests,
@@ -48,6 +48,48 @@ describe("image generation semantic cache", () => {
     expect(requests[0].semanticTags.map(normalizeSemanticTag)).toContain(
       "ruolo:target"
     );
+  });
+
+  it("includes a specific fallback reason when Gemini is not configured", async () => {
+    const previousKeys = {
+      GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+      GOOGLE_GENERATIVE_AI_API_KEY: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+      GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
+    };
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    delete process.env.GOOGLE_API_KEY;
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const db: ImageCacheDb = {
+        async findByCacheKey() {
+          return null;
+        },
+        async save(illustration) {
+          return illustration;
+        },
+      };
+
+      const result = await resolveImageRequestWithCache(
+        {
+          role: "target",
+          label: "Target",
+          prompt: "cane che mangia mela",
+          semanticTags: ["ruolo:target", "soggetto:cane"],
+        },
+        db
+      );
+
+      expect(result.source).toBe("mock");
+      expect(result.fallbackReason).toContain("Chiave API Gemini mancante");
+    } finally {
+      consoleSpy.mockRestore();
+      for (const [key, value] of Object.entries(previousKeys)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
   });
 
   it("returns cached images without invoking generation", async () => {
