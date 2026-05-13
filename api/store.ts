@@ -44,7 +44,16 @@ export type Subscription = {
   status: string;
   seatsCount: number;
 };
-export type Illustration = { tag: string; filePath: string };
+export type Illustration = {
+  tag: string;
+  semanticTags: string[];
+  cacheKey: string;
+  filePath: string;
+  mimeType?: string | null;
+  source: "generated" | "uploaded" | "mock";
+  generationModel?: string | null;
+  generatedCostUsd?: number | null;
+};
 
 let uid = 1,
   sid = 1;

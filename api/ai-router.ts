@@ -11,6 +11,11 @@ import {
 import { getAccountContext } from "./lib/organization";
 import { assertActiveSubscription } from "./lib/subscription";
 import { sanitizePlainText } from "./lib/sanitize";
+import { createSupabaseImageCacheDb } from "./lib/illustration-cache-db";
+import {
+  buildImageRequests,
+  resolveImageRequestWithCache,
+} from "./lib/image-generation";
 
 const ALLOWED_INTERESSI = [
   "libero",
@@ -168,6 +173,15 @@ export function sanitizeGenerationParams(input: {
     numeroOpzioni: Math.min(Math.max(input.numeroOpzioni ?? 4, 2), 4),
   };
 }
+
+const imageAssetSchema = z.object({
+  role: z.enum(["base", "target", "distrattore"]),
+  label: z.string(),
+  semanticTags: z.array(z.string()),
+  cacheKey: z.string(),
+  filePath: z.string(),
+  cacheHit: z.boolean(),
+});
 
 const aiResponseSchema = z.object({
   testoGenerato: z.string(),
@@ -591,6 +605,40 @@ export const aiRouter = createRouter({
         piano === "trial"
           ? (updatedUsage.trial_schede_usate ?? 0)
           : (updatedUsage.schede_mese ?? 0);
-      return { sheet, remaining: Math.max(limit - totalUsed, 0), totalUsed };
+      const imageRequests = buildImageRequests({
+        tipoOutput: sanitizedInput.tipoOutput,
+        interesse: sanitizedInput.interesse,
+        tagImmagine: data.tagImmagine,
+        testoGenerato: data.testoGenerato,
+        numeroOpzioni: sanitizedInput.numeroOpzioni,
+        scenarioSmart: sanitizedInput.scenarioSmart,
+        descrizioneScena: sanitizedInput.descrizioneScena,
+      });
+      const imageCacheDb = createSupabaseImageCacheDb(
+        appDb(ctx.supabaseAccessToken)
+      );
+      const imageAssets = await Promise.all(
+        imageRequests.map(async request => {
+          const illustration = await resolveImageRequestWithCache(
+            request,
+            imageCacheDb
+          );
+          return imageAssetSchema.parse({
+            role: request.role,
+            label: request.label,
+            semanticTags: illustration.semanticTags,
+            cacheKey: illustration.cacheKey,
+            filePath: illustration.filePath,
+            cacheHit: illustration.cacheHit,
+          });
+        })
+      );
+
+      return {
+        sheet,
+        imageAssets,
+        remaining: Math.max(limit - totalUsed, 0),
+        totalUsed,
+      };
     }),
 });
