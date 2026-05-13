@@ -59,6 +59,19 @@ describe("error sanitization", () => {
     });
   });
 
+  it("does not log expected unauthorized client requests as server errors", () => {
+    const error = new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "Authentication required",
+    });
+    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    logServerError(error, { path: "auth.me" });
+
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
   it("logs technical details server-side", () => {
     const error = new TRPCError({
       code: "INTERNAL_SERVER_ERROR",

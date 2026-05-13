@@ -34,10 +34,12 @@ app.all("/api/*", c => c.json(getSafeHttpErrorBody(404), 404));
 export default app;
 
 if (env.isProduction) {
+  const { mkdir } = await import("node:fs/promises");
   const { serve } = await import("@hono/node-server");
   const { serveStatic } = await import("@hono/node-server/serve-static");
   const { serveStaticFiles } = await import("./lib/vite");
 
+  await mkdir(".data/generated-images", { recursive: true });
   app.use("/generated-images/*", serveStatic({ root: ".data" }));
   serveStaticFiles(app);
 

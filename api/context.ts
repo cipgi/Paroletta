@@ -22,7 +22,7 @@ export async function createContext(
     supabaseAccessToken: getSupabaseAccessTokenFromHeaders(opts.req.headers),
   };
   try {
-    ctx.user = await authenticateRequest(opts.req.headers);
+    ctx.user = await authenticateRequest(opts.req.headers, opts.resHeaders);
   } catch {
     ctx.user = undefined;
   }

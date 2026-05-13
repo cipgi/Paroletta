@@ -106,6 +106,7 @@ export function logServerError(
   context: ServerErrorContext = {}
 ) {
   const trpcError = getTRPCErrorFromUnknown(error);
+  if (trpcError.code === "UNAUTHORIZED") return;
 
   console.error("[server-error]", {
     ...context,

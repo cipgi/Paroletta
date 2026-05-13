@@ -258,7 +258,7 @@ export const authRouter = createRouter({
       }
       return { success: true };
     }),
-  me: authedQuery.query(opts => opts.ctx.user),
+  me: publicQuery.query(opts => opts.ctx.user ?? null),
 
   deleteAccount: authedQuery
     .input(z.object({ password: z.string().min(1) }))
