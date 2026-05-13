@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { nanoid } from "nanoid";
 
 export const IMAGE_GENERATION_MODEL =
-  process.env.GEMINI_IMAGE_MODEL ?? "gemini-3-flash-image";
+  process.env.GEMINI_IMAGE_MODEL ?? "gemini-3.1-flash-image-preview";
 export const IMAGE_GENERATION_MODEL_CODE_NAME = "Nano Banana 2";
 export const IMAGE_GENERATION_COST_USD = 0.045;
 export const IMAGE_GENERATION_ASPECT_RATIO = "1:1";
