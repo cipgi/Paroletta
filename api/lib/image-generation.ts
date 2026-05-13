@@ -114,6 +114,74 @@ function splitPromptImageLines(text: string): string[] {
     .filter(line => line.length > 12);
 }
 
+function cleanVisualOptionText(text: string): string {
+  return text
+    .replace(
+      /^\s*(?:target|distrattore\s*\d*)\s*(?:\([^)]*\))?\s*[:.-]\s*/iu,
+      ""
+    )
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[.;,]\s*$/u, "");
+}
+
+function extractSectionLine(text: string, section: string): string | undefined {
+  return text.match(new RegExp(`${section}:\\s*([^\\n]+)`, "iu"))?.[1]?.trim();
+}
+
+function extractLabeledPrompt(
+  promptLines: string[],
+  labelPattern: RegExp
+): string | undefined {
+  const line = promptLines.find(item => labelPattern.test(item));
+  return line ? cleanVisualOptionText(line) : undefined;
+}
+
+function parseDistractors(text: string, maxDistractors: number): string[] {
+  const distractorText = extractSectionLine(text, "Distrattori") ?? "";
+  const primaryParts = distractorText
+    .split(/;|\n/u)
+    .map(cleanVisualOptionText)
+    .filter(Boolean);
+
+  const parts =
+    primaryParts.length <= 1
+      ? distractorText.split(/,/u).map(cleanVisualOptionText).filter(Boolean)
+      : primaryParts;
+
+  return parts.slice(0, maxDistractors);
+}
+
+function buildVisualOptionScene(params: {
+  label: string;
+  description: string;
+  context?: string;
+  similarity?: string;
+  exclude: string[];
+}) {
+  const context = params.context
+    ? `Contesto comune da mantenere: ${params.context}. `
+    : "";
+  const similarity = params.similarity
+    ? `Grado di somiglianza con il target: ${params.similarity}. `
+    : "";
+  const exclusions = params.exclude.length
+    ? `Non includere nella stessa immagine: ${params.exclude.join(", ")}. `
+    : "";
+
+  return [
+    `Opzione visiva separata: ${params.label}.`,
+    context,
+    similarity,
+    `Rappresenta solo questa scena: ${params.description}.`,
+    exclusions,
+    "Non creare collage, griglie, vignette multiple o scene combinate con altre opzioni.",
+  ]
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function buildImageRequests(params: {
   tipoOutput: string;
   interesse: string;
@@ -127,26 +195,36 @@ export function buildImageRequests(params: {
 
   if (params.tipoOutput === "discriminazione_visiva") {
     const optionCount = Math.min(Math.max(params.numeroOpzioni ?? 4, 2), 4);
-    const lines = splitPromptImageLines(params.testoGenerato);
+    const promptLines = splitPromptImageLines(params.testoGenerato);
     const target =
-      params.testoGenerato.match(/Target:\s*([^\n.]+)/iu)?.[1]?.trim() ||
+      cleanVisualOptionText(
+        extractSectionLine(params.testoGenerato, "Target") ?? ""
+      ) ||
       params.scenarioSmart ||
       params.tagImmagine ||
       "target clinico";
-    const distractorText =
-      params.testoGenerato.match(/Distrattori:\s*([^\n]+)/iu)?.[1] ?? "";
-    const distractors = distractorText
-      .split(/;|,/u)
-      .map(item => item.trim())
-      .filter(Boolean)
-      .slice(0, optionCount - 1);
-
-    const targetPrompt = lines[0] ?? target;
+    const distractors = parseDistractors(params.testoGenerato, optionCount - 1);
+    const context = extractSectionLine(params.testoGenerato, "Contesto comune");
+    const targetPrompt =
+      extractLabeledPrompt(promptLines, /^\s*target\b/iu) ?? target;
+    const allDistractorDescriptions = Array.from(
+      { length: optionCount - 1 },
+      (_, index) =>
+        distractors[index] ??
+        `${params.tagImmagine ?? "opzione"} alternativa ${index + 1}`
+    );
     const requests: ImageRequest[] = [
       {
         role: "target",
         label: "Target",
-        prompt: buildClinicalImagePrompt(targetPrompt),
+        prompt: buildClinicalImagePrompt(
+          buildVisualOptionScene({
+            label: "Target",
+            description: targetPrompt,
+            context,
+            exclude: allDistractorDescriptions,
+          })
+        ),
         semanticTags: [
           ...baseStyleTags,
           "tipo:discriminazione_visiva",
@@ -156,19 +234,42 @@ export function buildImageRequests(params: {
       },
     ];
 
+    const similarities = [
+      "molto simile",
+      "mediamente simile",
+      "lontanamente simile",
+    ];
+
     for (let index = 0; index < optionCount - 1; index += 1) {
       const label = `Distrattore ${index + 1}`;
-      const distractor =
-        distractors[index] ??
-        `${params.tagImmagine ?? "opzione"} alternativa ${index + 1}`;
+      const distractor = allDistractorDescriptions[index];
+      const distractorPrompt =
+        extractLabeledPrompt(
+          promptLines,
+          new RegExp(`^\\s*distrattore\\s*${index + 1}\\b`, "iu")
+        ) ?? distractor;
       requests.push({
         role: "distrattore",
         label,
-        prompt: buildClinicalImagePrompt(lines[index + 1] ?? distractor),
+        prompt: buildClinicalImagePrompt(
+          buildVisualOptionScene({
+            label,
+            description: distractorPrompt,
+            context,
+            similarity: similarities[index],
+            exclude: [
+              target,
+              ...allDistractorDescriptions.filter(
+                (_, itemIndex) => itemIndex !== index
+              ),
+            ],
+          })
+        ),
         semanticTags: [
           ...baseStyleTags,
           "tipo:discriminazione_visiva",
           `ruolo:distrattore_${index + 1}`,
+          `similarita:${similarities[index]}`,
           `scenario:${distractor}`,
         ],
       });
