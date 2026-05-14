@@ -1,6 +1,10 @@
 import { useParams, Link } from "react-router";
 import { useRef, type ReactNode } from "react";
 import { trpc } from "@/providers/trpc";
+import {
+  getNeutralVisualOptionLabel,
+  getUserFacingSheetContent,
+} from "@contracts/sheet-content";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -29,43 +33,8 @@ function isTextWithPhonemeSheet(tipoOutput: string) {
   return ["storia", "filastrocca", "lista"].includes(tipoOutput);
 }
 
-function renderImageFallbackNotice(fallbackReason?: string | null) {
-  return (
-    <div className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-left text-xs text-amber-700">
-      <p className="font-semibold">
-        Fallback locale: immagine Gemini non generata.
-      </p>
-      <p className="mt-1">
-        {fallbackReason ??
-          "Dettaglio non disponibile: controlla i log del server image-generation."}
-      </p>
-    </div>
-  );
-}
-
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function getFonemaPositionLabel(word: string, fonema: string) {
-  const normalizedWord = word
-    .toLocaleLowerCase("it-IT")
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "");
-  const normalizedFonema = fonema
-    .toLocaleLowerCase("it-IT")
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "");
-  const index = normalizedWord.indexOf(normalizedFonema);
-
-  if (index === -1) return "posizione non rilevata";
-  if (index === 0) return "iniziale";
-  if (index + normalizedFonema.length >= normalizedWord.length) return "finale";
-  return "mediana";
-}
-
-function getWordLabel(word: string) {
-  return word.split("—")[0]?.trim() || word.trim();
 }
 
 function renderHighlightedPhonemeText(
@@ -101,10 +70,6 @@ function getVisualOptionCount(words: string[]) {
 
 function isDisplayableImagePath(path: string | null | undefined) {
   return Boolean(path && /^(https?:|data:image\/|\/)/u.test(path));
-}
-
-function getImageAssetLabel(index: number) {
-  return index === 0 ? "Target corretto" : `Distrattore ${index}`;
 }
 
 function clonePrintableStyles(printDocument: Document) {
@@ -324,7 +289,10 @@ export default function SheetDetail() {
     4
   );
   const primaryImageAsset = imageAssets[0];
-  const targetWords = words.map(getWordLabel).filter(Boolean);
+  const userFacingContent = getUserFacingSheetContent({
+    tipoOutput: sheet.tipoOutput,
+    testoGenerato: sheet.testoGenerato,
+  });
 
   const doctorName =
     [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
@@ -374,34 +342,6 @@ export default function SheetDetail() {
               </Badge>
             </div>
 
-            {/* Meta */}
-            <div
-              className={`grid gap-4 mb-6 text-sm ${
-                showPhonemeTarget ? "grid-cols-3" : "grid-cols-2"
-              }`}
-            >
-              {showPhonemeTarget && (
-                <div className="bg-slate-50 p-3 rounded-lg">
-                  <p className="text-slate-500">Fonema target</p>
-                  <p className="font-semibold text-slate-800 text-lg">
-                    /{sheet.fonema}/
-                  </p>
-                </div>
-              )}
-              <div className="bg-slate-50 p-3 rounded-lg">
-                <p className="text-slate-500">Interesse</p>
-                <p className="font-semibold text-slate-800 capitalize">
-                  {sheet.interesse}
-                </p>
-              </div>
-              <div className="bg-slate-50 p-3 rounded-lg">
-                <p className="text-slate-500">Difficoltà</p>
-                <p className="font-semibold text-slate-800 capitalize">
-                  {sheet.difficolta}
-                </p>
-              </div>
-            </div>
-
             {/* Content */}
             <div className="space-y-4">
               <h2 className="text-xl font-bold text-slate-800">
@@ -411,33 +351,11 @@ export default function SheetDetail() {
               <div className="text-slate-700 leading-relaxed whitespace-pre-line text-lg">
                 {showPhonemeTarget
                   ? renderHighlightedPhonemeText(
-                      sheet.testoGenerato,
+                      userFacingContent,
                       sheet.fonema
                     )
-                  : sheet.testoGenerato}
+                  : userFacingContent}
               </div>
-
-              {words.length > 0 && !isVisualDiscrimination && (
-                <div className="pt-4">
-                  <p className="text-sm font-medium text-slate-500 mb-2">
-                    {isComplexMorphosyntax
-                      ? "Parametri clinici:"
-                      : "Parole-target estratte:"}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {targetWords.map(w => (
-                      <Badge key={w} variant="secondary" className="text-sm">
-                        {showPhonemeTarget
-                          ? `${w} · fonema in posizione ${getFonemaPositionLabel(
-                              w,
-                              sheet.fonema
-                            )}`
-                          : w}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
 
             {isVisualDiscrimination ? (
@@ -449,7 +367,7 @@ export default function SheetDetail() {
                 <div className="grid grid-cols-2 gap-4">
                   {Array.from({ length: visualOptionCount }, (_, index) => {
                     const asset = visualImageAssets[index];
-                    const label = asset?.label ?? getImageAssetLabel(index);
+                    const label = getNeutralVisualOptionLabel(index);
                     return (
                       <div
                         key={asset?.cacheKey ?? index}
@@ -472,16 +390,10 @@ export default function SheetDetail() {
                         <p className="mt-3 text-sm font-semibold text-slate-700">
                           {label}
                         </p>
-                        {asset?.source === "mock" &&
-                          renderImageFallbackNotice(asset.fallbackReason)}
                       </div>
                     );
                   })}
                 </div>
-                <p className="mt-3 text-xs text-slate-500">
-                  Le immagini sono generate come set coordinato: stesso contesto
-                  visivo, dettaglio discriminante diverso.
-                </p>
               </div>
             ) : isComplexMorphosyntax ? (
               <div className="mt-8 rounded-xl bg-indigo-50 p-5">
@@ -506,12 +418,6 @@ export default function SheetDetail() {
                       </span>
                     )}
                   </div>
-                  <p className="mt-3 text-sm text-slate-500">
-                    Immagine AI vincolata alla frase target e alla struttura
-                    grammaticale descritta.
-                  </p>
-                  {primaryImageAsset?.source === "mock" &&
-                    renderImageFallbackNotice(primaryImageAsset.fallbackReason)}
                 </div>
               </div>
             ) : (
@@ -529,11 +435,6 @@ export default function SheetDetail() {
                     <span className="text-xs text-slate-500">N/D</span>
                   )}
                 </div>
-                <p className="text-xs text-slate-400 mt-2 capitalize">
-                  Tag: {sheet.tagImmagine ?? "generico"}
-                </p>
-                {primaryImageAsset?.source === "mock" &&
-                  renderImageFallbackNotice(primaryImageAsset.fallbackReason)}
               </div>
             )}
 
