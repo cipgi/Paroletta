@@ -28,6 +28,11 @@ con `Invalid API key`. Configura queste variabili nel provider di hosting:
 - `SUPABASE_PUBLISHABLE_KEY` (oppure `SUPABASE_ANON_KEY` per configurazioni legacy)
 - `SUPABASE_SERVICE_ROLE_KEY`
 
+Per la generazione immagini server-side configura anche `OPENAI_API_KEY`. Il
+provider immagini usa OpenAI con modello predefinito `gpt-image-2`, qualità
+`low`, formato quadrato 1:1 e risoluzione `1024x1024`; `OPENAI_IMAGE_MODEL` e
+`OPENAI_IMAGE_API_URL` sono disponibili solo per override server-side.
+
 ### Perché servono tutte e tre
 
 L’errore mostrato nei log non indica un problema nella query

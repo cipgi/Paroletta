@@ -88,36 +88,21 @@ Prompt immagini: un gatto giocoso con una palla colorata, un gatto che dorme su 
     );
   });
 
-  it("calls Gemini with the JavaScript SDK-compatible image request shape", async () => {
+  it("calls OpenAI with the requested GPT Image generation settings", async () => {
     const previousKeys = {
-      GEMINI_API_KEY: process.env.GEMINI_API_KEY,
-      GOOGLE_GENERATIVE_AI_API_KEY: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
-      GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
-      GEMINI_IMAGE_API_URL: process.env.GEMINI_IMAGE_API_URL,
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+      OPENAI_IMAGE_API_URL: process.env.OPENAI_IMAGE_API_URL,
+      OPENAI_IMAGE_MODEL: process.env.OPENAI_IMAGE_MODEL,
     };
-    process.env.GEMINI_API_KEY = "test-gemini-key";
-    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    delete process.env.GOOGLE_API_KEY;
-    delete process.env.GEMINI_IMAGE_API_URL;
+    process.env.OPENAI_API_KEY = "test-openai-key";
+    delete process.env.OPENAI_IMAGE_API_URL;
+    delete process.env.OPENAI_IMAGE_MODEL;
 
     let generatedFilePath: string | undefined;
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
-          candidates: [
-            {
-              content: {
-                parts: [
-                  {
-                    inlineData: {
-                      data: Buffer.from("fake image").toString("base64"),
-                      mimeType: "image/png",
-                    },
-                  },
-                ],
-              },
-            },
-          ],
+          data: [{ b64_json: Buffer.from("fake image").toString("base64") }],
         }),
         { status: 200, headers: { "Content-Type": "application/json" } }
       )
@@ -148,28 +133,24 @@ Prompt immagini: un gatto giocoso con una palla colorata, un gatto che dorme su 
         "/generated-images/",
         ".data/generated-images/"
       );
+      expect(result.generationModel).toBe("gpt-image-2");
       expect(fetchSpy).toHaveBeenCalledWith(
-        expect.stringContaining(":generateContent"),
+        "https://api.openai.com/v1/images/generations",
         expect.objectContaining({
           method: "POST",
           headers: expect.objectContaining({
             "Content-Type": "application/json",
-            "x-goog-api-key": "test-gemini-key",
+            Authorization: "Bearer test-openai-key",
           }),
           body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts: [{ text: "cane che mangia mela" }],
-              },
-            ],
+            model: "gpt-image-2",
+            prompt: "cane che mangia mela",
+            n: 1,
+            size: "1024x1024",
+            quality: "low",
           }),
         })
       );
-      const request = JSON.parse(
-        (fetchSpy.mock.calls[0]?.[1] as RequestInit).body as string
-      ) as Record<string, unknown>;
-      expect(request).not.toHaveProperty("generationConfig");
     } finally {
       if (generatedFilePath) {
         rmSync(resolve(process.cwd(), generatedFilePath), { force: true });
@@ -182,15 +163,11 @@ Prompt immagini: un gatto giocoso con una palla colorata, un gatto che dorme su 
     }
   });
 
-  it("includes a specific fallback reason when Gemini is not configured", async () => {
+  it("includes a specific fallback reason when OpenAI is not configured", async () => {
     const previousKeys = {
-      GEMINI_API_KEY: process.env.GEMINI_API_KEY,
-      GOOGLE_GENERATIVE_AI_API_KEY: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
-      GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     };
-    delete process.env.GEMINI_API_KEY;
-    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    delete process.env.GOOGLE_API_KEY;
+    delete process.env.OPENAI_API_KEY;
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     try {
@@ -214,7 +191,7 @@ Prompt immagini: un gatto giocoso con una palla colorata, un gatto che dorme su 
       );
 
       expect(result.source).toBe("mock");
-      expect(result.fallbackReason).toContain("Chiave API Gemini mancante");
+      expect(result.fallbackReason).toContain("Chiave API OpenAI mancante");
     } finally {
       consoleSpy.mockRestore();
       for (const [key, value] of Object.entries(previousKeys)) {

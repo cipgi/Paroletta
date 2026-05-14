@@ -3,11 +3,12 @@ import { resolve } from "node:path";
 import { nanoid } from "nanoid";
 
 export const IMAGE_GENERATION_MODEL =
-  process.env.GEMINI_IMAGE_MODEL ?? "gemini-3.1-flash-image-preview";
-export const IMAGE_GENERATION_MODEL_CODE_NAME = "Nano Banana 2";
-export const IMAGE_GENERATION_COST_USD = 0.045;
+  process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-2";
+export const IMAGE_GENERATION_MODEL_CODE_NAME = "GPT Image 2";
+export const IMAGE_GENERATION_QUALITY = "low";
+export const IMAGE_GENERATION_COST_USD: number | null = null;
 export const IMAGE_GENERATION_ASPECT_RATIO = "1:1";
-export const IMAGE_GENERATION_SIZE = "512x512";
+export const IMAGE_GENERATION_SIZE = "1024x1024";
 
 const SCRIPT_STYLE_CONTENT_PATTERN =
   /<\s*(script|style)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/giu;
@@ -191,7 +192,7 @@ export function buildImageRequests(params: {
   scenarioSmart?: string;
   descrizioneScena?: string;
 }): ImageRequest[] {
-  const baseStyleTags = ["stile:vettoriale_bambini", "formato:quadrato_512"];
+  const baseStyleTags = ["stile:vettoriale_bambini", "formato:quadrato_1024"];
 
   if (params.tipoOutput === "discriminazione_visiva") {
     const optionCount = Math.min(Math.max(params.numeroOpzioni ?? 4, 2), 4);
@@ -311,80 +312,68 @@ export function buildClinicalImagePrompt(scene: string): string {
   ].join(" ");
 }
 
-async function callGeminiImageApi(prompt: string): Promise<{
+async function callOpenAIImageApi(prompt: string): Promise<{
   bytes: string;
   mimeType: string;
 }> {
-  const apiKey =
-    process.env.GEMINI_API_KEY ??
-    process.env.GOOGLE_GENERATIVE_AI_API_KEY ??
-    process.env.GOOGLE_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    throw new Error(
-      "Gemini API key not configured. Set GEMINI_API_KEY or GOOGLE_GENERATIVE_AI_API_KEY."
-    );
+    throw new Error("OpenAI API key not configured. Set OPENAI_API_KEY.");
   }
 
   const endpoint =
-    process.env.GEMINI_IMAGE_API_URL ??
-    `https://generativelanguage.googleapis.com/v1beta/models/${IMAGE_GENERATION_MODEL}:generateContent`;
+    process.env.OPENAI_IMAGE_API_URL ??
+    "https://api.openai.com/v1/images/generations";
 
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-goog-api-key": apiKey,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: prompt }],
-        },
-      ],
+      model: IMAGE_GENERATION_MODEL,
+      prompt,
+      n: 1,
+      size: IMAGE_GENERATION_SIZE,
+      quality: IMAGE_GENERATION_QUALITY,
     }),
   });
 
   if (!response.ok) {
     const errorBody = sanitizeImageText(await response.text(), 300);
     throw new Error(
-      `Gemini image API error: ${response.status}${errorBody ? ` - ${errorBody}` : ""}`
+      `OpenAI image API error: ${response.status}${errorBody ? ` - ${errorBody}` : ""}`
     );
   }
 
   const data = (await response.json()) as {
-    candidates?: Array<{
-      content?: {
-        parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }>;
-      };
-    }>;
+    data?: Array<{ b64_json?: string }>;
   };
-  const inlineData = data.candidates?.[0]?.content?.parts?.find(
-    part => part.inlineData?.data
-  )?.inlineData;
+  const imageData = data.data?.find(item => item.b64_json)?.b64_json;
 
-  if (!inlineData?.data) throw new Error("Gemini image API returned no image");
+  if (!imageData) throw new Error("OpenAI image API returned no image");
 
   return {
-    bytes: inlineData.data,
-    mimeType: inlineData.mimeType ?? "image/png",
+    bytes: imageData,
+    mimeType: "image/png",
   };
 }
 
 function describeImageGenerationError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
-  const httpStatus = message.match(/Gemini image API error: (\d{3})/u)?.[1];
+  const httpStatus = message.match(/OpenAI image API error: (\d{3})/u)?.[1];
 
-  if (message.includes("Gemini API key not configured")) {
-    return "Chiave API Gemini mancante: configura GEMINI_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY o GOOGLE_API_KEY nell'ambiente server.";
+  if (message.includes("OpenAI API key not configured")) {
+    return "Chiave API OpenAI mancante: configura OPENAI_API_KEY nell'ambiente server.";
   }
 
   if (httpStatus) {
-    return `Gemini ha risposto con errore HTTP ${httpStatus}: controlla chiave API, quota/billing, modello ${IMAGE_GENERATION_MODEL} ed eventuale GEMINI_IMAGE_API_URL.`;
+    return `OpenAI ha risposto con errore HTTP ${httpStatus}: controlla chiave API, quota/billing, modello ${IMAGE_GENERATION_MODEL} ed eventuale OPENAI_IMAGE_API_URL.`;
   }
 
   if (message.includes("returned no image")) {
-    return "Gemini ha risposto senza dati immagine inline: controlla modello, responseModalities IMAGE e compatibilità dell'endpoint configurato.";
+    return "OpenAI ha risposto senza dati immagine base64: controlla modello, qualità low e formato 1024x1024 configurati.";
   }
 
   return `Errore generazione immagine: ${sanitizeImageText(message, 220) || "controlla i log del server per i dettagli"}.`;
@@ -402,7 +391,7 @@ function saveLocalGeneratedImage(bytes: string, mimeType: string): string {
 
 function buildMockImageDataUrl(label: string): string {
   const safeLabel = sanitizeImageText(label, 60) || "Immagine non disponibile";
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"><rect width="512" height="512" rx="32" fill="#f1f5f9"/><circle cx="256" cy="214" r="58" fill="#ccfbf1"/><path d="M176 332h160" stroke="#0f766e" stroke-width="18" stroke-linecap="round"/><text x="256" y="394" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#334155">${safeLabel}</text><text x="256" y="438" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#64748b">fallback locale</text></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 512 512"><rect width="512" height="512" rx="32" fill="#f1f5f9"/><circle cx="256" cy="214" r="58" fill="#ccfbf1"/><path d="M176 332h160" stroke="#0f766e" stroke-width="18" stroke-linecap="round"/><text x="256" y="394" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#334155">${safeLabel}</text><text x="256" y="438" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#64748b">fallback locale</text></svg>`;
   return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
 }
 
@@ -424,11 +413,11 @@ export async function resolveImageRequestWithCache(
   let fallbackReason: string | null = null;
 
   try {
-    const generated = await callGeminiImageApi(prompt);
+    const generated = await callOpenAIImageApi(prompt);
     filePath = saveLocalGeneratedImage(generated.bytes, generated.mimeType);
     mimeType = generated.mimeType;
   } catch (error) {
-    console.error("[image-generation] Gemini image generation failed", {
+    console.error("[image-generation] OpenAI image generation failed", {
       cacheKey,
       error,
     });
