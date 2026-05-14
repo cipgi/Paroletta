@@ -8,6 +8,7 @@ import {
   invalidSessionError,
   missingResourceError,
 } from "./lib/errors";
+import { getUserFacingSheetContent } from "@contracts/sheet-content";
 import { sanitizeProfileNameOrFallback } from "./lib/sanitize";
 import { getAccountContext } from "./lib/organization";
 import { createSupabaseImageCacheDb } from "./lib/illustration-cache-db";
@@ -248,7 +249,10 @@ export const sheetsRouter = createRouter({
         fonema: sheet.fonema,
         interesse: sheet.interesse,
         difficolta: sheet.difficolta ?? "media",
-        content: sheet.testoGenerato,
+        content: getUserFacingSheetContent({
+          tipoOutput: sheet.tipoOutput,
+          testoGenerato: sheet.testoGenerato,
+        }),
         words: sheet.listaParole ?? [],
         illustrationLabel,
         watermarkDoctor: doctorName,
