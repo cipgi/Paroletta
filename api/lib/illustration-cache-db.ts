@@ -78,7 +78,7 @@ export function createSupabaseImageCacheDb(
             mime_type: illustration.mimeType,
             source: illustration.source,
             generation_model: illustration.generationModel,
-            generated_cost_usd: illustration.generatedCostUsd,
+            generated_cost_usd: illustration.generatedCostUsd ?? 0,
           },
           { onConflict: "cache_key" }
         ) as PostgrestMutation
@@ -90,6 +90,7 @@ export function createSupabaseImageCacheDb(
         const fallback: CachedIllustration = {
           ...illustration,
           id: illustration.cacheKey,
+          generatedCostUsd: illustration.generatedCostUsd ?? 0,
           createdAt: new Date().toISOString(),
         };
         illustrations.push({
@@ -101,7 +102,7 @@ export function createSupabaseImageCacheDb(
           source: fallback.source,
           fallbackReason: fallback.fallbackReason ?? null,
           generationModel: fallback.generationModel ?? null,
-          generatedCostUsd: fallback.generatedCostUsd ?? null,
+          generatedCostUsd: fallback.generatedCostUsd ?? 0,
         });
         return fallback;
       }

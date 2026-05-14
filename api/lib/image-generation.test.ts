@@ -1,6 +1,3 @@
-import { rmSync } from "node:fs";
-import { resolve } from "node:path";
-
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -97,8 +94,6 @@ Prompt immagini: un gatto giocoso con una palla colorata, un gatto che dorme su 
     process.env.OPENAI_API_KEY = "test-openai-key";
     delete process.env.OPENAI_IMAGE_API_URL;
     delete process.env.OPENAI_IMAGE_MODEL;
-
-    let generatedFilePath: string | undefined;
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -109,11 +104,13 @@ Prompt immagini: un gatto giocoso con una palla colorata, un gatto che dorme su 
     );
 
     try {
+      let saved = 0;
       const db: ImageCacheDb = {
         async findByCacheKey() {
           return null;
         },
         async save(illustration) {
+          saved += 1;
           return illustration;
         },
       };
@@ -129,9 +126,9 @@ Prompt immagini: un gatto giocoso con una palla colorata, un gatto che dorme su 
       );
 
       expect(result.source).toBe("generated");
-      generatedFilePath = result.filePath.replace(
-        "/generated-images/",
-        ".data/generated-images/"
+      expect(saved).toBe(1);
+      expect(result.filePath).toBe(
+        `data:image/png;base64,${Buffer.from("fake image").toString("base64")}`
       );
       expect(result.generationModel).toBe("gpt-image-2");
       expect(fetchSpy).toHaveBeenCalledWith(
@@ -152,9 +149,6 @@ Prompt immagini: un gatto giocoso con una palla colorata, un gatto che dorme su 
         })
       );
     } finally {
-      if (generatedFilePath) {
-        rmSync(resolve(process.cwd(), generatedFilePath), { force: true });
-      }
       fetchSpy.mockRestore();
       for (const [key, value] of Object.entries(previousKeys)) {
         if (value === undefined) delete process.env[key];
@@ -171,11 +165,13 @@ Prompt immagini: un gatto giocoso con una palla colorata, un gatto che dorme su 
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     try {
+      let saved = 0;
       const db: ImageCacheDb = {
         async findByCacheKey() {
           return null;
         },
         async save(illustration) {
+          saved += 1;
           return illustration;
         },
       };
@@ -191,6 +187,8 @@ Prompt immagini: un gatto giocoso con una palla colorata, un gatto che dorme su 
       );
 
       expect(result.source).toBe("mock");
+      expect(saved).toBe(1);
+      expect(result.filePath).toMatch(/^data:image\/svg\+xml;base64,/u);
       expect(result.fallbackReason).toContain("Chiave API OpenAI mancante");
     } finally {
       consoleSpy.mockRestore();
@@ -232,5 +230,61 @@ Prompt immagini: un gatto giocoso con una palla colorata, un gatto che dorme su 
     expect(result.cacheHit).toBe(true);
     expect(result.filePath).toBe("cache://target");
     expect(saved).toBe(0);
+  });
+
+  it("regenerates generated cache entries that point to ephemeral local files", async () => {
+    const previousKeys = {
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    };
+    process.env.OPENAI_API_KEY = "test-openai-key";
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [{ b64_json: Buffer.from("new image").toString("base64") }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+
+    try {
+      let saved = 0;
+      const db: ImageCacheDb = {
+        async findByCacheKey(cacheKey) {
+          return {
+            tag: "Target",
+            semanticTags: ["ruolo:target"],
+            cacheKey,
+            filePath: "/generated-images/stale.png",
+            source: "generated",
+          };
+        },
+        async save(illustration) {
+          saved += 1;
+          return illustration;
+        },
+      };
+
+      const result = await resolveImageRequestWithCache(
+        {
+          role: "target",
+          label: "Target",
+          prompt: "cane che mangia mela",
+          semanticTags: ["ruolo:target", "soggetto:cane"],
+        },
+        db
+      );
+
+      expect(result.cacheHit).toBe(false);
+      expect(saved).toBe(1);
+      expect(result.filePath).toBe(
+        `data:image/png;base64,${Buffer.from("new image").toString("base64")}`
+      );
+    } finally {
+      fetchSpy.mockRestore();
+      for (const [key, value] of Object.entries(previousKeys)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
   });
 });
