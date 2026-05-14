@@ -15,6 +15,8 @@ vi.mock("./middleware", () => ({
 }));
 import {
   buildPromptMessages,
+  deterministicQuestionGroundingCheck,
+  finalizeMorphosyntaxQuestions,
   sanitizeGenerationParams,
   sanitizePromptVariable,
   validateVisualDiscriminationPlan,
@@ -122,6 +124,53 @@ Distrattore 3: stessa foresta, bambino accarezza cane.`;
         4
       )
     ).toBe(false);
+  });
+
+  it("filters morphosyntax comprehension questions that need external knowledge", () => {
+    const check = deterministicQuestionGroundingCheck(
+      [
+        "Che animale vede il bambino?",
+        "Cosa fa il bambino con il dinosauro?",
+        "Quale animale mangia foglie?",
+        "A chi si riferisce 'lo'?",
+      ],
+      "Il bambino vede un dinosauro e lo accarezza.",
+      "bambino che accarezza un dinosauro",
+      "pronome clitico lo"
+    );
+
+    expect(check.validQuestions).toEqual([
+      "Che animale vede il bambino?",
+      "Cosa fa il bambino con il dinosauro?",
+      "A chi si riferisce 'lo'?",
+    ]);
+    expect(check.hasTargetQuestion).toBe(true);
+  });
+
+  it("replaces morphosyntax questions with verified questions grounded in final phrase and image", async () => {
+    const response = {
+      testoGenerato: `Obiettivo morfosintattico: pronome clitico lo.
+Frase target: Il bambino vede un dinosauro e lo accarezza.
+Scena da illustrare: bambino che accarezza un dinosauro.
+Domande di comprensione: Quale animale mangia foglie?
+Prompt immagine: mostra solo il bambino che accarezza il dinosauro.`,
+      tagImmagine: "morfosintassi complessa",
+      listaParole: ["pronome clitico lo"],
+      difficolta: "media" as const,
+    };
+    const params = sanitizeGenerationParams({
+      eta: "6 anni",
+      fonema: "r",
+      interesse: "dinosauro",
+      tipoOutput: "morfosintassi_complessa",
+      elementoGrammaticale: "pronome clitico lo",
+      descrizioneScena: "bambino che accarezza un dinosauro",
+    });
+
+    const finalized = await finalizeMorphosyntaxQuestions(response, params);
+
+    expect(finalized.testoGenerato).not.toContain("mangia foglie");
+    expect(finalized.testoGenerato).toContain("A chi si riferisce 'lo'?");
   });
 
   it("keeps sanitized user values as data separate from the fixed server template", () => {

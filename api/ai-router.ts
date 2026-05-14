@@ -176,6 +176,24 @@ const aiResponseSchema = z.object({
   difficolta: z.enum(["bassa", "media", "alta"]),
 });
 
+const morphosyntaxQuestionsSchema = z.object({
+  domande: z.array(z.string()).max(5),
+});
+
+const morphosyntaxQuestionCheckSchema = z.object({
+  risultati: z.array(
+    z.object({
+      domanda: z.string(),
+      risposta: z.string(),
+      verificabile: z.boolean(),
+      evidenza: z.string(),
+      testaTarget: z.boolean().optional(),
+    })
+  ),
+});
+
+type AIResponse = z.infer<typeof aiResponseSchema>;
+
 function normalizeFonemaForMatch(fonema: string): string {
   return fonema
     .toLocaleLowerCase("it-IT")
@@ -300,6 +318,378 @@ export function validateVisualDiscriminationPlan(
   );
 }
 
+function extractGeneratedSectionBlock(
+  text: string,
+  section: string
+): string | undefined {
+  const sections = [
+    "Obiettivo morfosintattico",
+    "Frase target",
+    "Scena da illustrare",
+    "Domande di comprensione",
+    "Prompt immagine",
+  ];
+  const otherSections = sections
+    .filter(candidate => candidate !== section)
+    .map(candidate => candidate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|");
+  const match = text.match(
+    new RegExp(
+      `${section}:\\s*([\\s\\S]*?)(?=\\n(?:${otherSections}):|$)`,
+      "iu"
+    )
+  );
+
+  return match?.[1]?.trim();
+}
+
+function replaceGeneratedSectionBlock(
+  text: string,
+  section: string,
+  replacement: string
+): string {
+  const sections = [
+    "Obiettivo morfosintattico",
+    "Frase target",
+    "Scena da illustrare",
+    "Domande di comprensione",
+    "Prompt immagine",
+  ];
+  const otherSections = sections
+    .filter(candidate => candidate !== section)
+    .map(candidate => candidate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|");
+  const pattern = new RegExp(
+    `(${section}:\\s*)[\\s\\S]*?(?=\\n(?:${otherSections}):|$)`,
+    "iu"
+  );
+
+  if (pattern.test(text)) {
+    return text.replace(pattern, `$1${replacement}`);
+  }
+
+  return `${text.trim()}\n${section}: ${replacement}`;
+}
+
+function extractMorphosyntaxQuestions(text: string): string[] {
+  const questionsBlock =
+    extractGeneratedSectionBlock(text, "Domande di comprensione") ?? "";
+
+  return questionsBlock
+    .split(/\n|(?<=\?)\s+/u)
+    .map(question =>
+      question
+        .replace(/^\s*(?:[-*]|\d+[.)])\s*/u, "")
+        .replace(/\s+/g, " ")
+        .trim()
+    )
+    .filter(question => question.endsWith("?"));
+}
+
+function formatMorphosyntaxQuestions(questions: string[]): string {
+  return questions
+    .map((question, index) => `${index + 1}. ${question}`)
+    .join("\n");
+}
+
+function isMorphosyntaxTargetQuestion(question: string): boolean {
+  return /a chi si riferisce|a cosa si riferisce|chi indica|che cosa indica|quale parola|quale frase/iu.test(
+    question
+  );
+}
+
+function normalizeItalianText(text: string): string {
+  return text
+    .toLocaleLowerCase("it-IT")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}'’\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function questionMentionsUnsupportedLexicalContent(
+  question: string,
+  evidenceText: string
+): boolean {
+  const normalizedEvidence = normalizeItalianText(evidenceText);
+  const allowedFunctionWords = new Set([
+    "a",
+    "ad",
+    "animale",
+    "che",
+    "chi",
+    "cosa",
+    "come",
+    "con",
+    "da",
+    "di",
+    "dove",
+    "e",
+    "fa",
+    "il",
+    "in",
+    "la",
+    "le",
+    "lo",
+    "lui",
+    "nel",
+    "nella",
+    "per",
+    "quale",
+    "quando",
+    "si",
+    "un",
+    "una",
+    "uno",
+    "riferisce",
+    "riferisce",
+  ]);
+  const lexicalWords = normalizeItalianText(question)
+    .split(" ")
+    .filter(word => word.length > 2 && !allowedFunctionWords.has(word));
+
+  return lexicalWords.some(word => !normalizedEvidence.includes(word));
+}
+
+export function deterministicQuestionGroundingCheck(
+  questions: string[],
+  fraseTarget: string,
+  descrizioneImmagine: string,
+  elementoGrammaticale: string
+): { validQuestions: string[]; hasTargetQuestion: boolean } {
+  const evidenceText = `${fraseTarget} ${descrizioneImmagine}`;
+  const normalizedEvidence = normalizeItalianText(evidenceText);
+  const normalizedTarget = normalizeItalianText(elementoGrammaticale);
+  const targetTokens = normalizedTarget
+    .split(" ")
+    .filter(token => token.length > 1 && normalizedEvidence.includes(token));
+
+  const validQuestions = questions.filter(question => {
+    if (!question.endsWith("?")) return false;
+    if (/foglie|mangia|vive|preferit|colore|eta|nome/iu.test(question)) {
+      return false;
+    }
+    if (
+      /a chi si riferisce|a cosa si riferisce|chi indica|che cosa indica/iu.test(
+        question
+      )
+    ) {
+      return targetTokens.length > 0;
+    }
+
+    return !questionMentionsUnsupportedLexicalContent(question, evidenceText);
+  });
+
+  const hasTargetQuestion = validQuestions.some(question =>
+    isMorphosyntaxTargetQuestion(question)
+  );
+
+  return { validQuestions, hasTargetQuestion };
+}
+
+function buildMorphosyntaxQuestionMessages(params: {
+  fraseTarget: string;
+  descrizioneImmagine: string;
+  elementoGrammaticale: string;
+  previousRejectedQuestions?: string[];
+}): PromptMessage[] {
+  return [
+    {
+      role: "system",
+      content: `Genera domande di comprensione clinica in italiano per una scheda di morfosintassi. Hai accesso SOLO alla frase target finale e alla descrizione dell'immagine finale nel messaggio utente. Non usare conoscenza esterna, inferenze sul mondo o contesto di iterazioni precedenti. Ogni domanda deve avere una risposta verificabile letteralmente nella frase o nella descrizione dell'immagine. Individua la struttura morfosintattica saliente dalla frase finale stessa e fai almeno una domanda esplicita su quella struttura; se nella frase compare un clitico come "lo", usa una domanda tipo "A chi si riferisce 'lo'?". Evita domande su proprietà non dichiarate, come dieta, habitat, colori o nomi se non sono scritti nei dati finali. Rispondi solo JSON valido: {"domande":["..."]}.`,
+    },
+    {
+      role: "user",
+      content: JSON.stringify({
+        fraseTarget: params.fraseTarget,
+        descrizioneImmagine: params.descrizioneImmagine,
+        domandeDaNonRipetere: params.previousRejectedQuestions ?? [],
+      }),
+    },
+  ];
+}
+
+function buildMorphosyntaxQuestionCheckMessages(params: {
+  fraseTarget: string;
+  descrizioneImmagine: string;
+  elementoGrammaticale: string;
+  questions: string[];
+}): PromptMessage[] {
+  return [
+    {
+      role: "system",
+      content: `Sei un verificatore clinico. Valuta ogni domanda usando SOLO frase target finale e descrizione immagine finale. Una domanda passa solo se la risposta è davvero presente o direttamente risolvibile nella frase o nell'immagine. Boccia ogni domanda che richiede informazioni esterne o conoscenza del mondo. Indica anche se testa esplicitamente la struttura morfosintattica target. Rispondi solo JSON valido nel formato {"risultati":[{"domanda":"...","risposta":"...","verificabile":true,"evidenza":"...","testaTarget":false}]}.`,
+    },
+    {
+      role: "user",
+      content: JSON.stringify({
+        fraseTarget: params.fraseTarget,
+        descrizioneImmagine: params.descrizioneImmagine,
+        elementoGrammaticale: params.elementoGrammaticale,
+        domande: params.questions,
+      }),
+    },
+  ];
+}
+
+async function checkMorphosyntaxQuestions(params: {
+  fraseTarget: string;
+  descrizioneImmagine: string;
+  elementoGrammaticale: string;
+  questions: string[];
+}): Promise<{ validQuestions: string[]; hasTargetQuestion: boolean }> {
+  try {
+    const raw = await callOpenAI(
+      buildMorphosyntaxQuestionCheckMessages(params)
+    );
+    const parsed = morphosyntaxQuestionCheckSchema.safeParse(raw);
+    if (parsed.success) {
+      const validQuestions = params.questions.filter(question =>
+        parsed.data.risultati.some(
+          result =>
+            result.domanda.trim() === question.trim() && result.verificabile
+        )
+      );
+      const hasTargetQuestion = parsed.data.risultati.some(
+        result => result.verificabile && result.testaTarget
+      );
+      return { validQuestions, hasTargetQuestion };
+    }
+  } catch {
+    // Fallback deterministico usato quando il verificatore remoto non è disponibile.
+  }
+
+  return deterministicQuestionGroundingCheck(
+    params.questions,
+    params.fraseTarget,
+    params.descrizioneImmagine,
+    params.elementoGrammaticale
+  );
+}
+
+async function generateMorphosyntaxQuestions(params: {
+  fraseTarget: string;
+  descrizioneImmagine: string;
+  elementoGrammaticale: string;
+  previousRejectedQuestions?: string[];
+}): Promise<string[]> {
+  try {
+    const raw = await callOpenAI(buildMorphosyntaxQuestionMessages(params));
+    const parsed = morphosyntaxQuestionsSchema.safeParse(raw);
+    if (parsed.success) {
+      return parsed.data.domande
+        .map(question => question.replace(/\s+/g, " ").trim())
+        .filter(question => question.endsWith("?"));
+    }
+  } catch {
+    // Fallback deterministico usato quando il generatore remoto non è disponibile.
+  }
+
+  const targetToken =
+    normalizeItalianText(params.elementoGrammaticale)
+      .split(" ")
+      .find(token =>
+        normalizeItalianText(params.fraseTarget).includes(token)
+      ) ?? params.elementoGrammaticale;
+
+  return [
+    `A chi si riferisce '${targetToken}'?`,
+    "Chi compie l'azione?",
+    "Che cosa succede nella frase?",
+  ];
+}
+
+export async function finalizeMorphosyntaxQuestions(
+  response: AIResponse,
+  params: GenerationParams
+): Promise<AIResponse> {
+  if (params.tipoOutput !== "morfosintassi_complessa") return response;
+
+  const fraseTarget =
+    extractGeneratedSectionBlock(response.testoGenerato, "Frase target") ?? "";
+  const descrizioneImmagine =
+    extractGeneratedSectionBlock(
+      response.testoGenerato,
+      "Scena da illustrare"
+    ) ?? "";
+  const elementoGrammaticale =
+    extractGeneratedSectionBlock(
+      response.testoGenerato,
+      "Obiettivo morfosintattico"
+    ) ??
+    params.elementoGrammaticale ??
+    "struttura morfosintattica target";
+
+  if (!fraseTarget || !descrizioneImmagine) return response;
+
+  const acceptedQuestions: string[] = [];
+  const rejectedQuestions: string[] = [];
+  let candidates = extractMorphosyntaxQuestions(response.testoGenerato);
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (attempt > 0 || candidates.length === 0) {
+      candidates = await generateMorphosyntaxQuestions({
+        fraseTarget,
+        descrizioneImmagine,
+        elementoGrammaticale,
+        previousRejectedQuestions: rejectedQuestions,
+      });
+    }
+
+    const freshCandidates = candidates.filter(
+      question =>
+        !acceptedQuestions.includes(question) &&
+        !rejectedQuestions.includes(question)
+    );
+    const check = await checkMorphosyntaxQuestions({
+      fraseTarget,
+      descrizioneImmagine,
+      elementoGrammaticale,
+      questions: freshCandidates,
+    });
+
+    acceptedQuestions.push(...check.validQuestions);
+    rejectedQuestions.push(
+      ...freshCandidates.filter(
+        question => !check.validQuestions.includes(question)
+      )
+    );
+
+    const hasTargetQuestion = deterministicQuestionGroundingCheck(
+      acceptedQuestions,
+      fraseTarget,
+      descrizioneImmagine,
+      elementoGrammaticale
+    ).hasTargetQuestion;
+
+    if (
+      acceptedQuestions.length >= 3 &&
+      (check.hasTargetQuestion || hasTargetQuestion)
+    ) {
+      break;
+    }
+  }
+
+  const finalQuestions = [...acceptedQuestions]
+    .sort(
+      (left, right) =>
+        Number(isMorphosyntaxTargetQuestion(right)) -
+        Number(isMorphosyntaxTargetQuestion(left))
+    )
+    .slice(0, 5);
+  return {
+    ...response,
+    testoGenerato: replaceGeneratedSectionBlock(
+      response.testoGenerato,
+      "Domande di comprensione",
+      finalQuestions.length > 0
+        ? formatMorphosyntaxQuestions(finalQuestions)
+        : "Nessuna domanda verificabile generata automaticamente."
+    ),
+  };
+}
+
 export function buildPromptMessages(params: GenerationParams): PromptMessage[] {
   const sanitizedVariables = {
     eta: params.eta,
@@ -341,7 +731,7 @@ ISTRUZIONI DI GENERAZIONE:
 2. Se il tipo è "filastrocca": componi una filastrocca facile e ritmata (8-12 versi) a tema indicato dal campo "interesse". Se il campo "interesse" vale "libero", scegli liberamente un tema tra gli interessi disponibili nel messaggio utente. Usa parole con il fonema indicato dal campo "fonema".
 3. Se il tipo è "lista": crea una lista di 15-20 parole con il fonema indicato dal campo "fonema", divise per difficoltà (semplici, medie, complesse) e vicine agli interessi del bambino. Se il campo "interesse" vale "libero", usa liberamente uno degli interessi disponibili nel messaggio utente.
 4. Se il tipo è "discriminazione_visiva": crea una scheda "Trova l'intruso" di VERA DISCRIMINAZIONE VISIVA, non una selezione semantica tra scene scollegate. Parti dalla frase target esplicita data nello scenarioSmart (es. "Il bambino accarezza il dinosauro") e dalla struttura morfosintattica/asse clinico richiesto quando presente. Il numero totale di opzioni deve rispettare esattamente "numeroOpzioni": 2 significa target + 1 distrattore, 3 significa target + 2 distrattori, 4 significa target + 3 distrattori. Genera 1 immagine corretta che rappresenta esattamente la frase target e 1-3 distrattori che sembrano frame della stessa storia: stessi personaggi principali quando l'asse non è agente/oggetto, stesso ambiente, stesso stile, stessa inquadratura, stessa palette e stesso livello di dettaglio. Ogni distrattore deve variare UN SOLO ASSE alla volta rispetto al target, scegliendo tra azione, agente, oggetto o posizione spaziale; non cambiare contemporaneamente categoria, scenario e personaggi. Esempi validi per target "Il bambino accarezza il dinosauro": azione = "Il bambino spinge il dinosauro"; agente = "Il dinosauro accarezza il bambino"; oggetto = "Il bambino accarezza un cane"; spaziale = "Il bambino accarezza il dinosauro sopra l'albero". Ogni opzione deve essere una singola immagine separata: non creare collage, griglie o vignette multiple dentro la stessa immagine. Nel testoGenerato includi sezioni in italiano: "Obiettivo clinico", "Struttura morfosintattica", "Consegna", "Target", "Distrattori", "Contesto comune", "Assi di variazione", "Check coerenza" e "Prompt immagini". In "Check coerenza" dichiara che le opzioni usano stesso stile, ambiente, personaggi condivisi e una sola variazione per distrattore; se non puoi rispettarlo, rigenera mentalmente prima di rispondere. La "Consegna" deve essere clinica e contestualizzata, nel formato "Indica l'immagine in cui..."; non usare consegne generiche come "Trova l'intruso tra le immagini" quando il target è noto. In "Prompt immagini" scrivi una riga separata per Target e una riga separata per ogni Distrattore richiesto. Ogni riga deve descrivere solo una singola immagine pronta per una API di generazione immagini e deve ripetere il contesto comune, lo stile coerente e l'unico asse variato.
-5. Se il tipo è "morfosintassi_complessa": crea una scheda su morfosintassi complessa partendo da elemento grammaticale, complessità e scena. Nel testoGenerato includi sezioni in italiano: "Obiettivo morfosintattico", "Frase target", "Scena da illustrare", "Domande di comprensione" e "Prompt immagine". Accetta strutture come pronomi clitici, relative e subordinate quando richieste.
+5. Se il tipo è "morfosintassi_complessa": crea una scheda su morfosintassi complessa partendo da elemento grammaticale, complessità e scena. Nel testoGenerato includi sezioni in italiano: "Obiettivo morfosintattico", "Frase target", "Scena da illustrare", "Domande di comprensione" e "Prompt immagine". Accetta strutture come pronomi clitici, relative e subordinate quando richieste. Nella sezione "Domande di comprensione" inserisci solo il segnaposto "DA_VERIFICARE": le domande finali saranno generate da un passaggio separato che riceve esclusivamente frase target finale e scena finale.
 6. Se il tipo è "storia" o "filastrocca", aggiungi in fondo al testoGenerato una sezione "Domande di comprensione" con 3-5 domande semplici e coerenti con il testo.
 
 Devi rispondere ESCLUSIVAMENTE in formato JSON valido con questa struttura esatta:
@@ -591,7 +981,7 @@ export const aiRouter = createRouter({
           "SERVICE_UNAVAILABLE",
           "La generazione non ha restituito una scheda valida. Riprova modificando leggermente i parametri."
         );
-      const data =
+      const generatedData =
         sanitizedInput.tipoOutput === "discriminazione_visiva" &&
         !validateVisualDiscriminationPlan(
           parsed.data.testoGenerato,
@@ -599,6 +989,10 @@ export const aiRouter = createRouter({
         )
           ? mockAIResponse(sanitizedInput)
           : parsed.data;
+      const data = await finalizeMorphosyntaxQuestions(
+        generatedData,
+        sanitizedInput
+      );
       const sanitizedWords =
         sanitizedInput.tipoOutput === "discriminazione_visiva"
           ? [
