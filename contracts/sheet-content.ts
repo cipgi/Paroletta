@@ -77,6 +77,37 @@ function extractSectionBlock(
   return block.join("\n").trim() || undefined;
 }
 
+function removeTrailingPunctuation(value: string) {
+  return value.trim().replace(/[.;:,\s]+$/u, "");
+}
+
+function lowerFirstLetter(value: string) {
+  const trimmed = removeTrailingPunctuation(value);
+  return trimmed
+    ? `${trimmed.charAt(0).toLocaleLowerCase("it-IT")}${trimmed.slice(1)}`
+    : "";
+}
+
+function getVisualInstructionAction(instruction: string) {
+  if (/evidenz/iu.test(instruction)) return "Evidenzia";
+  if (/cerchia/iu.test(instruction)) return "Cerchia";
+  if (/colora/iu.test(instruction)) return "Colora";
+  if (/seleziona/iu.test(instruction)) return "Seleziona";
+  if (/indica/iu.test(instruction)) return "Indica";
+  return "Trova";
+}
+
+function formatContextualVisualInstruction(text: string) {
+  const target = lowerFirstLetter(extractSectionLine(text, "Target") ?? "");
+  const rawInstruction = extractSectionLine(text, "Consegna") ?? "";
+
+  if (!target) return "";
+
+  return formatInstruction(
+    `${getVisualInstructionAction(rawInstruction)} l'immagine in cui si vede ${target}`
+  );
+}
+
 function normalizeSentence(value: string) {
   const trimmed = value.replace(/\s+/g, " ").trim();
   if (!trimmed) return trimmed;
@@ -122,6 +153,7 @@ export function getUserFacingSheetContent(params: {
 
   if (params.tipoOutput === "discriminazione_visiva") {
     return (
+      formatContextualVisualInstruction(text) ||
       formatInstruction(extractSectionLine(text, "Consegna") ?? "") ||
       "Consegna: Osserva le immagini e trova l'intruso."
     );

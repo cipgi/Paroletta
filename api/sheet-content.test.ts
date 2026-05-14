@@ -18,9 +18,35 @@ Prompt immagini:
 Target: prompt tecnico`,
     });
 
-    expect(result).toBe("Consegna: Trova l'intruso tra le immagini.");
+    expect(result).toBe(
+      "Consegna: Trova l'immagine in cui si vede un trenino sotto un tavolo."
+    );
     expect(result).not.toContain("Target");
     expect(result).not.toContain("Prompt");
+  });
+
+  it("preserves the requested action in contextual visual instructions", () => {
+    const result = getUserFacingSheetContent({
+      tipoOutput: "discriminazione_visiva",
+      testoGenerato: `Consegna: Evidenzia l'immagine corretta.
+Target: Un trenino sotto al tavolo.
+Prompt immagini:
+Target: prompt tecnico`,
+    });
+
+    expect(result).toBe(
+      "Consegna: Evidenzia l'immagine in cui si vede un trenino sotto al tavolo."
+    );
+    expect(result).not.toContain("Prompt");
+  });
+
+  it("falls back to the generated delivery when no visual target is available", () => {
+    const result = getUserFacingSheetContent({
+      tipoOutput: "discriminazione_visiva",
+      testoGenerato: "Consegna: Trova l'intruso tra le immagini.",
+    });
+
+    expect(result).toBe("Consegna: Trova l'intruso tra le immagini.");
   });
 
   it("keeps only fundamental text for morphosyntax sheets", () => {
@@ -65,7 +91,9 @@ Parole medie: torre, carro
 Prompt immagine: tecnico`,
     });
 
-    expect(result).toBe("Parole semplici: rana, rosa\nParole medie: torre, carro");
+    expect(result).toBe(
+      "Parole semplici: rana, rosa\nParole medie: torre, carro"
+    );
     expect(result).not.toContain("Obiettivo");
     expect(result).not.toContain("Prompt");
   });
