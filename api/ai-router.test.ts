@@ -17,6 +17,7 @@ import {
   buildPromptMessages,
   sanitizeGenerationParams,
   sanitizePromptVariable,
+  validateVisualDiscriminationPlan,
 } from "./ai-router";
 
 describe("AI prompt security", () => {
@@ -89,12 +90,38 @@ describe("AI prompt security", () => {
 
     const messages = buildPromptMessages(params);
 
-    expect(messages[0].content).toContain("Target");
-    expect(messages[0].content).toContain("Distrattori");
+    expect(messages[0].content).toContain("VERA DISCRIMINAZIONE VISIVA");
+    expect(messages[0].content).toContain("frase target esplicita");
+    expect(messages[0].content).toContain("UN SOLO ASSE");
+    expect(messages[0].content).toContain("Check coerenza");
     expect(messages[1].content).toContain(
       '"tipoOutput":"discriminazione_visiva"'
     );
     expect(messages[1].content).toContain('"numeroOpzioni":4');
+  });
+
+  it("validates visual discrimination plans before saving", () => {
+    const validPlan = `Obiettivo clinico: Discriminazione visiva vera.
+Struttura morfosintattica: frase semplice soggetto verbo oggetto.
+Consegna: Indica l'immagine in cui il bambino accarezza il dinosauro.
+Target: Il bambino accarezza il dinosauro.
+Distrattori: Distrattore 1 (azione): Il bambino spinge il dinosauro; Distrattore 2 (agente): Il dinosauro accarezza il bambino; Distrattore 3 (oggetto): Il bambino accarezza il cane.
+Contesto comune: stessa foresta, stesso stile, stessi personaggi e stessa inquadratura.
+Assi di variazione: azione; agente; oggetto.
+Check coerenza: stesso stile, stesso ambiente, personaggi condivisi e una sola variazione per distrattore.
+Prompt immagini:
+Target: stessa foresta, bambino accarezza dinosauro.
+Distrattore 1: stessa foresta, bambino spinge dinosauro.
+Distrattore 2: stessa foresta, dinosauro accarezza bambino.
+Distrattore 3: stessa foresta, bambino accarezza cane.`;
+
+    expect(validateVisualDiscriminationPlan(validPlan, 4)).toBe(true);
+    expect(
+      validateVisualDiscriminationPlan(
+        "Consegna: Trova l'intruso tra le immagini.\nTarget: dinosauro che mangia foglie.\nDistrattori: leone che dorme; scimmia che salta.",
+        4
+      )
+    ).toBe(false);
   });
 
   it("keeps sanitized user values as data separate from the fixed server template", () => {

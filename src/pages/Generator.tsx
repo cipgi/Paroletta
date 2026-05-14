@@ -257,25 +257,26 @@ export default function Generator() {
           <div className="space-y-2">
             <Label htmlFor="scenarioSmart" className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-teal-600" />
-              Smart Input: scenario clinico
+              Frase target e struttura da allenare
             </Label>
             <Textarea
               id="scenarioSmart"
               value={scenarioSmart}
               onChange={e => setScenarioSmart(e.target.value)}
-              placeholder='es. "Il bambino deve scegliere l’immagine in cui il gatto è sotto il tavolo, non sopra o vicino"'
+              placeholder='es. "Frase target: Il bambino accarezza il dinosauro. Struttura: soggetto-verbo-oggetto. Variazioni: azione, agente, oggetto"'
               rows={5}
             />
             <p className="text-xs text-slate-500">
-              Paroletta trasforma il testo in un target corretto e in
-              distrattori visivi nello stesso contesto.
+              Paroletta genera un target corretto e distrattori che sembrano
+              frame della stessa scena, con una sola variazione clinica alla
+              volta.
             </p>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="numeroOpzioni" className="flex items-center gap-2">
               <Images className="w-4 h-4 text-teal-600" />
-              Numero di immagini coordinate
+              Numero di frame coerenti
             </Label>
             <Select
               value={String(numeroOpzioni)}
