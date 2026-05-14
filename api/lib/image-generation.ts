@@ -1,7 +1,3 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { nanoid } from "nanoid";
-
 export const IMAGE_GENERATION_MODEL =
   process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-2";
 export const IMAGE_GENERATION_MODEL_CODE_NAME = "GPT Image 2";
@@ -301,6 +297,13 @@ export function buildImageRequests(params: {
   ];
 }
 
+function isEphemeralGeneratedImagePath(path: string): boolean {
+  return (
+    path.startsWith("/generated-images/") ||
+    path.startsWith(".data/generated-images/")
+  );
+}
+
 export function buildClinicalImagePrompt(scene: string): string {
   const sanitizedScene = sanitizeImagePrompt(scene);
   return [
@@ -379,14 +382,8 @@ function describeImageGenerationError(error: unknown): string {
   return `Errore generazione immagine: ${sanitizeImageText(message, 220) || "controlla i log del server per i dettagli"}.`;
 }
 
-function saveLocalGeneratedImage(bytes: string, mimeType: string): string {
-  const extension = mimeType === "image/jpeg" ? "jpg" : "png";
-  const dir = resolve(process.cwd(), ".data/generated-images");
-  mkdirSync(dir, { recursive: true });
-  const fileName = `${nanoid()}.${extension}`;
-  const filePath = resolve(dir, fileName);
-  writeFileSync(filePath, Buffer.from(bytes, "base64"));
-  return `/generated-images/${fileName}`;
+function buildImageDataUrl(bytes: string, mimeType: string): string {
+  return `data:${mimeType};base64,${bytes}`;
 }
 
 function buildMockImageDataUrl(label: string): string {
@@ -404,7 +401,16 @@ export async function resolveImageRequestWithCache(
   );
   const cacheKey = buildSemanticCacheKey(semanticTags);
   const cached = await db.findByCacheKey(cacheKey);
-  if (cached && cached.source !== "mock") return { ...cached, cacheHit: true };
+  if (
+    cached &&
+    cached.source !== "mock" &&
+    !(
+      cached.source === "generated" &&
+      isEphemeralGeneratedImagePath(cached.filePath)
+    )
+  ) {
+    return { ...cached, cacheHit: true };
+  }
 
   const prompt = sanitizeImagePrompt(request.prompt);
   let filePath: string;
@@ -414,7 +420,7 @@ export async function resolveImageRequestWithCache(
 
   try {
     const generated = await callOpenAIImageApi(prompt);
-    filePath = saveLocalGeneratedImage(generated.bytes, generated.mimeType);
+    filePath = buildImageDataUrl(generated.bytes, generated.mimeType);
     mimeType = generated.mimeType;
   } catch (error) {
     console.error("[image-generation] OpenAI image generation failed", {
@@ -438,11 +444,11 @@ export async function resolveImageRequestWithCache(
     generatedCostUsd: source === "generated" ? IMAGE_GENERATION_COST_USD : 0,
   };
 
-  if (source === "mock") {
-    return { ...illustration, cacheHit: false };
-  }
-
   const saved = await db.save(illustration);
 
-  return { ...saved, cacheHit: false };
+  return {
+    ...saved,
+    fallbackReason: saved.fallbackReason ?? fallbackReason,
+    cacheHit: false,
+  };
 }
