@@ -44,7 +44,25 @@ if (env.isProduction) {
   serveStaticFiles(app);
 
   const port = parseInt(process.env.PORT || "3000");
-  serve({ fetch: app.fetch, port }, () => {
+  const server = serve({ fetch: app.fetch, port }, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
+
+  let isShuttingDown = false;
+  const shutdown = (signal: NodeJS.Signals) => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+
+    console.log(`Received ${signal}; shutting down gracefully.`);
+    server.close(error => {
+      if (error) {
+        console.error("Error while closing the server:", error);
+        process.exit(1);
+      }
+      process.exit(0);
+    });
+  };
+
+  process.once("SIGTERM", shutdown);
+  process.once("SIGINT", shutdown);
 }
