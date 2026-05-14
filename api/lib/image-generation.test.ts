@@ -51,11 +51,14 @@ Distrattore 3: cane che mangia una pera in cucina.`,
     expect(
       requests.slice(1).every(request => request.role === "distrattore")
     ).toBe(true);
-    expect(requests[0].prompt).toContain("Opzione visiva separata: Target");
+    expect(requests[0].prompt).toContain(
+      "Frame separato di una serie visiva coerente: Target"
+    );
     expect(requests[0].prompt).toContain("Non creare collage");
-    expect(requests[1].prompt).toContain("molto simile");
-    expect(requests[2].prompt).toContain("mediamente simile");
-    expect(requests[3].prompt).toContain("lontanamente simile");
+    expect(requests[0].prompt).toContain("serie visiva coerente");
+    expect(requests[1].prompt).toContain("Unico asse di variazione");
+    expect(requests[1].prompt).toContain("Varia solo il dettaglio clinico");
+    expect(requests[2].prompt).toContain("stesso stile");
     expect(requests[0].semanticTags.map(normalizeSemanticTag)).toContain(
       "ruolo:target"
     );

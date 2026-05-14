@@ -153,30 +153,56 @@ function buildVisualOptionScene(params: {
   label: string;
   description: string;
   context?: string;
-  similarity?: string;
+  variationAxis?: string;
   exclude: string[];
 }) {
   const context = params.context
-    ? `Contesto comune da mantenere: ${params.context}. `
+    ? `Contesto comune vincolante da mantenere identico in tutta la serie: ${params.context}. `
     : "";
-  const similarity = params.similarity
-    ? `Grado di somiglianza con il target: ${params.similarity}. `
-    : "";
+  const variationAxis = params.variationAxis
+    ? `Unico asse di variazione per questa opzione: ${params.variationAxis}. `
+    : "Unico asse di variazione: nessuno, questa è l'immagine target. ";
   const exclusions = params.exclude.length
     ? `Non includere nella stessa immagine: ${params.exclude.join(", ")}. `
     : "";
 
   return [
-    `Opzione visiva separata: ${params.label}.`,
+    `Frame separato di una serie visiva coerente: ${params.label}.`,
+    "Le immagini della serie devono sembrare appartenere alla stessa storia clinica: stesso stile, stessa inquadratura, stesso ambiente, stessa palette e stessi personaggi salvo l'unico asse variato.",
     context,
-    similarity,
+    variationAxis,
     `Rappresenta solo questa scena: ${params.description}.`,
+    "Varia solo il dettaglio clinico indicato; non cambiare categoria, sfondo, camera, illuminazione o altri dettagli narrativi.",
     exclusions,
     "Non creare collage, griglie, vignette multiple o scene combinate con altre opzioni.",
   ]
     .join(" ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function extractVariationAxis(
+  description: string,
+  axes: string | undefined,
+  index: number
+): string {
+  const labeledAxis = description.match(
+    /\((azione|agente|oggetto|spazial[^)]*|posizione[^)]*)\)/iu
+  )?.[1];
+  if (labeledAxis) return labeledAxis;
+
+  const parsedAxes =
+    axes
+      ?.split(/;|,/u)
+      .map(axis => axis.trim())
+      .filter(axis => /azione|agente|oggetto|spazial|posizione/iu.test(axis)) ??
+    [];
+
+  return (
+    parsedAxes[index] ??
+    ["azione", "agente", "oggetto", "posizione spaziale"][index] ??
+    "dettaglio clinico minimo"
+  );
 }
 
 export function buildImageRequests(params: {
@@ -202,6 +228,7 @@ export function buildImageRequests(params: {
       "target clinico";
     const distractors = parseDistractors(params.testoGenerato, optionCount - 1);
     const context = extractSectionLine(params.testoGenerato, "Contesto comune");
+    const axes = extractSectionLine(params.testoGenerato, "Assi di variazione");
     const targetPrompt =
       extractLabeledPrompt(promptLines, /^\s*target\b/iu) ?? target;
     const allDistractorDescriptions = Array.from(
@@ -231,12 +258,6 @@ export function buildImageRequests(params: {
       },
     ];
 
-    const similarities = [
-      "molto simile",
-      "mediamente simile",
-      "lontanamente simile",
-    ];
-
     for (let index = 0; index < optionCount - 1; index += 1) {
       const label = `Distrattore ${index + 1}`;
       const distractor = allDistractorDescriptions[index];
@@ -245,6 +266,7 @@ export function buildImageRequests(params: {
           promptLines,
           new RegExp(`^\\s*distrattore\\s*${index + 1}\\b`, "iu")
         ) ?? distractor;
+      const variationAxis = extractVariationAxis(distractor, axes, index);
       requests.push({
         role: "distrattore",
         label,
@@ -253,7 +275,7 @@ export function buildImageRequests(params: {
             label,
             description: distractorPrompt,
             context,
-            similarity: similarities[index],
+            variationAxis,
             exclude: [
               target,
               ...allDistractorDescriptions.filter(
@@ -266,7 +288,7 @@ export function buildImageRequests(params: {
           ...baseStyleTags,
           "tipo:discriminazione_visiva",
           `ruolo:distrattore_${index + 1}`,
-          `similarita:${similarities[index]}`,
+          `asse_variazione:${variationAxis}`,
           `scenario:${distractor}`,
         ],
       });
