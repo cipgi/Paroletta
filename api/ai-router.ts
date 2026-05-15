@@ -261,9 +261,66 @@ function splitVisualDistractors(text: string): string[] {
     .filter(Boolean);
 }
 
+function normalizeVisualTokens(value: string): string[] {
+  const stopWords = new Set([
+    "il",
+    "lo",
+    "la",
+    "i",
+    "gli",
+    "le",
+    "un",
+    "uno",
+    "una",
+    "in",
+    "cui",
+    "che",
+    "si",
+    "vede",
+    "vedi",
+    "scegli",
+    "indica",
+    "immagine",
+    "l",
+    "d",
+  ]);
+
+  return Array.from(
+    new Set(
+      value
+        .toLocaleLowerCase("it-IT")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .match(/[a-z]{3,}/gu)
+        ?.filter(token => !stopWords.has(token)) ?? []
+    )
+  );
+}
+
+function planMatchesExpectedTarget(
+  text: string,
+  expectedTarget?: string
+): boolean {
+  if (!expectedTarget) return true;
+
+  const expectedTokens = normalizeVisualTokens(expectedTarget);
+  if (expectedTokens.length === 0) return true;
+
+  const targetText = [
+    extractGeneratedSectionLine(text, "Consegna") ?? "",
+    extractGeneratedSectionLine(text, "Target") ?? "",
+    text.match(/Prompt immagini?:([\s\S]*)/iu)?.[1] ?? "",
+  ].join(" ");
+  const actualTokens = new Set(normalizeVisualTokens(targetText));
+  const matches = expectedTokens.filter(token => actualTokens.has(token));
+
+  return matches.length >= Math.min(2, expectedTokens.length);
+}
+
 export function validateVisualDiscriminationPlan(
   text: string,
-  optionCount: number
+  optionCount: number,
+  expectedTarget?: string
 ): boolean {
   const requiredSections = [
     "Obiettivo clinico",
@@ -296,7 +353,8 @@ export function validateVisualDiscriminationPlan(
       check
     ) &&
     /azione|agente|oggetto|spazial|posizione/iu.test(axes) &&
-    !/trova l['’]intruso tra le immagini/iu.test(text)
+    !/trova l['’]intruso tra le immagini/iu.test(text) &&
+    planMatchesExpectedTarget(text, expectedTarget)
   );
 }
 
@@ -595,7 +653,8 @@ export const aiRouter = createRouter({
         sanitizedInput.tipoOutput === "discriminazione_visiva" &&
         !validateVisualDiscriminationPlan(
           parsed.data.testoGenerato,
-          sanitizedInput.numeroOpzioni ?? 4
+          sanitizedInput.numeroOpzioni ?? 4,
+          sanitizedInput.scenarioSmart
         )
           ? mockAIResponse(sanitizedInput)
           : parsed.data;

@@ -26,7 +26,7 @@ function sanitizeImageText(input: string, maxLength: number): string {
 }
 
 const MAX_TAG_LENGTH = 80;
-const MAX_PROMPT_LENGTH = 1200;
+const MAX_PROMPT_LENGTH = 1800;
 const SENSITIVE_PATIENT_PATTERN =
   /\b(?:paziente|patient|nome|cognome|codice\s*fiscale|telefono|email|indirizzo|diagnosi|cartella|nato\s+il|nata\s+il)\b(?:\s+[^,.;:]+)?/giu;
 const NON_SEMANTIC_PATTERN = /[^a-z0-9_:-]+/giu;
@@ -152,6 +152,8 @@ function parseDistractors(text: string, maxDistractors: number): string[] {
 function buildVisualOptionScene(params: {
   label: string;
   description: string;
+  target: string;
+  isTarget: boolean;
   context?: string;
   variationAxis?: string;
   exclude: string[];
@@ -162,6 +164,9 @@ function buildVisualOptionScene(params: {
   const variationAxis = params.variationAxis
     ? `Unico asse di variazione per questa opzione: ${params.variationAxis}. `
     : "Unico asse di variazione: nessuno, questa è l'immagine target. ";
+  const matchingRule = params.isTarget
+    ? `REQUISITO NON NEGOZIABILE: questa immagine deve rendere vera la consegna e mostrare chiaramente il target esatto: ${params.target}. `
+    : `REQUISITO NON NEGOZIABILE: questa immagine deve rappresentare il distrattore, non il target; deve rendere falsa la consegna sul target esatto: ${params.target}. `;
   const exclusions = params.exclude.length
     ? `Non includere nella stessa immagine: ${params.exclude.join(", ")}. `
     : "";
@@ -170,8 +175,10 @@ function buildVisualOptionScene(params: {
     `Frame separato di una serie visiva coerente: ${params.label}.`,
     "Le immagini della serie devono sembrare appartenere alla stessa storia clinica: stesso stile, stessa inquadratura, stesso ambiente, stessa palette e stessi personaggi salvo l'unico asse variato.",
     context,
+    matchingRule,
     variationAxis,
-    `Rappresenta solo questa scena: ${params.description}.`,
+    `Rappresenta solo questa scena, senza sostituire il soggetto richiesto: ${params.description}.`,
+    "La scena generata deve combaciare letteralmente con la descrizione: soggetti, azione, oggetto e posizione devono essere quelli indicati.",
     "Varia solo il dettaglio clinico indicato; non cambiare categoria, sfondo, camera, illuminazione o altri dettagli narrativi.",
     exclusions,
     "Non creare collage, griglie, vignette multiple o scene combinate con altre opzioni.",
@@ -215,6 +222,7 @@ export function buildImageRequests(params: {
   descrizioneScena?: string;
 }): ImageRequest[] {
   const baseStyleTags = ["stile:vettoriale_bambini", "formato:quadrato_1024"];
+  const visualStyleTags = [...baseStyleTags, "prompt_version:visual_exact_v2"];
 
   if (params.tipoOutput === "discriminazione_visiva") {
     const optionCount = Math.min(Math.max(params.numeroOpzioni ?? 4, 2), 4);
@@ -245,15 +253,19 @@ export function buildImageRequests(params: {
           buildVisualOptionScene({
             label: "Target",
             description: targetPrompt,
+            target,
+            isTarget: true,
             context,
             exclude: allDistractorDescriptions,
           })
         ),
         semanticTags: [
-          ...baseStyleTags,
+          ...visualStyleTags,
           "tipo:discriminazione_visiva",
           "ruolo:target",
           `scenario:${target}`,
+          `consegna_target:${target}`,
+          `prompt_target:${targetPrompt}`,
         ],
       },
     ];
@@ -274,6 +286,8 @@ export function buildImageRequests(params: {
           buildVisualOptionScene({
             label,
             description: distractorPrompt,
+            target,
+            isTarget: false,
             context,
             variationAxis,
             exclude: [
@@ -285,11 +299,13 @@ export function buildImageRequests(params: {
           })
         ),
         semanticTags: [
-          ...baseStyleTags,
+          ...visualStyleTags,
           "tipo:discriminazione_visiva",
           `ruolo:distrattore_${index + 1}`,
           `asse_variazione:${variationAxis}`,
           `scenario:${distractor}`,
+          `consegna_target:${target}`,
+          `prompt_opzione:${distractorPrompt}`,
         ],
       });
     }
@@ -330,6 +346,7 @@ export function buildClinicalImagePrompt(scene: string): string {
   const sanitizedScene = sanitizeImagePrompt(scene);
   return [
     "Illustrazione pediatrica per esercizio di logopedia.",
+    "Priorità massima: l'immagine deve essere semanticamente fedele alla consegna clinica; non aggiungere soggetti alternativi o non richiesti.",
     `Scena: ${sanitizedScene}.`,
     "Stile vettoriale per bambini, colori chiari, sfondo semplice, nessun testo nell'immagine.",
     `Output obbligatorio: aspect ratio ${IMAGE_GENERATION_ASPECT_RATIO}, risoluzione ${IMAGE_GENERATION_SIZE}.`,
