@@ -115,7 +115,16 @@ Distrattore 1: stessa foresta, bambino spinge dinosauro.
 Distrattore 2: stessa foresta, dinosauro accarezza bambino.
 Distrattore 3: stessa foresta, bambino accarezza cane.`;
 
-    expect(validateVisualDiscriminationPlan(validPlan, 4)).toBe(true);
+    expect(
+      validateVisualDiscriminationPlan(
+        validPlan,
+        4,
+        "il bambino accarezza il dinosauro"
+      )
+    ).toBe(true);
+    expect(validateVisualDiscriminationPlan(validPlan, 4, "l'aquila")).toBe(
+      false
+    );
     expect(
       validateVisualDiscriminationPlan(
         "Consegna: Trova l'intruso tra le immagini.\nTarget: dinosauro che mangia foglie.\nDistrattori: leone che dorme; scimmia che salta.",

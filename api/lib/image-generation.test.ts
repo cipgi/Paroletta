@@ -56,6 +56,13 @@ Distrattore 3: cane che mangia una pera in cucina.`,
     );
     expect(requests[0].prompt).toContain("Non creare collage");
     expect(requests[0].prompt).toContain("serie visiva coerente");
+    expect(requests[0].prompt).toContain("REQUISITO NON NEGOZIABILE");
+    expect(requests[0].prompt).toContain(
+      "target esatto: il cane mangia la mela"
+    );
+    expect(requests[0].semanticTags.map(normalizeSemanticTag)).toContain(
+      "prompt_version:visual_exact_v2"
+    );
     expect(requests[1].prompt).toContain("Unico asse di variazione");
     expect(requests[1].prompt).toContain("Varia solo il dettaglio clinico");
     expect(requests[2].prompt).toContain("stesso stile");
@@ -84,7 +91,33 @@ Prompt immagini: un gatto giocoso con una palla colorata, un gatto che dorme su 
       "un gatto giocoso con una palla colorata, un gatto che dorme"
     );
     expect(requests[1].prompt).toContain(
-      "Rappresenta solo questa scena: un gatto che dorme"
+      "Rappresenta solo questa scena, senza sostituire il soggetto richiesto: un gatto che dorme"
+    );
+  });
+
+  it("anchors visual prompts to the exact target named by the worksheet", () => {
+    const requests = buildImageRequests({
+      tipoOutput: "discriminazione_visiva",
+      interesse: "animali",
+      tagImmagine: "aquila",
+      numeroOpzioni: 2,
+      scenarioSmart: "l'aquila",
+      testoGenerato: `Consegna: Indica l'immagine in cui si vede l'aquila.
+Target: l'aquila.
+Distrattori: il falco.
+Contesto comune: cielo azzurro semplice, stile vettoriale per bambini.
+Assi di variazione: oggetto.
+Prompt immagini:
+Target: singola immagine con un'aquila al centro nel cielo azzurro.
+Distrattore 1: singola immagine con un falco al centro nel cielo azzurro.`,
+    });
+
+    expect(requests[0].prompt).toContain("target esatto: l'aquila");
+    expect(requests[0].prompt).toContain("un'aquila al centro");
+    expect(requests[1].prompt).toContain("deve rendere falsa la consegna");
+    expect(requests[1].prompt).toContain("target esatto: l'aquila");
+    expect(requests[0].semanticTags.map(normalizeSemanticTag)).toContain(
+      "consegna_target:laquila"
     );
   });
 
