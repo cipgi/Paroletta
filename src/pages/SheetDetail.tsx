@@ -300,7 +300,7 @@ export default function SheetDetail() {
     "Nome Utente";
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="mx-auto max-w-4xl space-y-6">
       <div className="flex items-center justify-between">
         <Link to="/sheets">
           <Button variant="ghost" size="sm">
@@ -322,10 +322,10 @@ export default function SheetDetail() {
 
       {/* Preview card */}
       <div ref={sheetCardRef}>
-        <Card className="border-2 border-slate-200">
-          <CardContent className="p-8">
+        <Card className="overflow-hidden border-0 bg-gradient-to-br from-teal-100 via-white to-indigo-100 p-1 shadow-xl shadow-slate-200/70">
+          <CardContent className="rounded-[1.35rem] bg-white p-6 sm:p-8">
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-200 pb-4 mb-6">
+            <div className="mb-6 flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 shadow-inner">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center">
                   <Sparkles className="w-5 h-5 text-white" />
@@ -359,21 +359,21 @@ export default function SheetDetail() {
             </div>
 
             {isVisualDiscrimination ? (
-              <div className="mt-8 rounded-xl bg-teal-50 p-5">
+              <div className="mt-8 rounded-[1.5rem] border border-teal-100 bg-gradient-to-br from-teal-50 to-cyan-50 p-5 shadow-inner sm:p-6">
                 <div className="mb-4 flex items-center gap-2 text-teal-800">
                   <Eye className="h-5 w-5" />
                   <p className="font-semibold">Scelta multipla visiva</p>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6">
                   {Array.from({ length: visualOptionCount }, (_, index) => {
                     const asset = visualImageAssets[index];
                     const label = getNeutralVisualOptionLabel(index);
                     return (
                       <div
                         key={asset?.cacheKey ?? index}
-                        className="rounded-xl border-2 border-white bg-white p-3 text-center shadow-sm"
+                        className="rounded-[1.35rem] border border-teal-100 bg-white p-3 text-center shadow-lg shadow-teal-900/5 ring-4 ring-white/80 sm:p-4"
                       >
-                        <div className="flex h-40 items-center justify-center overflow-hidden rounded-lg bg-slate-100">
+                        <div className="flex h-56 items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-slate-50 sm:h-64 md:h-72">
                           {isDisplayableImagePath(asset?.filePath) ? (
                             <img
                               src={asset.filePath}
@@ -387,7 +387,7 @@ export default function SheetDetail() {
                             </span>
                           )}
                         </div>
-                        <p className="mt-3 text-sm font-semibold text-slate-700">
+                        <p className="mt-4 text-base font-bold text-slate-700">
                           {label}
                         </p>
                       </div>
@@ -396,15 +396,15 @@ export default function SheetDetail() {
                 </div>
               </div>
             ) : isComplexMorphosyntax ? (
-              <div className="mt-8 rounded-xl bg-indigo-50 p-5">
+              <div className="mt-8 rounded-[1.5rem] border border-indigo-100 bg-gradient-to-br from-indigo-50 to-violet-50 p-5 shadow-inner sm:p-6">
                 <div className="mb-4 flex items-center gap-2 text-indigo-800">
                   <Brain className="h-5 w-5" />
                   <p className="font-semibold">
                     Scena morfosintattica illustrata
                   </p>
                 </div>
-                <div className="rounded-xl border-2 border-white bg-white p-5 text-center shadow-sm">
-                  <div className="mx-auto flex h-56 max-w-lg items-center justify-center overflow-hidden rounded-lg bg-slate-100">
+                <div className="rounded-[1.35rem] border border-indigo-100 bg-white p-4 text-center shadow-lg shadow-indigo-900/5 ring-4 ring-white/80 sm:p-5">
+                  <div className="mx-auto flex h-72 max-w-2xl items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-slate-50 sm:h-80 md:h-[26rem]">
                     {isDisplayableImagePath(primaryImageAsset?.filePath) ? (
                       <img
                         src={primaryImageAsset.filePath}
@@ -421,9 +421,11 @@ export default function SheetDetail() {
                 </div>
               </div>
             ) : (
-              <div className="mt-8 p-6 bg-slate-50 rounded-xl text-center">
-                <p className="text-sm text-slate-500 mb-2">Illustrazione</p>
-                <div className="w-32 h-32 mx-auto overflow-hidden bg-slate-200 rounded-lg flex items-center justify-center">
+              <div className="mt-8 rounded-[1.5rem] border border-slate-200 bg-gradient-to-br from-slate-50 to-teal-50/70 p-5 text-center shadow-inner sm:p-6">
+                <p className="mb-4 text-base font-semibold text-slate-600">
+                  Illustrazione
+                </p>
+                <div className="mx-auto flex h-72 max-w-2xl items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-lg shadow-slate-900/5 ring-4 ring-white/80 sm:h-80 md:h-96">
                   {isDisplayableImagePath(primaryImageAsset?.filePath) ? (
                     <img
                       src={primaryImageAsset.filePath}
@@ -432,7 +434,9 @@ export default function SheetDetail() {
                       loading="lazy"
                     />
                   ) : (
-                    <span className="text-xs text-slate-500">N/D</span>
+                    <span className="px-4 text-sm font-medium text-slate-500">
+                      Immagine non disponibile
+                    </span>
                   )}
                 </div>
               </div>
