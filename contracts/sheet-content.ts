@@ -182,18 +182,13 @@ export function getUserFacingSheetContent(params: {
       "Domande di comprensione"
     );
 
-    const textBlock = targetPhrase
-      ? `Testo: ${targetPhrase.replace(/^Frase target:\s*/iu, "")}`
-      : "Testo: Osserva l'immagine e leggi la frase target indicata dal professionista.";
-    const questionsBlock =
-      comprehensionQuestions ??
-      "Domande di comprensione:\n1. Chi è il protagonista della scena?\n2. Che cosa sta facendo?\n3. Quale elemento grammaticale stai allenando?";
-
     return joinVisibleBlocks([
       getSheetTitle(params.tipoOutput),
       explicitInstruction || "Consegna: Leggi il testo e completa l'esercizio.",
-      textBlock,
-      questionsBlock,
+      targetPhrase
+        ? `Testo: ${targetPhrase.replace(/^Frase target:\s*/iu, "")}`
+        : undefined,
+      comprehensionQuestions,
       "Immagini: usa l'immagine per rispondere alle domande.",
     ]);
   }

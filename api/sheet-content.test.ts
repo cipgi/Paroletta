@@ -66,26 +66,10 @@ Prompt immagine: tecnico`,
     expect(result).not.toContain("insieme al logopedista");
   });
 
-  it("shows explicit fallback text and questions when morphosyntax sections are missing", () => {
+  it("adds the standard structure for story sheets", () => {
     const result = getUserFacingSheetContent({
       tipoOutput: "morfosintassi_complessa",
       testoGenerato: "Consegna: Completa l'esercizio osservando l'immagine.",
-    });
-
-    expect(result).toContain(
-      "Testo: Osserva l'immagine e leggi la frase target indicata dal professionista."
-    );
-    expect(result).toContain("Domande di comprensione:");
-    expect(result).toContain("1. Chi è il protagonista della scena?");
-  });
-
-  it("adds the standard structure for story sheets", () => {
-    const result = getUserFacingSheetContent({
-      tipoOutput: "storia",
-      testoGenerato: `Il gatto salta sul prato.
-Domande di comprensione:
-1. Chi salta?
-Prompt immagine: gatto sul prato`,
     });
 
     expect(result).toContain("Titolo: Storia con fonema");
