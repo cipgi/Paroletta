@@ -6,7 +6,7 @@ import {
 } from "@contracts/sheet-content";
 
 describe("getUserFacingSheetContent", () => {
-  it("shows only the delivery instruction for visual discrimination sheets", () => {
+  it("shows title, text, instruction and images section for visual discrimination sheets", () => {
     const result = getUserFacingSheetContent({
       tipoOutput: "discriminazione_visiva",
       testoGenerato: `Obiettivo clinico: Riconoscere l'immagine corretta.
@@ -19,9 +19,8 @@ Target: prompt tecnico`,
     });
 
     expect(result).toBe(
-      "Consegna: Trova l'immagine in cui si vede un trenino sotto un tavolo."
+      "Titolo: Discriminazione visiva\n\nTesto: Un trenino sotto un tavolo.\n\nConsegna: Trova l'immagine corrispondente alla frase: un trenino sotto un tavolo.\n\nImmagini: osserva le opzioni e scegli quella corretta."
     );
-    expect(result).not.toContain("Target");
     expect(result).not.toContain("Prompt");
   });
 
@@ -34,22 +33,24 @@ Prompt immagini:
 Target: prompt tecnico`,
     });
 
-    expect(result).toBe(
-      "Consegna: Evidenzia l'immagine in cui si vede un trenino sotto al tavolo."
+    expect(result).toContain(
+      "Consegna: Evidenzia l'immagine corrispondente alla frase: un trenino sotto al tavolo."
     );
     expect(result).not.toContain("Prompt");
   });
 
-  it("falls back to the generated delivery when no visual target is available", () => {
+  it("falls back to generated delivery when no visual target is available", () => {
     const result = getUserFacingSheetContent({
       tipoOutput: "discriminazione_visiva",
       testoGenerato: "Consegna: Trova l'intruso tra le immagini.",
     });
 
-    expect(result).toBe("Consegna: Trova l'intruso tra le immagini.");
+    expect(result).toBe(
+      "Titolo: Discriminazione visiva\n\nConsegna: Trova l'intruso tra le immagini.\n\nImmagini: osserva le opzioni e scegli quella corretta."
+    );
   });
 
-  it("keeps only fundamental text for morphosyntax sheets", () => {
+  it("does not show generic therapist-only instruction for morphosyntax sheets", () => {
     const result = getUserFacingSheetContent({
       tipoOutput: "morfosintassi_complessa",
       testoGenerato: `Obiettivo morfosintattico: pronome clitico lo.
@@ -60,14 +61,12 @@ Prompt immagine: tecnico`,
     });
 
     expect(result).toBe(
-      "Consegna: Osserva l'immagine e rispondi insieme al logopedista.\n\nFrase target: La bambina lava il cane.\n\nDomande di comprensione: Chi lava il cane?"
+      "Titolo: Morfosintassi complessa\n\nConsegna: Leggi il testo e completa l'esercizio.\n\nTesto: La bambina lava il cane.\n\nDomande di comprensione: Chi lava il cane?\n\nImmagini: usa l'immagine per rispondere alle domande."
     );
-    expect(result).not.toContain("Obiettivo");
-    expect(result).not.toContain("Scena da illustrare");
-    expect(result).not.toContain("Prompt");
+    expect(result).not.toContain("insieme al logopedista");
   });
 
-  it("removes internal prompt sections from story sheets", () => {
+  it("adds the standard structure for story sheets", () => {
     const result = getUserFacingSheetContent({
       tipoOutput: "storia",
       testoGenerato: `Il gatto salta sul prato.
@@ -76,25 +75,10 @@ Domande di comprensione:
 Prompt immagine: gatto sul prato`,
     });
 
-    expect(result).toBe(
-      "Il gatto salta sul prato.\nDomande di comprensione:\n1. Chi salta?"
-    );
-    expect(result).not.toContain("Prompt");
-  });
-
-  it("keeps generated word lists but removes internal objectives", () => {
-    const result = getUserFacingSheetContent({
-      tipoOutput: "lista",
-      testoGenerato: `Obiettivo clinico: esercizio sul fonema.
-Parole semplici: rana, rosa
-Parole medie: torre, carro
-Prompt immagine: tecnico`,
-    });
-
-    expect(result).toBe(
-      "Parole semplici: rana, rosa\nParole medie: torre, carro"
-    );
-    expect(result).not.toContain("Obiettivo");
+    expect(result).toContain("Titolo: Storia con fonema");
+    expect(result).toContain("Consegna: Leggi il testo e svolgi l'esercizio.");
+    expect(result).toContain("Testo: Il gatto salta sul prato.");
+    expect(result).toContain("Immagini: osserva l'illustrazione collegata al testo.");
     expect(result).not.toContain("Prompt");
   });
 });

@@ -49,10 +49,7 @@ function extractSectionLine(text: string, section: string): string | undefined {
   return text.match(SECTION_LINE_PATTERN(section))?.[1]?.trim();
 }
 
-function extractSectionBlock(
-  text: string,
-  section: string
-): string | undefined {
+function extractSectionBlock(text: string, section: string): string | undefined {
   const lines = text.split(/\r?\n/u);
   const sectionPattern = new RegExp(
     `^\\s*${escapeRegExp(section)}\\s*:\\s*(.*)$`,
@@ -104,7 +101,7 @@ function formatContextualVisualInstruction(text: string) {
   if (!target) return "";
 
   return formatInstruction(
-    `${getVisualInstructionAction(rawInstruction)} l'immagine in cui si vede ${target}`
+    `${getVisualInstructionAction(rawInstruction)} l'immagine corrispondente alla frase: ${target}`
   );
 }
 
@@ -145,6 +142,15 @@ function joinVisibleBlocks(blocks: Array<string | undefined>) {
   return blocks.filter(Boolean).join("\n\n").trim();
 }
 
+function getSheetTitle(tipoOutput: SheetContentType): string {
+  if (tipoOutput === "discriminazione_visiva") return "Titolo: Discriminazione visiva";
+  if (tipoOutput === "morfosintassi_complessa") return "Titolo: Morfosintassi complessa";
+  if (tipoOutput === "storia") return "Titolo: Storia con fonema";
+  if (tipoOutput === "filastrocca") return "Titolo: Filastrocca con fonema";
+  if (tipoOutput === "lista") return "Titolo: Lista parole con fonema";
+  return "Titolo: Scheda personalizzata";
+}
+
 export function getUserFacingSheetContent(params: {
   tipoOutput: SheetContentType;
   testoGenerato: string;
@@ -152,11 +158,18 @@ export function getUserFacingSheetContent(params: {
   const text = params.testoGenerato.trim();
 
   if (params.tipoOutput === "discriminazione_visiva") {
-    return (
+    const target = extractSectionLine(text, "Target");
+    const instruction =
       formatContextualVisualInstruction(text) ||
       formatInstruction(extractSectionLine(text, "Consegna") ?? "") ||
-      "Consegna: Osserva le immagini e trova l'intruso."
-    );
+      "Consegna: Trova l'immagine corrispondente alla frase.";
+
+    return joinVisibleBlocks([
+      getSheetTitle(params.tipoOutput),
+      target ? `Testo: ${normalizeSentence(target)}` : undefined,
+      instruction,
+      "Immagini: osserva le opzioni e scegli quella corretta.",
+    ]);
   }
 
   if (params.tipoOutput === "morfosintassi_complessa") {
@@ -169,17 +182,24 @@ export function getUserFacingSheetContent(params: {
       "Domande di comprensione"
     );
 
-    return (
-      joinVisibleBlocks([
-        explicitInstruction ||
-          "Consegna: Osserva l'immagine e rispondi insieme al logopedista.",
-        targetPhrase,
-        comprehensionQuestions,
-      ]) || "Consegna: Osserva l'immagine e rispondi insieme al logopedista."
-    );
+    return joinVisibleBlocks([
+      getSheetTitle(params.tipoOutput),
+      explicitInstruction || "Consegna: Leggi il testo e completa l'esercizio.",
+      targetPhrase
+        ? `Testo: ${targetPhrase.replace(/^Frase target:\s*/iu, "")}`
+        : undefined,
+      comprehensionQuestions,
+      "Immagini: usa l'immagine per rispondere alle domande.",
+    ]);
   }
 
-  return removeInternalSections(text);
+  const cleaned = removeInternalSections(text);
+  return joinVisibleBlocks([
+    getSheetTitle(params.tipoOutput),
+    "Consegna: Leggi il testo e svolgi l'esercizio.",
+    cleaned ? `Testo: ${cleaned}` : undefined,
+    "Immagini: osserva l'illustrazione collegata al testo.",
+  ]);
 }
 
 export function getNeutralVisualOptionLabel(index: number): string {
