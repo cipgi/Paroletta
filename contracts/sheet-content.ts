@@ -16,8 +16,10 @@ const KNOWN_SECTION_NAMES = [
   "Prompt immagini",
   "Prompt immagine",
   "Frase target",
+  "Testo",
   "Scena da illustrare",
   "Domande di comprensione",
+  "Domande",
   "Parole semplici",
   "Parole medie",
   "Parole complesse",
@@ -180,18 +182,19 @@ export function getUserFacingSheetContent(params: {
     const explicitInstruction = formatInstruction(
       extractSectionLine(text, "Consegna") ?? ""
     );
-    const targetPhrase = extractSectionBlock(text, "Frase target");
-    const comprehensionQuestions = extractSectionBlock(
-      text,
-      "Domande di comprensione"
-    );
+    const targetPhrase =
+      extractSectionBlock(text, "Frase target") ??
+      extractSectionBlock(text, "Testo");
+    const comprehensionQuestions =
+      extractSectionBlock(text, "Domande di comprensione") ??
+      extractSectionBlock(text, "Domande");
 
     const cleaned = removeInternalSections(text);
     return joinVisibleBlocks([
       getSheetTitle(params.tipoOutput),
       explicitInstruction || "Consegna: Leggi il testo e completa l'esercizio.",
       targetPhrase
-        ? `Testo: ${targetPhrase.replace(/^Frase target:\s*/iu, "")}`
+        ? `Testo: ${targetPhrase.replace(/^(Frase target|Testo):\s*/iu, "")}`
         : cleaned
           ? `Testo: ${cleaned}`
           : undefined,
