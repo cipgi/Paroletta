@@ -399,9 +399,17 @@ export default function SheetDetail() {
                 <Badge variant="secondary">
                   Livello: {sheet.difficolta.toLowerCase()}
                 </Badge>
-                <Badge variant="secondary">/{sheet.fonema}/</Badge>
-                <Badge variant="outline">{getPhoneticTranscriptionHint(sheet.fonema)}</Badge>
-                <Badge variant="outline">{getPhonemePositionHints(sheet.fonema)}</Badge>
+                {!isVisualDiscrimination && !isComplexMorphosyntax ? (
+                  <>
+                    <Badge variant="secondary">/{sheet.fonema}/</Badge>
+                    <Badge variant="outline">
+                      {getPhoneticTranscriptionHint(sheet.fonema)}
+                    </Badge>
+                    <Badge variant="outline">
+                      {getPhonemePositionHints(sheet.fonema)}
+                    </Badge>
+                  </>
+                ) : null}
                 <Badge variant="secondary">{getClinicalGoalLabel(sheet.tipoOutput)}</Badge>
                 <Badge variant="outline" className="inline-flex items-center gap-1">
                   <Clock3 className="h-3.5 w-3.5" />

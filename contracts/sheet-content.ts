@@ -186,13 +186,16 @@ export function getUserFacingSheetContent(params: {
       "Domande di comprensione"
     );
 
+    const cleaned = removeInternalSections(text);
     return joinVisibleBlocks([
       getSheetTitle(params.tipoOutput),
       explicitInstruction || "Consegna: Leggi il testo e completa l'esercizio.",
       targetPhrase
         ? `Testo: ${targetPhrase.replace(/^Frase target:\s*/iu, "")}`
-        : undefined,
-      comprehensionQuestions,
+        : cleaned
+          ? `Testo: ${cleaned}`
+          : undefined,
+      comprehensionQuestions ?? "Domande di comprensione: n/d",
       "Immagini: usa l'immagine per rispondere alle domande.",
     ]);
   }
