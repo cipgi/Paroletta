@@ -68,8 +68,8 @@ Prompt immagine: tecnico`,
 
   it("adds the standard structure for story sheets", () => {
     const result = getUserFacingSheetContent({
-      tipoOutput: "morfosintassi_complessa",
-      testoGenerato: "Consegna: Completa l'esercizio osservando l'immagine.",
+      tipoOutput: "storia",
+      testoGenerato: "Il gatto salta sul prato.",
     });
 
     expect(result).toContain("Titolo: Storia con fonema");

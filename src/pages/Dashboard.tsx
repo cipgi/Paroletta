@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
@@ -50,7 +51,33 @@ export default function Dashboard() {
   }
 
   const totalSheets = sheetsCount ?? sheetsList?.length ?? 0;
-  const recentSheets = sheetsList?.slice(0, 5) ?? [];
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [phonemeFilter, setPhonemeFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<"recenti" | "vecchie">("recenti");
+
+  const recentSheets = useMemo(() => {
+    const base = sheetsList ?? [];
+    return base
+      .filter(sheet =>
+        typeFilter === "all" ? true : sheet.tipoOutput === typeFilter
+      )
+      .filter(sheet =>
+        phonemeFilter === "all" ? true : sheet.fonema === phonemeFilter
+      )
+      .sort((a, b) =>
+        sortBy === "recenti"
+          ? +new Date(b.createdAt) - +new Date(a.createdAt)
+          : +new Date(a.createdAt) - +new Date(b.createdAt)
+      )
+      .slice(0, 10);
+  }, [phonemeFilter, sheetsList, sortBy, typeFilter]);
+
+  const availableTypes = Array.from(
+    new Set((sheetsList ?? []).map(sheet => sheet.tipoOutput))
+  );
+  const availablePhonemes = Array.from(
+    new Set((sheetsList ?? []).map(sheet => sheet.fonema))
+  );
 
   const planLabels: Record<string, string> = {
     trial: "Prova Gratuita",
@@ -116,6 +143,40 @@ export default function Dashboard() {
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Schede recenti</CardTitle>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <select
+              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm"
+              value={typeFilter}
+              onChange={event => setTypeFilter(event.target.value)}
+            >
+              <option value="all">Tutti i tipi</option>
+              {availableTypes.map(type => (
+                <option key={type} value={type}>
+                  {getSheetTypeLabel(type)}
+                </option>
+              ))}
+            </select>
+            <select
+              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm"
+              value={phonemeFilter}
+              onChange={event => setPhonemeFilter(event.target.value)}
+            >
+              <option value="all">Tutti i fonemi</option>
+              {availablePhonemes.map(phoneme => (
+                <option key={phoneme} value={phoneme}>
+                  /{phoneme}/
+                </option>
+              ))}
+            </select>
+            <select
+              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm"
+              value={sortBy}
+              onChange={event => setSortBy(event.target.value as "recenti" | "vecchie")}
+            >
+              <option value="recenti">Più recenti</option>
+              <option value="vecchie">Più vecchie</option>
+            </select>
+          </div>
         </CardHeader>
         <CardContent className="p-6 pt-0">
           {recentSheets.length === 0 ? (
