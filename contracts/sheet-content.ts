@@ -111,6 +111,10 @@ function normalizeSentence(value: string) {
   return /[.!?]$/u.test(trimmed) ? trimmed : `${trimmed}.`;
 }
 
+function decodeEscapedNewlines(value: string) {
+  return value.replace(/\\r\\n|\\n|\\r/gu, "\n");
+}
+
 function formatInstruction(instruction: string) {
   const normalized = normalizeSentence(instruction);
   return normalized ? `Consegna: ${normalized}` : "";
@@ -155,7 +159,7 @@ export function getUserFacingSheetContent(params: {
   tipoOutput: SheetContentType;
   testoGenerato: string;
 }): string {
-  const text = params.testoGenerato.trim();
+  const text = decodeEscapedNewlines(params.testoGenerato).trim();
 
   if (params.tipoOutput === "discriminazione_visiva") {
     const target = extractSectionLine(text, "Target");
