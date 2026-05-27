@@ -156,10 +156,7 @@ function removeInternalSections(text: string): string {
 function removeSectionBlocks(text: string, sections: string[]) {
   const lines = text.split(/\r?\n/u);
   const patterns = sections.map(section =>
-    new RegExp(
-      `^\\s*(?:[-*]\\s*)?(?:#{1,6}\\s*)?(?:\\*\\*)?${escapeRegExp(section)}(?:\\*\\*)?\\s*:\\s*(.*)$`,
-      "iu"
-    )
+    new RegExp(`^\\s*${escapeRegExp(section)}\\s*:\\s*(.*)$`, "iu")
   );
   const output: string[] = [];
   let isSkipping = false;
