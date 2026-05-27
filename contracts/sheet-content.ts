@@ -36,10 +36,18 @@ const INTERNAL_SECTION_NAMES = new Set<string>([
   "scena da illustrare",
 ]);
 
+function sectionBody(block: string | undefined, label: string) {
+  if (!block) return "";
+  return block.replace(new RegExp(`^${escapeRegExp(label)}\\s*:\\s*`, "iu"), "").trim();
+}
+
 const SECTION_LINE_PATTERN = (section: string) =>
-  new RegExp(`^\\s*${section}\\s*:\\s*(.+?)\\s*$`, "imu");
+  new RegExp(
+    `^\\s*(?:[-*]\\s*)?(?:#{1,6}\\s*)?(?:\\*\\*)?${escapeRegExp(section)}(?:\\*\\*)?\\s*:\\s*(.+?)\\s*$`,
+    "imu"
+  );
 const ANY_KNOWN_SECTION_PATTERN = new RegExp(
-  `^\\s*(${KNOWN_SECTION_NAMES.map(escapeRegExp).join("|")})\\s*:\\s*(.*)$`,
+  `^\\s*(?:[-*]\\s*)?(?:#{1,6}\\s*)?(?:\\*\\*)?(${KNOWN_SECTION_NAMES.map(escapeRegExp).join("|")})(?:\\*\\*)?\\s*:\\s*(.*)$`,
   "iu"
 );
 
@@ -54,7 +62,7 @@ function extractSectionLine(text: string, section: string): string | undefined {
 function extractSectionBlock(text: string, section: string): string | undefined {
   const lines = text.split(/\r?\n/u);
   const sectionPattern = new RegExp(
-    `^\\s*${escapeRegExp(section)}\\s*:\\s*(.*)$`,
+    `^\\s*(?:[-*]\\s*)?(?:#{1,6}\\s*)?(?:\\*\\*)?${escapeRegExp(section)}(?:\\*\\*)?\\s*:\\s*(.*)$`,
     "iu"
   );
   const block: string[] = [];
@@ -144,6 +152,34 @@ function removeInternalSections(text: string): string {
     .trim();
 }
 
+
+function removeSectionBlocks(text: string, sections: string[]) {
+  const lines = text.split(/\r?\n/u);
+  const patterns = sections.map(section =>
+    new RegExp(
+      `^\\s*(?:[-*]\\s*)?(?:#{1,6}\\s*)?(?:\\*\\*)?${escapeRegExp(section)}(?:\\*\\*)?\\s*:\\s*(.*)$`,
+      "iu"
+    )
+  );
+  const output: string[] = [];
+  let isSkipping = false;
+
+  for (const line of lines) {
+    const hitIndex = patterns.findIndex(pattern => pattern.test(line));
+    if (hitIndex >= 0) {
+      isSkipping = true;
+      continue;
+    }
+
+    if (isSkipping && ANY_KNOWN_SECTION_PATTERN.test(line)) {
+      isSkipping = false;
+    }
+
+    if (!isSkipping) output.push(line);
+  }
+
+  return output.join("\n").replace(/\n{3,}/gu, "\n\n").trim();
+}
 function joinVisibleBlocks(blocks: Array<string | undefined>) {
   return blocks.filter(Boolean).join("\n\n").trim();
 }
@@ -203,11 +239,25 @@ export function getUserFacingSheetContent(params: {
     ]);
   }
 
-  const cleaned = removeInternalSections(text);
+  const explicitInstruction =
+    formatInstruction(extractSectionLine(text, "Consegna") ?? "") ||
+    "Consegna: Leggi il testo e svolgi l'esercizio.";
+  const bodyText =
+    sectionBody(extractSectionBlock(text, "Testo"), "Testo") ||
+    removeSectionBlocks(removeInternalSections(text), [
+      "Consegna",
+      "Domande di comprensione",
+      "Domande",
+    ]);
+  const questions =
+    extractSectionBlock(text, "Domande di comprensione") ??
+    extractSectionBlock(text, "Domande");
+
   return joinVisibleBlocks([
     getSheetTitle(params.tipoOutput),
-    "Consegna: Leggi il testo e svolgi l'esercizio.",
-    cleaned ? `Testo: ${cleaned}` : undefined,
+    explicitInstruction,
+    bodyText ? `Testo: ${bodyText}` : undefined,
+    questions,
     "Immagini: osserva l'illustrazione collegata al testo.",
   ]);
 }

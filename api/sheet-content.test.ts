@@ -66,6 +66,21 @@ Prompt immagine: tecnico`,
     expect(result).not.toContain("insieme al logopedista");
   });
 
+  it("extracts morphosyntax text and questions even with markdown-style section headers", () => {
+    const result = getUserFacingSheetContent({
+      tipoOutput: "morfosintassi_complessa",
+      testoGenerato: `## Obiettivo morfosintattico: pronomi clitici
+**Frase target**: Il gatto insegue la palla e poi la prende.
+**Scena da illustrare**: un gatto bianco in giardino con una palla rossa.
+**Domande di comprensione**: Cosa insegue il gatto? Cosa prende poi?
+**Prompt immagine**: tecnico`,
+    });
+
+    expect(result).toBe(
+      "Titolo: Morfosintassi complessa\n\nConsegna: Leggi il testo e completa l'esercizio.\n\nTesto: Il gatto insegue la palla e poi la prende.\n\nDomande di comprensione: Cosa insegue il gatto? Cosa prende poi?\n\nImmagini: usa l'immagine per rispondere alle domande."
+    );
+  });
+
   it("adds the standard structure for story sheets", () => {
     const result = getUserFacingSheetContent({
       tipoOutput: "storia",
