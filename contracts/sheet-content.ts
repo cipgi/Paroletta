@@ -42,9 +42,12 @@ function sectionBody(block: string | undefined, label: string) {
 }
 
 const SECTION_LINE_PATTERN = (section: string) =>
-  new RegExp(`^\\s*${section}\\s*:\\s*(.+?)\\s*$`, "imu");
+  new RegExp(
+    `^\\s*(?:[-*]\\s*)?(?:#{1,6}\\s*)?(?:\\*\\*)?${escapeRegExp(section)}(?:\\*\\*)?\\s*:\\s*(.+?)\\s*$`,
+    "imu"
+  );
 const ANY_KNOWN_SECTION_PATTERN = new RegExp(
-  `^\\s*(${KNOWN_SECTION_NAMES.map(escapeRegExp).join("|")})\\s*:\\s*(.*)$`,
+  `^\\s*(?:[-*]\\s*)?(?:#{1,6}\\s*)?(?:\\*\\*)?(${KNOWN_SECTION_NAMES.map(escapeRegExp).join("|")})(?:\\*\\*)?\\s*:\\s*(.*)$`,
   "iu"
 );
 
@@ -59,7 +62,7 @@ function extractSectionLine(text: string, section: string): string | undefined {
 function extractSectionBlock(text: string, section: string): string | undefined {
   const lines = text.split(/\r?\n/u);
   const sectionPattern = new RegExp(
-    `^\\s*${escapeRegExp(section)}\\s*:\\s*(.*)$`,
+    `^\\s*(?:[-*]\\s*)?(?:#{1,6}\\s*)?(?:\\*\\*)?${escapeRegExp(section)}(?:\\*\\*)?\\s*:\\s*(.*)$`,
     "iu"
   );
   const block: string[] = [];
