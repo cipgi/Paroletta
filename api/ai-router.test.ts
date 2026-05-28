@@ -15,6 +15,7 @@ vi.mock("./middleware", () => ({
 }));
 import {
   buildPromptMessages,
+  ensureComprehensionQuestions,
   sanitizeGenerationParams,
   sanitizePromptVariable,
   validateVisualDiscriminationPlan,
@@ -131,6 +132,67 @@ Distrattore 3: stessa foresta, bambino accarezza cane.`;
         4
       )
     ).toBe(false);
+  });
+
+  it("rejects generic visual discrimination targets before saving", () => {
+    const genericPlan = `Obiettivo clinico: Discriminazione visiva vera.
+Struttura morfosintattica: frase semplice soggetto verbo oggetto.
+Consegna: Indica l'immagine in cui il bambino osserva cane nel contesto scelto.
+Target: Il bambino osserva cane nel contesto scelto.
+Distrattori: Distrattore 1 (azione): Il bambino indica cane nel contesto scelto; Distrattore 2 (agente): cane osserva il bambino nel contesto scelto; Distrattore 3 (oggetto): Il bambino osserva un oggetto diverso nel contesto scelto.
+Contesto comune: stesso ambiente, stessi personaggi, stesso stile.
+Assi di variazione: azione; agente; oggetto.
+Check coerenza: stesso stile, stesso ambiente, personaggi condivisi e una sola variazione per distrattore.
+Prompt immagini:
+Target: stesso ambiente, bambino osserva cane nel contesto scelto.
+Distrattore 1: stesso ambiente, bambino indica cane nel contesto scelto.
+Distrattore 2: stesso ambiente, cane osserva bambino nel contesto scelto.
+Distrattore 3: stesso ambiente, bambino osserva oggetto diverso nel contesto scelto.`;
+
+    expect(validateVisualDiscriminationPlan(genericPlan, 4)).toBe(false);
+  });
+
+  it("adds fallback comprehension questions when AI omits required sections", () => {
+    const storyParams = sanitizeGenerationParams({
+      eta: "6 anni",
+      fonema: "r",
+      interesse: "dinosauro",
+      tipoOutput: "storia",
+    });
+    const story = ensureComprehensionQuestions(
+      {
+        testoGenerato: "Il dinosauro corre nel prato.",
+        tagImmagine: "dinosauro",
+        listaParole: ["dinosauro", "corre", "prato"],
+        difficolta: "media",
+      },
+      storyParams
+    );
+
+    expect(story.testoGenerato).toContain("Domande di comprensione:");
+    expect(story.testoGenerato.match(/\?/gu)).toHaveLength(3);
+
+    const morphParams = sanitizeGenerationParams({
+      eta: "6 anni",
+      fonema: "r",
+      interesse: "cane",
+      tipoOutput: "morfosintassi_complessa",
+      elementoGrammaticale: "pronome clitico lo",
+      descrizioneScena: "il bambino lava il cane e poi lo asciuga",
+    });
+    const morph = ensureComprehensionQuestions(
+      {
+        testoGenerato:
+          "Obiettivo morfosintattico: pronome clitico lo.\nFrase target: Il bambino lava il cane e poi lo asciuga.",
+        tagImmagine: "morfosintassi",
+        listaParole: ["pronome clitico lo"],
+        difficolta: "media",
+      },
+      morphParams
+    );
+
+    expect(morph.testoGenerato).toContain("Domande di comprensione:");
+    expect(morph.testoGenerato).not.toContain("n/d");
   });
 
   it("keeps sanitized user values as data separate from the fixed server template", () => {

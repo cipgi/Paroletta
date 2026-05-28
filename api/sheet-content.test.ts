@@ -66,6 +66,19 @@ Prompt immagine: tecnico`,
     expect(result).not.toContain("insieme al logopedista");
   });
 
+  it("shows fallback comprehension questions instead of n/d for legacy morphosyntax sheets", () => {
+    const result = getUserFacingSheetContent({
+      tipoOutput: "morfosintassi_complessa",
+      testoGenerato: `Obiettivo morfosintattico: pronome clitico lo.
+Frase target: La bambina lava il cane.
+Scena da illustrare: una bambina lava il cane.
+Prompt immagine: tecnico`,
+    });
+
+    expect(result).toContain("Domande di comprensione:");
+    expect(result).not.toContain("n/d");
+  });
+
   it("extracts morphosyntax text and questions even with markdown-style section headers", () => {
     const result = getUserFacingSheetContent({
       tipoOutput: "morfosintassi_complessa",
@@ -90,7 +103,9 @@ Prompt immagine: tecnico`,
     expect(result).toContain("Titolo: Storia con fonema");
     expect(result).toContain("Consegna: Leggi il testo e svolgi l'esercizio.");
     expect(result).toContain("Testo: Il gatto salta sul prato.");
-    expect(result).toContain("Immagini: osserva l'illustrazione collegata al testo.");
+    expect(result).toContain(
+      "Immagini: osserva l'illustrazione collegata al testo."
+    );
     expect(result).not.toContain("Prompt");
   });
 });
