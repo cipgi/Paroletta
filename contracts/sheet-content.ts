@@ -18,6 +18,9 @@ const KNOWN_SECTION_NAMES = [
   "Frase target",
   "Testo",
   "Scena da illustrare",
+  "Struttura morfosintattica",
+  "Assi di variazione",
+  "Check coerenza",
   "Domande di comprensione",
   "Domande",
   "Parole semplici",
@@ -57,36 +60,46 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function sectionHeaderPattern(section: string) {
+  return new RegExp(
+    `(?:^|[\\s.;!?])(?:[-*]\\s*)?(?:#{1,6}\\s*)?(?:\\*\\*)?${escapeRegExp(section)}(?:\\*\\*)?\\s*:\\s*`,
+    "iu"
+  );
+}
+
+function anySectionHeaderPattern() {
+  return new RegExp(
+    `(?:^|[\\s.;!?])(?:[-*]\\s*)?(?:#{1,6}\\s*)?(?:\\*\\*)?(${KNOWN_SECTION_NAMES.map(escapeRegExp).join("|")})(?:\\*\\*)?\\s*:\\s*`,
+    "igu"
+  );
+}
+
 function extractSectionLine(text: string, section: string): string | undefined {
-  return text.match(SECTION_LINE_PATTERN(section))?.[1]?.trim();
+  const lineMatch = text.match(SECTION_LINE_PATTERN(section))?.[1]?.trim();
+  if (lineMatch) return lineMatch;
+
+  const block = extractSectionBlock(text, section);
+  return block
+    ?.replace(new RegExp(`^${escapeRegExp(section)}\\s*:\\s*`, "iu"), "")
+    .split(/\r?\n/u)[0]
+    ?.trim();
 }
 
 function extractSectionBlock(
   text: string,
   section: string
 ): string | undefined {
-  const lines = text.split(/\r?\n/u);
-  const sectionPattern = new RegExp(
-    `^\\s*(?:[-*]\\s*)?(?:#{1,6}\\s*)?(?:\\*\\*)?${escapeRegExp(section)}(?:\\*\\*)?\\s*:\\s*(.*)$`,
-    "iu"
-  );
-  const block: string[] = [];
-  let isCollecting = false;
+  const match = sectionHeaderPattern(section).exec(text);
+  if (!match) return undefined;
 
-  for (const line of lines) {
-    if (!isCollecting) {
-      const match = line.match(sectionPattern);
-      if (!match) continue;
-      isCollecting = true;
-      block.push(`${section}: ${match[1]?.trim() ?? ""}`.trim());
-      continue;
-    }
+  const bodyStart = match.index + match[0].length;
+  const nextSectionPattern = anySectionHeaderPattern();
+  nextSectionPattern.lastIndex = bodyStart;
+  const nextSection = nextSectionPattern.exec(text);
+  const bodyEnd = nextSection?.index ?? text.length;
+  const body = text.slice(bodyStart, bodyEnd).trim();
 
-    if (ANY_KNOWN_SECTION_PATTERN.test(line)) break;
-    block.push(line);
-  }
-
-  return block.join("\n").trim() || undefined;
+  return `${section}: ${body}`.trim();
 }
 
 function removeTrailingPunctuation(value: string) {
@@ -158,31 +171,21 @@ function removeInternalSections(text: string): string {
 }
 
 function removeSectionBlocks(text: string, sections: string[]) {
-  const lines = text.split(/\r?\n/u);
-  const patterns = sections.map(
-    section => new RegExp(`^\\s*${escapeRegExp(section)}\\s*:\\s*(.*)$`, "iu")
-  );
-  const output: string[] = [];
-  let isSkipping = false;
+  let output = text;
 
-  for (const line of lines) {
-    const hitIndex = patterns.findIndex(pattern => pattern.test(line));
-    if (hitIndex >= 0) {
-      isSkipping = true;
-      continue;
-    }
+  for (const section of sections) {
+    const sectionMatch = sectionHeaderPattern(section).exec(output);
+    if (!sectionMatch) continue;
 
-    if (isSkipping && ANY_KNOWN_SECTION_PATTERN.test(line)) {
-      isSkipping = false;
-    }
-
-    if (!isSkipping) output.push(line);
+    const nextSectionPattern = anySectionHeaderPattern();
+    nextSectionPattern.lastIndex = sectionMatch.index + sectionMatch[0].length;
+    const nextSection = nextSectionPattern.exec(output);
+    output = `${output.slice(0, sectionMatch.index)}${
+      nextSection ? output.slice(nextSection.index) : ""
+    }`;
   }
 
-  return output
-    .join("\n")
-    .replace(/\n{3,}/gu, "\n\n")
-    .trim();
+  return output.replace(/\n{3,}/gu, "\n\n").trim();
 }
 function buildDisplayFallbackQuestions(
   tipoOutput: SheetContentType,

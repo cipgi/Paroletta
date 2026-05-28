@@ -94,6 +94,20 @@ Prompt immagine: tecnico`,
     );
   });
 
+  it("extracts inline morphosyntax questions before the image prompt", () => {
+    const result = getUserFacingSheetContent({
+      tipoOutput: "morfosintassi_complessa",
+      testoGenerato:
+        "Obiettivo morfosintattico: soggetto-verbo-oggetto. Frase target: Il gatto mangia la palla. Scena da illustrare: gatto nero con palla rossa. Domande di comprensione: 1. Chi mangia la palla? 2. Di che colore è il gatto? 3. Dove si trova il gatto? Prompt immagine: tecnico",
+    });
+
+    expect(result).toContain(
+      "Domande di comprensione: 1. Chi mangia la palla? 2. Di che colore è il gatto? 3. Dove si trova il gatto?"
+    );
+    expect(result).not.toContain("Prompt immagine");
+    expect(result).not.toContain("n/d");
+  });
+
   it("adds the standard structure for story sheets", () => {
     const result = getUserFacingSheetContent({
       tipoOutput: "storia",
