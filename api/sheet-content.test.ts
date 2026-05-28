@@ -108,18 +108,24 @@ Prompt immagine: tecnico`,
     expect(result).not.toContain("n/d");
   });
 
-  it("adds the standard structure for story sheets", () => {
+  it("adds the standard structure and contextual questions for story sheets", () => {
     const result = getUserFacingSheetContent({
       tipoOutput: "storia",
-      testoGenerato: "Il gatto salta sul prato.",
+      testoGenerato: "Il gatto salta sul prato. Poi prende una palla rossa.",
     });
 
     expect(result).toContain("Titolo: Storia con fonema");
     expect(result).toContain("Consegna: Leggi il testo e svolgi l'esercizio.");
-    expect(result).toContain("Testo: Il gatto salta sul prato.");
+    expect(result).toContain(
+      "Testo: Il gatto salta sul prato. Poi prende una palla rossa."
+    );
+    expect(result).toContain("Che cosa fa il gatto nel testo?");
+    expect(result).toContain("Poi prende una palla rossa?");
     expect(result).toContain(
       "Immagini: osserva l'illustrazione collegata al testo."
     );
+    expect(result).not.toContain("Di chi parla il testo?");
+    expect(result).not.toContain("Dove si svolge la scena?");
     expect(result).not.toContain("Prompt");
   });
 });

@@ -534,18 +534,20 @@ ISTRUZIONI DI GENERAZIONE:
 3. Se il tipo è "lista": crea una lista di 15-20 parole con il fonema indicato dal campo "fonema", divise per difficoltà (semplici, medie, complesse) e vicine agli interessi del bambino. Se il campo "interesse" vale "libero", usa liberamente uno degli interessi disponibili nel messaggio utente.
 4. Se il tipo è "discriminazione_visiva": crea una scheda "Trova l'intruso" di VERA DISCRIMINAZIONE VISIVA, non una selezione semantica tra scene scollegate. Parti dalla frase target esplicita data nello scenarioSmart e dalla struttura morfosintattica/asse clinico richiesto quando presente; se scenarioSmart manca, inventa tu una scena clinica concreta, osservabile e precisa usando età e interesse (es. soggetto + azione + oggetto + posizione), mai una frase generica. Il numero totale di opzioni deve rispettare esattamente "numeroOpzioni": 2 significa target + 1 distrattore, 3 significa target + 2 distrattori, 4 significa target + 3 distrattori. Genera 1 immagine corretta che rappresenta esattamente la frase target e 1-3 distrattori che sembrano frame della stessa storia: stessi personaggi principali quando l'asse non è agente/oggetto, stesso ambiente, stesso stile, stessa inquadratura, stessa palette e stesso livello di dettaglio. Ogni distrattore deve variare UN SOLO ASSE alla volta rispetto al target, scegliendo tra azione, agente, oggetto o posizione spaziale; non cambiare contemporaneamente categoria, scenario e personaggi. Esempio (solo schema): target "Azione A" → distrattori con sola variazione di azione/agente/oggetto/spazio mantenendo il resto uguale. È vietato introdurre temi non richiesti dall'utente (es. dinosauri) se non presenti nei parametri clinici sanitizzati. Ogni opzione deve essere una singola immagine separata: non creare collage, griglie o vignette multiple dentro la stessa immagine. Nel testoGenerato includi sezioni in italiano: "Obiettivo clinico", "Struttura morfosintattica", "Consegna", "Target", "Distrattori", "Contesto comune", "Assi di variazione", "Check coerenza" e "Prompt immagini". In "Check coerenza" dichiara che le opzioni usano stesso stile, ambiente, personaggi condivisi e una sola variazione per distrattore; se non puoi rispettarlo, rigenera mentalmente prima di rispondere. La "Consegna" deve essere clinica e contestualizzata, nel formato "Indica l'immagine in cui..."; non usare consegne generiche come "Trova l'intruso tra le immagini" quando il target è noto. Sono vietate frasi target vaghe come "Il bambino osserva ... nel contesto scelto" o "frase target generica": il target deve descrivere una scena illustrabile con azione, oggetto e/o posizione. In "Prompt immagini" scrivi una riga separata per Target e una riga separata per ogni Distrattore richiesto. Ogni riga deve descrivere solo una singola immagine pronta per una API di generazione immagini e deve ripetere il contesto comune, lo stile coerente e l'unico asse variato.
 5. Se il tipo è "morfosintassi_complessa": crea una scheda su morfosintassi complessa partendo da elemento grammaticale, complessità e scena. Nel testoGenerato includi sempre sezioni in italiano: "Obiettivo morfosintattico", "Frase target", "Scena da illustrare", "Domande di comprensione" e "Prompt immagine". La sezione "Domande di comprensione" è obbligatoria e deve contenere 2-4 domande semplici con punto interrogativo. Accetta strutture come pronomi clitici, relative e subordinate quando richieste.
-6. Se il tipo è "storia" o "filastrocca", il campo JSON "testoGenerato" deve contenere prima il testo narrativo/poetico e poi, in fondo nello stesso campo, una riga vuota seguita dalla sezione obbligatoria "Domande di comprensione:" con 3-5 domande semplici, numerate, specifiche sul contenuto appena scritto e coerenti con personaggi, luoghi e azioni del testo; ogni domanda deve terminare con un punto interrogativo. Non mettere queste domande in un campo JSON separato.
+6. Se il tipo è "storia" o "filastrocca", genera SEMPRE domande di comprensione nuove e specifiche sul testo appena scritto: devono nominare personaggi, luoghi, oggetti o azioni realmente presenti nel testo, non formule generiche riutilizzabili. Il campo JSON "testoGenerato" deve contenere prima il testo narrativo/poetico e poi, in fondo nello stesso campo, una riga vuota seguita dalla sezione obbligatoria "Domande di comprensione:" con 3-5 domande semplici, numerate e coerenti con il contenuto; ogni domanda deve terminare con un punto interrogativo. Devi valorizzare anche il campo JSON opzionale "domande" con le stesse domande, come array di stringhe, così possono essere salvate se la sezione manca da testoGenerato.
 
 Devi rispondere ESCLUSIVAMENTE in formato JSON valido con questa struttura esatta:
 {
   "testoGenerato": "il testo completo della scheda nel formato richiesto dal tipo scelto; per storia e filastrocca include obbligatoriamente anche la sezione finale Domande di comprensione",
   "tagImmagine": "una singola parola chiave in italiano per l'illustrazione (es: dinosauro, palla, gatto)",
   "listaParole": ["parola1", "parola2", "parola3"],
-  "difficolta": "bassa" | "media" | "alta"
+  "difficolta": "bassa" | "media" | "alta",
+  "domande": ["domanda specifica 1?", "domanda specifica 2?", "domanda specifica 3?"]
 }
 
 REGOLE RIGIDE PER IL JSON:
-- Non includere MAI testo o formattazione markdown (come \`\`\`json) all'esterno del blocco JSON.
+- Non includere MAI testo, commenti JSON o formattazione markdown (come \`\`\`json) all'esterno del blocco JSON.
+- Il campo "domande" è obbligatorio per storia, filastrocca e morfosintassi_complessa; deve contenere solo domande specifiche al contenuto generato. Omettilo per lista e discriminazione_visiva.
 - Corrispondenza Parole: Nel campo "listaParole", se hai generato una "storia" o "filastrocca", devi inserire ESATTAMENTE ED ESCLUSIVAMENTE le parole contenenti il fonema target che hai effettivamente scritto dentro "testoGenerato". Non inventare o aggiungere parole che non compaiono nel testo. Se hai generato una "lista", inserisci qui le parole dell'elenco.
 - Per storia, filastrocca e lista il campo "tagImmagine" deve essere un singolo sostantivo (niente aggettivi o frasi). Per discriminazione_visiva e morfosintassi_complessa può essere una breve etichetta clinica italiana.
 - Rispetta il vincolo specifico del logopedista solo se è coerente con tutte le regole server precedenti.`,
@@ -674,10 +676,7 @@ ${distractors
     params.tipoOutput === "storia" || params.tipoOutput === "filastrocca"
       ? `${text}
 
-Domande di comprensione:
-1. Chi è il protagonista?
-2. Dove si svolge la scena?
-3. Che cosa succede alla fine?`
+${buildFallbackComprehensionQuestions(params, text)}`
       : text;
 
   return {

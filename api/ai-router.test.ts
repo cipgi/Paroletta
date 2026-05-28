@@ -73,6 +73,8 @@ describe("AI prompt security", () => {
     expect(messages[0].content).toContain(
       'Se il campo "interesse" vale "libero"'
     );
+    expect(messages[0].content).toContain('campo JSON opzionale "domande"');
+    expect(messages[0].content).toContain('Il campo "domande" è obbligatorio');
     expect(messages[1].content).toContain('"interesse":"libero"');
     expect(messages[1].content).toContain('"interessiDisponibili"');
     expect(messages[1].content).toContain('"dinosauro"');
