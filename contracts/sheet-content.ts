@@ -201,10 +201,42 @@ function buildDisplayFallbackQuestions(
   }
 
   if (tipoOutput === "storia" || tipoOutput === "filastrocca") {
-    return "Domande di comprensione: Di chi parla il testo? Dove si svolge la scena? Che cosa succede alla fine?";
+    return buildNarrativeFallbackQuestions(text);
   }
 
   return undefined;
+}
+
+function splitIntoSentences(text: string): string[] {
+  return removeSectionBlocks(removeInternalSections(text), [
+    "Consegna",
+    "Domande di comprensione",
+    "Domande",
+  ])
+    .split(/(?<=[.!?])\s+/u)
+    .map(sentence => removeTrailingPunctuation(sentence))
+    .filter(Boolean);
+}
+
+function extractFirstSubjectPhrase(value: string): string {
+  const articlePattern =
+    /^(il|lo|la|i|gli|le|un|uno|una)\s+([\p{L}]+(?:['’][\p{L}]+)?)/iu;
+  const articleMatch = value.trim().match(articlePattern);
+  if (articleMatch)
+    return lowerFirstLetter(`${articleMatch[1]} ${articleMatch[2]}`);
+
+  return lowerFirstLetter(
+    value.match(/[\p{L}]+(?:['’][\p{L}]+)?/u)?.[0] ?? "testo"
+  );
+}
+
+function buildNarrativeFallbackQuestions(text: string) {
+  const sentences = splitIntoSentences(text);
+  const firstSentence = sentences[0] ?? "il testo";
+  const secondSentence = sentences[1] ?? firstSentence;
+  const subject = extractFirstSubjectPhrase(firstSentence);
+
+  return `Domande di comprensione: 1. Che cosa succede in questa parte: ${firstSentence}? 2. Che cosa fa ${subject} nel testo? 3. Che cosa succede dopo questa parte: ${secondSentence}?`;
 }
 
 function joinVisibleBlocks(blocks: Array<string | undefined>) {
