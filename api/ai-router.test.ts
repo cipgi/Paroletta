@@ -195,6 +195,36 @@ Distrattore 3: stesso ambiente, bambino osserva oggetto diverso nel contesto sce
     expect(morph.testoGenerato).not.toContain("n/d");
   });
 
+  it("keeps model-provided separate questions for stories when testoGenerato omits them", () => {
+    const storyParams = sanitizeGenerationParams({
+      eta: "6 anni",
+      fonema: "r",
+      interesse: "gatto",
+      tipoOutput: "storia",
+    });
+
+    const story = ensureComprehensionQuestions(
+      {
+        testoGenerato:
+          "Il gatto nero corre nel prato. Poi prende una palla rossa.",
+        tagImmagine: "gatto",
+        listaParole: ["nero", "corre", "prato", "rossa"],
+        difficolta: "media",
+        domande: [
+          "Chi corre nel prato?",
+          "Che cosa prende il gatto?",
+          "Di che colore è la palla?",
+        ],
+      },
+      storyParams
+    );
+
+    expect(story.testoGenerato).toContain("1. Chi corre nel prato?");
+    expect(story.testoGenerato).toContain("2. Che cosa prende il gatto?");
+    expect(story.testoGenerato).toContain("3. Di che colore è la palla?");
+    expect(story.testoGenerato).not.toContain("Di chi parla il testo?");
+  });
+
   it("keeps sanitized user values as data separate from the fixed server template", () => {
     const params = sanitizeGenerationParams({
       eta: "6 anni",
