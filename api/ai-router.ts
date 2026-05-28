@@ -317,6 +317,115 @@ function planMatchesExpectedTarget(
   return matches.length >= Math.min(2, expectedTokens.length);
 }
 
+function isGenericVisualTarget(value: string): boolean {
+  const normalized = value
+    .toLocaleLowerCase("it-IT")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return (
+    /\b(?:contesto|tema) scelto\b/iu.test(normalized) ||
+    /\bfrase target generica\b/iu.test(normalized) ||
+    /\bosserva\s+\w+\s+nel\s+contesto\b/iu.test(normalized)
+  );
+}
+
+function hasComprehensionQuestions(text: string): boolean {
+  const questionsSection =
+    text.match(
+      /(?:^|\n)\s*(?:#{1,6}\s*)?(?:\*\*)?Domande di comprensione(?:\*\*)?\s*:\s*([\s\S]*)/iu
+    )?.[1] ??
+    text.match(
+      /(?:^|\n)\s*(?:#{1,6}\s*)?(?:\*\*)?Domande(?:\*\*)?\s*:\s*([\s\S]*)/iu
+    )?.[1] ??
+    "";
+
+  return /\?/u.test(questionsSection);
+}
+
+function buildFallbackComprehensionQuestions(
+  params: GenerationParams,
+  text: string
+): string {
+  if (params.tipoOutput === "morfosintassi_complessa") {
+    const target =
+      extractGeneratedSectionLine(text, "Frase target") ??
+      extractGeneratedSectionLine(text, "Testo") ??
+      "la frase";
+    const scene =
+      extractGeneratedSectionLine(text, "Scena da illustrare") ??
+      params.descrizioneScena ??
+      "la scena";
+
+    return `Domande di comprensione:\n1. Chi o che cosa compie l'azione nella frase: ${target}?\n2. Che cosa succede nella scena: ${scene}?\n3. Quale parola aiuta a capire a chi o a che cosa si riferisce l'azione?`;
+  }
+
+  const body = text
+    .replace(/Domande di comprensione:[\s\S]*$/iu, "")
+    .replace(/Domande:[\s\S]*$/iu, "")
+    .trim();
+  const firstSentence = body.match(/[^.!?]+[.!?]/u)?.[0]?.trim() ?? "il testo";
+
+  return `Domande di comprensione:\n1. Di chi parla il testo?\n2. Dove si svolge la scena?\n3. Che cosa succede in questa parte: ${firstSentence}?`;
+}
+
+export function ensureComprehensionQuestions(
+  data: z.infer<typeof aiResponseSchema>,
+  params: GenerationParams
+): z.infer<typeof aiResponseSchema> {
+  if (
+    !["storia", "filastrocca", "morfosintassi_complessa"].includes(
+      params.tipoOutput
+    ) ||
+    hasComprehensionQuestions(data.testoGenerato)
+  ) {
+    return data;
+  }
+
+  return {
+    ...data,
+    testoGenerato: `${data.testoGenerato.trim()}\n\n${buildFallbackComprehensionQuestions(
+      params,
+      data.testoGenerato
+    )}`,
+  };
+}
+
+function getVisualFallbackScenario(params: GenerationParams) {
+  const interest = resolveInterestForGeneration(params.interesse);
+  const sceneByInterest: Record<string, string> = {
+    dinosauro: "Il bambino mette il dinosauro piccolo dentro la scatola rossa",
+    principessa: "La principessa posa la corona sopra il cuscino blu",
+    calcio: "Il bambino calcia la palla rossa dentro la porta piccola",
+    gatto: "Il gatto spinge la palla sotto la sedia verde",
+    cane: "Il bambino asciuga il cane con un asciugamano giallo",
+    auto: "Il bambino parcheggia l'auto rossa davanti al garage",
+    cucina: "La bambina mette la mela dentro il cestino",
+    mare: "Il bambino mette il secchiello sopra la sabbia bagnata",
+    ballo: "La bambina alza il nastro sopra la testa",
+    musica: "Il bambino suona il tamburo vicino alla finestra",
+  };
+  const targetPhrase = params.scenarioSmart || sceneByInterest[interest];
+  const tokens = targetPhrase.split(/\s+/u).filter(Boolean);
+  const subject = tokens.slice(0, 2).join(" ") || "Il bambino";
+  const alternateSubject = /^Il bambino/iu.test(subject)
+    ? subject.replace(/^Il bambino/iu, "La bambina")
+    : /^La bambina/iu.test(subject)
+      ? subject.replace(/^La bambina/iu, "Il bambino")
+      : "La bambina";
+  const context = `stessa scena clinica sul tema "${interest}", stessi personaggi, stesso ambiente, stesso stile vettoriale, stessa inquadratura frontale e stessa palette`;
+
+  return {
+    interest,
+    targetPhrase,
+    context,
+    distractors: [
+      `Distrattore 1 (azione): ${targetPhrase.replace(/\b(mette|posa|calcia|spinge|asciuga|parcheggia|alza|suona)\b/iu, "tocca")}`,
+      `Distrattore 2 (posizione): ${targetPhrase.replace(/\b(dentro|sopra|sotto|davanti|vicino)\b/iu, "accanto a")}`,
+      `Distrattore 3 (agente): ${alternateSubject} ${tokens.slice(2).join(" ")}`,
+    ],
+  };
+}
 export function validateVisualDiscriminationPlan(
   text: string,
   optionCount: number,
@@ -345,7 +454,8 @@ export function validateVisualDiscriminationPlan(
 
   return (
     hasRequiredSections &&
-    Boolean(target) &&
+    target !== undefined &&
+    !isGenericVisualTarget(target) &&
     Boolean(context) &&
     distractors.length >= optionCount - 1 &&
     promptRows.length >= optionCount + 1 &&
@@ -398,9 +508,9 @@ ISTRUZIONI DI GENERAZIONE:
 1. Se il tipo è "storia": scrivi una storia brevissima (max 150 parole) sul tema indicato dal campo "interesse". Se il campo "interesse" vale "libero", non c'è un interesse specifico: scegli liberamente un tema tra gli interessi disponibili nel messaggio utente. Inserisci in modo naturale le parole contenenti il fonema indicato dal campo "fonema".
 2. Se il tipo è "filastrocca": componi una filastrocca facile e ritmata (8-12 versi) a tema indicato dal campo "interesse". Se il campo "interesse" vale "libero", scegli liberamente un tema tra gli interessi disponibili nel messaggio utente. Usa parole con il fonema indicato dal campo "fonema".
 3. Se il tipo è "lista": crea una lista di 15-20 parole con il fonema indicato dal campo "fonema", divise per difficoltà (semplici, medie, complesse) e vicine agli interessi del bambino. Se il campo "interesse" vale "libero", usa liberamente uno degli interessi disponibili nel messaggio utente.
-4. Se il tipo è "discriminazione_visiva": crea una scheda "Trova l'intruso" di VERA DISCRIMINAZIONE VISIVA, non una selezione semantica tra scene scollegate. Parti dalla frase target esplicita data nello scenarioSmart e dalla struttura morfosintattica/asse clinico richiesto quando presente. Il numero totale di opzioni deve rispettare esattamente "numeroOpzioni": 2 significa target + 1 distrattore, 3 significa target + 2 distrattori, 4 significa target + 3 distrattori. Genera 1 immagine corretta che rappresenta esattamente la frase target e 1-3 distrattori che sembrano frame della stessa storia: stessi personaggi principali quando l'asse non è agente/oggetto, stesso ambiente, stesso stile, stessa inquadratura, stessa palette e stesso livello di dettaglio. Ogni distrattore deve variare UN SOLO ASSE alla volta rispetto al target, scegliendo tra azione, agente, oggetto o posizione spaziale; non cambiare contemporaneamente categoria, scenario e personaggi. Esempio (solo schema): target "Azione A" → distrattori con sola variazione di azione/agente/oggetto/spazio mantenendo il resto uguale. È vietato introdurre temi non richiesti dall'utente (es. dinosauri) se non presenti nei parametri clinici sanitizzati. Ogni opzione deve essere una singola immagine separata: non creare collage, griglie o vignette multiple dentro la stessa immagine. Nel testoGenerato includi sezioni in italiano: "Obiettivo clinico", "Struttura morfosintattica", "Consegna", "Target", "Distrattori", "Contesto comune", "Assi di variazione", "Check coerenza" e "Prompt immagini". In "Check coerenza" dichiara che le opzioni usano stesso stile, ambiente, personaggi condivisi e una sola variazione per distrattore; se non puoi rispettarlo, rigenera mentalmente prima di rispondere. La "Consegna" deve essere clinica e contestualizzata, nel formato "Indica l'immagine in cui..."; non usare consegne generiche come "Trova l'intruso tra le immagini" quando il target è noto. In "Prompt immagini" scrivi una riga separata per Target e una riga separata per ogni Distrattore richiesto. Ogni riga deve descrivere solo una singola immagine pronta per una API di generazione immagini e deve ripetere il contesto comune, lo stile coerente e l'unico asse variato.
-5. Se il tipo è "morfosintassi_complessa": crea una scheda su morfosintassi complessa partendo da elemento grammaticale, complessità e scena. Nel testoGenerato includi sezioni in italiano: "Obiettivo morfosintattico", "Frase target", "Scena da illustrare", "Domande di comprensione" e "Prompt immagine". Accetta strutture come pronomi clitici, relative e subordinate quando richieste.
-6. Se il tipo è "storia" o "filastrocca", aggiungi in fondo al testoGenerato una sezione "Domande di comprensione" con 3-5 domande semplici e coerenti con il testo.
+4. Se il tipo è "discriminazione_visiva": crea una scheda "Trova l'intruso" di VERA DISCRIMINAZIONE VISIVA, non una selezione semantica tra scene scollegate. Parti dalla frase target esplicita data nello scenarioSmart e dalla struttura morfosintattica/asse clinico richiesto quando presente; se scenarioSmart manca, inventa tu una scena clinica concreta, osservabile e precisa usando età e interesse (es. soggetto + azione + oggetto + posizione), mai una frase generica. Il numero totale di opzioni deve rispettare esattamente "numeroOpzioni": 2 significa target + 1 distrattore, 3 significa target + 2 distrattori, 4 significa target + 3 distrattori. Genera 1 immagine corretta che rappresenta esattamente la frase target e 1-3 distrattori che sembrano frame della stessa storia: stessi personaggi principali quando l'asse non è agente/oggetto, stesso ambiente, stesso stile, stessa inquadratura, stessa palette e stesso livello di dettaglio. Ogni distrattore deve variare UN SOLO ASSE alla volta rispetto al target, scegliendo tra azione, agente, oggetto o posizione spaziale; non cambiare contemporaneamente categoria, scenario e personaggi. Esempio (solo schema): target "Azione A" → distrattori con sola variazione di azione/agente/oggetto/spazio mantenendo il resto uguale. È vietato introdurre temi non richiesti dall'utente (es. dinosauri) se non presenti nei parametri clinici sanitizzati. Ogni opzione deve essere una singola immagine separata: non creare collage, griglie o vignette multiple dentro la stessa immagine. Nel testoGenerato includi sezioni in italiano: "Obiettivo clinico", "Struttura morfosintattica", "Consegna", "Target", "Distrattori", "Contesto comune", "Assi di variazione", "Check coerenza" e "Prompt immagini". In "Check coerenza" dichiara che le opzioni usano stesso stile, ambiente, personaggi condivisi e una sola variazione per distrattore; se non puoi rispettarlo, rigenera mentalmente prima di rispondere. La "Consegna" deve essere clinica e contestualizzata, nel formato "Indica l'immagine in cui..."; non usare consegne generiche come "Trova l'intruso tra le immagini" quando il target è noto. Sono vietate frasi target vaghe come "Il bambino osserva ... nel contesto scelto" o "frase target generica": il target deve descrivere una scena illustrabile con azione, oggetto e/o posizione. In "Prompt immagini" scrivi una riga separata per Target e una riga separata per ogni Distrattore richiesto. Ogni riga deve descrivere solo una singola immagine pronta per una API di generazione immagini e deve ripetere il contesto comune, lo stile coerente e l'unico asse variato.
+5. Se il tipo è "morfosintassi_complessa": crea una scheda su morfosintassi complessa partendo da elemento grammaticale, complessità e scena. Nel testoGenerato includi sempre sezioni in italiano: "Obiettivo morfosintattico", "Frase target", "Scena da illustrare", "Domande di comprensione" e "Prompt immagine". La sezione "Domande di comprensione" è obbligatoria e deve contenere 2-4 domande semplici con punto interrogativo. Accetta strutture come pronomi clitici, relative e subordinate quando richieste.
+6. Se il tipo è "storia" o "filastrocca", aggiungi sempre in fondo al testoGenerato una sezione obbligatoria "Domande di comprensione" con 3-5 domande semplici, numerate e coerenti con il testo; ogni domanda deve terminare con un punto interrogativo.
 
 Devi rispondere ESCLUSIVAMENTE in formato JSON valido con questa struttura esatta:
 {
@@ -454,17 +564,11 @@ async function callOpenAI(messages: PromptMessage[]): Promise<unknown> {
 
 function mockAIResponse(params: GenerationParams) {
   if (params.tipoOutput === "discriminazione_visiva") {
-    const baseSubject = params.tagImmagine ?? params.interesse ?? "personaggio";
-    const targetPhrase =
-      params.scenarioSmart ??
-      `Il bambino osserva ${baseSubject} nel contesto scelto`;
+    const scenario = getVisualFallbackScenario(params);
+    const targetPhrase = scenario.targetPhrase;
     const options = Math.min(params.numeroOpzioni ?? 4, 4);
-    const distractors = [
-      `Distrattore 1 (azione): Il bambino indica ${baseSubject} nel contesto scelto`,
-      `Distrattore 2 (agente): ${baseSubject} osserva il bambino nel contesto scelto`,
-      "Distrattore 3 (oggetto): Il bambino osserva un oggetto diverso nel contesto scelto",
-    ].slice(0, Math.max(options - 1, 1));
-    const context = `stesso ambiente coerente con il tema "${params.interesse}", stessi personaggi, stesso stile vettoriale, stessa inquadratura frontale e stessa palette`;
+    const distractors = scenario.distractors.slice(0, Math.max(options - 1, 1));
+    const context = scenario.context;
 
     return {
       testoGenerato: `Obiettivo clinico: Discriminazione visiva vera con variazioni minime su una frase target.
@@ -650,7 +754,7 @@ export const aiRouter = createRouter({
           "SERVICE_UNAVAILABLE",
           "La generazione non ha restituito una scheda valida. Riprova modificando leggermente i parametri."
         );
-      const data =
+      const generatedData =
         sanitizedInput.tipoOutput === "discriminazione_visiva" &&
         !validateVisualDiscriminationPlan(
           parsed.data.testoGenerato,
@@ -659,6 +763,7 @@ export const aiRouter = createRouter({
         )
           ? mockAIResponse(sanitizedInput)
           : parsed.data;
+      const data = ensureComprehensionQuestions(generatedData, sanitizedInput);
       const sanitizedWords =
         sanitizedInput.tipoOutput === "discriminazione_visiva"
           ? [

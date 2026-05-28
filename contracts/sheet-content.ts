@@ -38,7 +38,9 @@ const INTERNAL_SECTION_NAMES = new Set<string>([
 
 function sectionBody(block: string | undefined, label: string) {
   if (!block) return "";
-  return block.replace(new RegExp(`^${escapeRegExp(label)}\\s*:\\s*`, "iu"), "").trim();
+  return block
+    .replace(new RegExp(`^${escapeRegExp(label)}\\s*:\\s*`, "iu"), "")
+    .trim();
 }
 
 const SECTION_LINE_PATTERN = (section: string) =>
@@ -59,7 +61,10 @@ function extractSectionLine(text: string, section: string): string | undefined {
   return text.match(SECTION_LINE_PATTERN(section))?.[1]?.trim();
 }
 
-function extractSectionBlock(text: string, section: string): string | undefined {
+function extractSectionBlock(
+  text: string,
+  section: string
+): string | undefined {
   const lines = text.split(/\r?\n/u);
   const sectionPattern = new RegExp(
     `^\\s*(?:[-*]\\s*)?(?:#{1,6}\\s*)?(?:\\*\\*)?${escapeRegExp(section)}(?:\\*\\*)?\\s*:\\s*(.*)$`,
@@ -152,11 +157,10 @@ function removeInternalSections(text: string): string {
     .trim();
 }
 
-
 function removeSectionBlocks(text: string, sections: string[]) {
   const lines = text.split(/\r?\n/u);
-  const patterns = sections.map(section =>
-    new RegExp(`^\\s*${escapeRegExp(section)}\\s*:\\s*(.*)$`, "iu")
+  const patterns = sections.map(
+    section => new RegExp(`^\\s*${escapeRegExp(section)}\\s*:\\s*(.*)$`, "iu")
   );
   const output: string[] = [];
   let isSkipping = false;
@@ -175,15 +179,40 @@ function removeSectionBlocks(text: string, sections: string[]) {
     if (!isSkipping) output.push(line);
   }
 
-  return output.join("\n").replace(/\n{3,}/gu, "\n\n").trim();
+  return output
+    .join("\n")
+    .replace(/\n{3,}/gu, "\n\n")
+    .trim();
 }
+function buildDisplayFallbackQuestions(
+  tipoOutput: SheetContentType,
+  text: string
+) {
+  if (tipoOutput === "morfosintassi_complessa") {
+    const target =
+      sectionBody(extractSectionBlock(text, "Frase target"), "Frase target") ||
+      sectionBody(extractSectionBlock(text, "Testo"), "Testo") ||
+      "la frase";
+
+    return `Domande di comprensione: Chi compie l'azione nella frase? Che cosa succede? Quale parola aiuta a capire il significato di "${removeTrailingPunctuation(target)}"?`;
+  }
+
+  if (tipoOutput === "storia" || tipoOutput === "filastrocca") {
+    return "Domande di comprensione: Di chi parla il testo? Dove si svolge la scena? Che cosa succede alla fine?";
+  }
+
+  return undefined;
+}
+
 function joinVisibleBlocks(blocks: Array<string | undefined>) {
   return blocks.filter(Boolean).join("\n\n").trim();
 }
 
 function getSheetTitle(tipoOutput: SheetContentType): string {
-  if (tipoOutput === "discriminazione_visiva") return "Titolo: Discriminazione visiva";
-  if (tipoOutput === "morfosintassi_complessa") return "Titolo: Morfosintassi complessa";
+  if (tipoOutput === "discriminazione_visiva")
+    return "Titolo: Discriminazione visiva";
+  if (tipoOutput === "morfosintassi_complessa")
+    return "Titolo: Morfosintassi complessa";
   if (tipoOutput === "storia") return "Titolo: Storia con fonema";
   if (tipoOutput === "filastrocca") return "Titolo: Filastrocca con fonema";
   if (tipoOutput === "lista") return "Titolo: Lista parole con fonema";
@@ -231,7 +260,8 @@ export function getUserFacingSheetContent(params: {
         : cleaned
           ? `Testo: ${cleaned}`
           : undefined,
-      comprehensionQuestions ?? "Domande di comprensione: n/d",
+      comprehensionQuestions ??
+        buildDisplayFallbackQuestions(params.tipoOutput, text),
       "Immagini: usa l'immagine per rispondere alle domande.",
     ]);
   }
@@ -254,7 +284,7 @@ export function getUserFacingSheetContent(params: {
     getSheetTitle(params.tipoOutput),
     explicitInstruction,
     bodyText ? `Testo: ${bodyText}` : undefined,
-    questions,
+    questions ?? buildDisplayFallbackQuestions(params.tipoOutput, text),
     "Immagini: osserva l'illustrazione collegata al testo.",
   ]);
 }

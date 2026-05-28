@@ -42,14 +42,6 @@ export default function Dashboard() {
     }
   );
 
-  if (isLoading) {
-    return <div className="text-slate-500">Caricamento dashboard...</div>;
-  }
-
-  if (!isAuthenticated) {
-    return null;
-  }
-
   const totalSheets = sheetsCount ?? sheetsList?.length ?? 0;
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [phonemeFilter, setPhonemeFilter] = useState<string>("all");
@@ -83,6 +75,14 @@ export default function Dashboard() {
     trial: "Prova Gratuita",
     base: "Base",
   };
+
+  if (isLoading) {
+    return <div className="text-slate-500">Caricamento dashboard...</div>;
+  }
+
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -171,7 +171,9 @@ export default function Dashboard() {
             <select
               className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm"
               value={sortBy}
-              onChange={event => setSortBy(event.target.value as "recenti" | "vecchie")}
+              onChange={event =>
+                setSortBy(event.target.value as "recenti" | "vecchie")
+              }
             >
               <option value="recenti">Più recenti</option>
               <option value="vecchie">Più vecchie</option>
