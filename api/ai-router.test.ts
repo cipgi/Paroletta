@@ -16,6 +16,7 @@ vi.mock("./middleware", () => ({
 import {
   buildPromptMessages,
   ensureComprehensionQuestions,
+  extractExpectedVisualTargetHint,
   sanitizeGenerationParams,
   sanitizePromptVariable,
   validateVisualDiscriminationPlan,
@@ -105,6 +106,24 @@ describe("AI prompt security", () => {
     expect(messages[1].content).toContain('"numeroOpzioni":4');
   });
 
+  it("treats the visual target phrase as optional", () => {
+    expect(extractExpectedVisualTargetHint(undefined)).toBeUndefined();
+    expect(extractExpectedVisualTargetHint("   ")).toBeUndefined();
+    expect(
+      extractExpectedVisualTargetHint(
+        "Frase target: Il papà guida l'auto. Struttura: soggetto-verbo-oggetto"
+      )
+    ).toBe("Il papà guida l'auto");
+    expect(
+      extractExpectedVisualTargetHint(
+        "Struttura: soggetto-verbo-oggetto. Variazioni: azione, agente, oggetto"
+      )
+    ).toBeUndefined();
+    expect(extractExpectedVisualTargetHint("il papà guida l'auto")).toBe(
+      "il papà guida l'auto"
+    );
+  });
+
   it("validates visual discrimination plans before saving", () => {
     const validPlan = `Obiettivo clinico: Discriminazione visiva vera.
 Struttura morfosintattica: frase semplice soggetto verbo oggetto.
@@ -136,6 +155,29 @@ Distrattore 3: stessa foresta, bambino accarezza cane.`;
         4
       )
     ).toBe(false);
+  });
+
+  it("accepts visual discrimination plans with multiline bullet rows", () => {
+    const bulletedPlan = `Obiettivo clinico: discriminazione visiva su scena quotidiana.
+Struttura morfosintattica: soggetto verbo oggetto.
+Consegna: Indica l'immagine in cui il papà guida l'auto.
+Target: Il papà guida l'auto.
+Distrattori:
+- Distrattore 1 (difficile): Il papà guida la stessa auto con un faro di colore diverso.
+- Distrattore 2 (intermedio): Il papà pulisce l'auto nello stesso vialetto.
+- Distrattore 3 (facile): La mamma guida una bicicletta.
+Contesto comune: stesso ambiente domestico, stesso stile illustrativo e stessa inquadratura.
+Assi di variazione: dettaglio oggetto; azione; agente e oggetto.
+Check coerenza: stesso stile e stesso ambiente, con differenze graduate per livello.
+Prompt immagini:
+- Target: stesso vialetto, papà guida l'auto, illustrazione coerente.
+- Distrattore 1: stesso vialetto, papà guida la stessa auto con faro diverso, livello difficile.
+- Distrattore 2: stesso vialetto, papà pulisce l'auto, livello intermedio.
+- Distrattore 3: stesso vialetto, mamma guida una bicicletta, livello facile.`;
+
+    expect(
+      validateVisualDiscriminationPlan(bulletedPlan, 4, "il papà guida l'auto")
+    ).toBe(true);
   });
 
   it("rejects generic visual discrimination targets before saving", () => {
