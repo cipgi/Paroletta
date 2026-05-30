@@ -95,7 +95,9 @@ describe("AI prompt security", () => {
 
     expect(messages[0].content).toContain("VERA DISCRIMINAZIONE VISIVA");
     expect(messages[0].content).toContain("frase target esplicita");
-    expect(messages[0].content).toContain("UN SOLO ASSE");
+    expect(messages[0].content).toContain("difficoltà graduata obbligatoria");
+    expect(messages[0].content).toContain("Distrattore 1 (difficile)");
+    expect(messages[0].content).toContain("Distrattore 3 (facile)");
     expect(messages[0].content).toContain("Check coerenza");
     expect(messages[1].content).toContain(
       '"tipoOutput":"discriminazione_visiva"'

@@ -19,13 +19,13 @@ Il server costruisce due messaggi:
 - `system`: template clinico fisso + regole di sicurezza + formato JSON obbligatorio.
 - `user`: JSON con parametri già sanitizzati (trattati come dati, non istruzioni).
 
-### Chiamata modello e fallback
+### Chiamata modello
 - Chiamata a `chat/completions` con `gpt-4o-mini` e `response_format: json_object`.
-- Se la chiamata fallisce, fallback su `mockAIResponse`.
+- Se la chiamata fallisce, la richiesta viene interrotta con errore utente: non vengono usati contenuti mockup o precompilati.
 
 ### Validazione output
 - Parse con schema zod (`aiResponseSchema`).
-- Se `discriminazione_visiva`, controllo di coerenza strutturale (`validateVisualDiscriminationPlan`) con eventuale fallback mock.
+- Se `discriminazione_visiva`, controllo di coerenza strutturale (`validateVisualDiscriminationPlan`); se il piano non è valido, la richiesta viene interrotta invece di sostituire il risultato con dati mockup.
 
 ### Post-processing e persistenza
 - Normalizzazione `listaParole` in base al tipo scheda.
@@ -78,8 +78,9 @@ Tipi inclusi: `storia`, `filastrocca`, `lista`.
 - Template system molto prescrittivo:
   - obbligo sezioni: obiettivo, consegna, target, distrattori, contesto, assi, check coerenza, prompt immagini.
   - target esplicito,
-  - distrattori con **una sola variazione** per volta (azione/agente/oggetto/spaziale),
-  - coerenza visiva forte (stesso stile/ambiente/personaggi),
+  - immagine bersaglio inequivocabilmente corretta rispetto alla frase target,
+  - distrattori con difficoltà graduata: D1 difficile quasi identico con 1-2 dettagli diversi, D2 intermedio con differenze evidenti ma nello stesso tema, D3 facile con differenze sostanziali,
+  - coerenza visiva forte (stesso stile/palette; ambiente più simile nei distrattori difficili e più differenziabile nel distrattore facile),
   - no collage/griglie.
 - Dopo output: validazione formale con `validateVisualDiscriminationPlan`.
 
@@ -95,7 +96,7 @@ Tipi inclusi: `storia`, `filastrocca`, `lista`.
 
 ### Leve qualità da ottimizzare
 - aderenza esatta al target (soggetto-verbo-oggetto),
-- robustezza asse singolo per distrattore,
+- robustezza della scala bersaglio/D1 difficile/D2 intermedio/D3 facile,
 - coerenza stilistica cross-frame,
 - chiarezza clinica della consegna.
 

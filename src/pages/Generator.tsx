@@ -267,9 +267,9 @@ export default function Generator() {
               rows={5}
             />
             <p className="text-xs text-slate-500">
-              Paroletta genera un target corretto e distrattori che sembrano
-              frame della stessa scena, con una sola variazione clinica alla
-              volta.
+              Paroletta genera un bersaglio esatto e distrattori graduati:
+              difficile quasi identico, intermedio con differenze evidenti,
+              facile con differenze sostanziali.
             </p>
           </div>
 
