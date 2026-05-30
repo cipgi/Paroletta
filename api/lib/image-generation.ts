@@ -156,6 +156,7 @@ function buildVisualOptionScene(params: {
   isTarget: boolean;
   context?: string;
   variationAxis?: string;
+  difficultyGuidance?: string;
   exclude: string[];
 }) {
   const context = params.context
@@ -167,25 +168,39 @@ function buildVisualOptionScene(params: {
   const matchingRule = params.isTarget
     ? `REQUISITO NON NEGOZIABILE: questa immagine deve rendere vera la consegna e mostrare chiaramente il target esatto: ${params.target}. `
     : `REQUISITO NON NEGOZIABILE: questa immagine deve rappresentare il distrattore, non il target; deve rendere falsa la consegna sul target esatto: ${params.target}. `;
+  const difficultyGuidance = params.difficultyGuidance
+    ? `Livello del distrattore: ${params.difficultyGuidance}. `
+    : "Livello dell'opzione: bersaglio esatto, senza errori o ambiguità. ";
   const exclusions = params.exclude.length
     ? `Non includere nella stessa immagine: ${params.exclude.join(", ")}. `
     : "";
 
   return [
     `Frame separato di una serie visiva coerente: ${params.label}.`,
-    "Le immagini della serie devono sembrare appartenere alla stessa storia clinica: stesso stile, stessa inquadratura, stesso ambiente, stessa palette e stessi personaggi salvo l'unico asse variato.",
+    "Le immagini della serie devono appartenere alla stessa attività clinica: stesso stile illustrativo, stessa palette e stessa qualità visiva; mantieni inquadratura e ambiente uguali nei distrattori difficili, ma consenti differenze più evidenti nei distrattori facili quando richieste dal livello.",
     context,
     matchingRule,
+    difficultyGuidance,
     variationAxis,
     `Rappresenta solo questa scena, senza sostituire il soggetto richiesto: ${params.description}.`,
     "La scena generata deve combaciare letteralmente con la descrizione: soggetti, azione, oggetto e posizione devono essere quelli indicati.",
-    "Varia solo il dettaglio clinico indicato; non cambiare categoria, sfondo, camera, illuminazione o altri dettagli narrativi.",
+    "Rispetta la scala di difficoltà indicata: il distrattore 1 deve essere quasi identico al target, il distrattore 2 deve avere differenze intermedie, il distrattore 3 deve essere chiaramente diverso e più facile da escludere.",
     exclusions,
     "Non creare collage, griglie, vignette multiple o scene combinate con altre opzioni.",
   ]
     .join(" ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function getVisualDistractorDifficulty(index: number): string {
+  return (
+    [
+      "difficile, quasi identico al target; cambia solo 1 dettaglio, massimo 2 dettagli piccoli e osservabili, per esempio colore, dimensione o posizione precisa dell'oggetto",
+      "intermedio; mantieni tema, ambiente e direzione generale dell'azione, ma cambia un elemento più evidente come azione, modalità o posizione principale",
+      "facile; crea una differenza sostanziale rispetto al target, per esempio agente, oggetto principale o luogo/elemento scenico, così l'opzione è chiaramente falsa",
+    ][index] ?? "graduato; differenza coerente con il livello clinico richiesto"
+  );
 }
 
 function extractVariationAxis(
@@ -222,7 +237,7 @@ export function buildImageRequests(params: {
   descrizioneScena?: string;
 }): ImageRequest[] {
   const baseStyleTags = ["stile:vettoriale_bambini", "formato:quadrato_1024"];
-  const visualStyleTags = [...baseStyleTags, "prompt_version:visual_exact_v2"];
+  const visualStyleTags = [...baseStyleTags, "prompt_version:visual_graded_v3"];
 
   if (params.tipoOutput === "discriminazione_visiva") {
     const optionCount = Math.min(Math.max(params.numeroOpzioni ?? 4, 2), 4);
@@ -290,6 +305,7 @@ export function buildImageRequests(params: {
             isTarget: false,
             context,
             variationAxis,
+            difficultyGuidance: getVisualDistractorDifficulty(index),
             exclude: [
               target,
               ...allDistractorDescriptions.filter(
@@ -425,12 +441,6 @@ function buildImageDataUrl(bytes: string, mimeType: string): string {
   return `data:${mimeType};base64,${bytes}`;
 }
 
-function buildMockImageDataUrl(label: string): string {
-  const safeLabel = sanitizeImageText(label, 60) || "Immagine non disponibile";
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 512 512"><rect width="512" height="512" rx="32" fill="#f1f5f9"/><circle cx="256" cy="214" r="58" fill="#ccfbf1"/><path d="M176 332h160" stroke="#0f766e" stroke-width="18" stroke-linecap="round"/><text x="256" y="394" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#334155">${safeLabel}</text><text x="256" y="438" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#64748b">fallback locale</text></svg>`;
-  return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
-}
-
 export async function resolveImageRequestWithCache(
   request: ImageRequest,
   db: ImageCacheDb
@@ -454,8 +464,6 @@ export async function resolveImageRequestWithCache(
   const prompt = sanitizeImagePrompt(request.prompt);
   let filePath: string;
   let mimeType = "image/png";
-  let source: CachedIllustration["source"] = "generated";
-  let fallbackReason: string | null = null;
 
   try {
     const generated = await callOpenAIImageApi(prompt);
@@ -466,9 +474,9 @@ export async function resolveImageRequestWithCache(
       cacheKey,
       error,
     });
-    source = "mock";
-    fallbackReason = describeImageGenerationError(error);
-    filePath = buildMockImageDataUrl(request.label);
+    throw new Error(
+      `Generazione immagine non disponibile: ${describeImageGenerationError(error)}`
+    );
   }
 
   const illustration = {
@@ -477,17 +485,17 @@ export async function resolveImageRequestWithCache(
     cacheKey,
     filePath,
     mimeType,
-    source,
-    fallbackReason,
+    source: "generated" as const,
+    fallbackReason: null,
     generationModel: IMAGE_GENERATION_MODEL,
-    generatedCostUsd: source === "generated" ? IMAGE_GENERATION_COST_USD : 0,
+    generatedCostUsd: IMAGE_GENERATION_COST_USD,
   };
 
   const saved = await db.save(illustration);
 
   return {
     ...saved,
-    fallbackReason: saved.fallbackReason ?? fallbackReason,
+    fallbackReason: saved.fallbackReason ?? null,
     cacheHit: false,
   };
 }

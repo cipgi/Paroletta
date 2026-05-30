@@ -61,10 +61,12 @@ Distrattore 3: cane che mangia una pera in cucina.`,
       "target esatto: il cane mangia la mela"
     );
     expect(requests[0].semanticTags.map(normalizeSemanticTag)).toContain(
-      "prompt_version:visual_exact_v2"
+      "prompt_version:visual_graded_v3"
     );
     expect(requests[1].prompt).toContain("Unico asse di variazione");
-    expect(requests[1].prompt).toContain("Varia solo il dettaglio clinico");
+    expect(requests[1].prompt).toContain("difficile, quasi identico");
+    expect(requests[2].prompt).toContain("intermedio");
+    expect(requests[3].prompt).toContain("facile");
     expect(requests[2].prompt).toContain("stesso stile");
     expect(requests[0].semanticTags.map(normalizeSemanticTag)).toContain(
       "ruolo:target"
@@ -193,7 +195,7 @@ Distrattore 1: singola immagine con un falco al centro nel cielo azzurro.`,
     }
   });
 
-  it("includes a specific fallback reason when OpenAI is not configured", async () => {
+  it("fails without saving mockup images when OpenAI is not configured", async () => {
     const previousKeys = {
       OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     };
@@ -212,20 +214,19 @@ Distrattore 1: singola immagine con un falco al centro nel cielo azzurro.`,
         },
       };
 
-      const result = await resolveImageRequestWithCache(
-        {
-          role: "target",
-          label: "Target",
-          prompt: "cane che mangia mela",
-          semanticTags: ["ruolo:target", "soggetto:cane"],
-        },
-        db
-      );
+      await expect(
+        resolveImageRequestWithCache(
+          {
+            role: "target",
+            label: "Target",
+            prompt: "cane che mangia mela",
+            semanticTags: ["ruolo:target", "soggetto:cane"],
+          },
+          db
+        )
+      ).rejects.toThrow("Chiave API OpenAI mancante");
 
-      expect(result.source).toBe("mock");
-      expect(saved).toBe(1);
-      expect(result.filePath).toMatch(/^data:image\/svg\+xml;base64,/u);
-      expect(result.fallbackReason).toContain("Chiave API OpenAI mancante");
+      expect(saved).toBe(0);
     } finally {
       consoleSpy.mockRestore();
       for (const [key, value] of Object.entries(previousKeys)) {
