@@ -180,6 +180,38 @@ Prompt immagini:
     ).toBe(true);
   });
 
+  it("accepts visual plans when validation sections are multiline", () => {
+    const multilinePlan = `Obiettivo clinico: discriminazione visiva su scena quotidiana.
+Struttura morfosintattica: soggetto verbo oggetto luogo.
+Consegna: Indica l'immagine in cui il papà guida l'auto in città.
+Target: Il papà guida l'auto in città.
+Distrattori:
+- Distrattore 1 (difficile): Il papà guida la stessa auto in città con un semaforo rosso invece che verde.
+- Distrattore 2 (intermedio): Il papà parcheggia l'auto nella stessa strada cittadina.
+- Distrattore 3 (facile): La mamma pedala in bicicletta al parco.
+Contesto comune:
+- stessa città, stesso stile illustrativo e stessa inquadratura per le opzioni più vicine.
+Assi di variazione:
+- Distrattore 1: dettaglio oggetto/ambiente, livello difficile.
+- Distrattore 2: azione, livello intermedio.
+- Distrattore 3: agente, oggetto e posizione, livello facile.
+Check coerenza:
+- coerenza di stile e ambiente; differenze graduate per livello.
+Prompt immagini:
+- **Target:** stessa città, papà guida l'auto, illustrazione coerente.
+- **Distrattore 1:** stessa città, papà guida la stessa auto con semaforo diverso, livello difficile.
+- **Distrattore 2:** stessa città, papà parcheggia l'auto, livello intermedio.
+- **Distrattore 3:** parco, mamma guida una bicicletta, livello facile.`;
+
+    expect(
+      validateVisualDiscriminationPlan(
+        multilinePlan,
+        4,
+        "il papà guida l'auto in città"
+      )
+    ).toBe(true);
+  });
+
   it("rejects generic visual discrimination targets before saving", () => {
     const genericPlan = `Obiettivo clinico: Discriminazione visiva vera.
 Struttura morfosintattica: frase semplice soggetto verbo oggetto.

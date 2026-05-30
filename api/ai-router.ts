@@ -245,7 +245,22 @@ function extractGeneratedSectionLine(
   text: string,
   section: string
 ): string | undefined {
-  return text.match(new RegExp(`${section}:\\s*([^\\n]+)`, "iu"))?.[1]?.trim();
+  const escapedSection = section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return text
+    .match(new RegExp(`${escapedSection}:\\s*([^\\n]+)`, "iu"))?.[1]
+    ?.trim();
+}
+
+function extractGeneratedSectionText(
+  text: string,
+  section: string,
+  nextSections: string[]
+): string {
+  return (
+    extractGeneratedSectionBody(text, section, nextSections) ||
+    extractGeneratedSectionLine(text, section) ||
+    ""
+  );
 }
 
 function extractGeneratedSectionBody(
@@ -393,8 +408,9 @@ function extractVisualPromptRows(text: string): string[] {
   return promptText
     .split(/\n/u)
     .map(row => row.trim())
+    .map(row => row.replace(/^\s*(?:[-*•]|\d+[.)])?\s*\*{0,2}/u, ""))
     .filter(row =>
-      /^(?:[-*•]|\d+[.)])?\s*(?:Target|Distrattore\s*\d+)\s*:/iu.test(row)
+      /^(?:Target|Distrattore\s*\d+)\*{0,2}\s*:/iu.test(row)
     );
 }
 
@@ -501,11 +517,20 @@ export function validateVisualDiscriminationPlan(
     new RegExp(`${section}:`, "iu").test(text)
   );
   const target = extractGeneratedSectionLine(text, "Target");
-  const context = extractGeneratedSectionLine(text, "Contesto comune");
+  const context = extractGeneratedSectionText(text, "Contesto comune", [
+    "Assi di variazione",
+    "Check coerenza",
+    "Prompt immagini",
+  ]);
   const distractors = splitVisualDistractors(text);
   const promptRows = extractVisualPromptRows(text);
-  const check = extractGeneratedSectionLine(text, "Check coerenza") ?? "";
-  const axes = extractGeneratedSectionLine(text, "Assi di variazione") ?? "";
+  const check = extractGeneratedSectionText(text, "Check coerenza", [
+    "Prompt immagini",
+  ]);
+  const axes = extractGeneratedSectionText(text, "Assi di variazione", [
+    "Check coerenza",
+    "Prompt immagini",
+  ]);
 
   return (
     hasRequiredSections &&
