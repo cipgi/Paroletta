@@ -248,12 +248,41 @@ function extractGeneratedSectionLine(
   return text.match(new RegExp(`${section}:\\s*([^\\n]+)`, "iu"))?.[1]?.trim();
 }
 
+function extractGeneratedSectionBody(
+  text: string,
+  section: string,
+  nextSections: string[]
+): string {
+  const escapedSection = section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const nextSectionPattern = nextSections
+    .map(nextSection => nextSection.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|");
+  const lookAhead = nextSectionPattern
+    ? `(?=\\n\\s*(?:${nextSectionPattern}):|$)`
+    : "(?=$)";
+  const sectionBody = text.match(
+    new RegExp(
+      `(?:^|\\n)\\s*${escapedSection}:\\s*([\\s\\S]*?)${lookAhead}`,
+      "iu"
+    )
+  )?.[1];
+
+  return sectionBody?.trim() ?? "";
+}
+
 function splitVisualDistractors(text: string): string[] {
-  const distractorText = extractGeneratedSectionLine(text, "Distrattori") ?? "";
+  const distractorText =
+    extractGeneratedSectionBody(text, "Distrattori", [
+      "Contesto comune",
+      "Assi di variazione",
+      "Check coerenza",
+      "Prompt immagini",
+    ]) || extractGeneratedSectionLine(text, "Distrattori") || "";
   return distractorText
     .split(/;|\n/u)
     .map(item =>
       item
+        .replace(/^\s*(?:[-*•]|\d+[.)])\s*/u, "")
         .replace(/^\s*distrattore\s*\d*\s*(?:\([^)]*\))?\s*[:.-]?\s*/iu, "")
         .replace(/\s+/g, " ")
         .trim()
@@ -318,6 +347,33 @@ function planMatchesExpectedTarget(
   return matches.length >= Math.min(2, expectedTokens.length);
 }
 
+function isLikelyVisualTargetHint(value: string): boolean {
+  const tokens = normalizeVisualTokens(value);
+  if (tokens.length < 2) return false;
+
+  return !/^\s*(?:struttura|variazioni|assi|distrattori|contesto|prompt)\b/iu.test(
+    value
+  );
+}
+
+export function extractExpectedVisualTargetHint(
+  scenarioSmart?: string
+): string | undefined {
+  const normalized = scenarioSmart?.replace(/\s+/gu, " ").trim();
+  if (!normalized) return undefined;
+
+  const labeledTarget = normalized.match(
+    /\b(?:frase\s*target|target|bersaglio)\s*[:=-]\s*([\s\S]*?)(?=\s+(?:struttura|variazioni|assi|distrattori|contesto|prompt)\s*[:=-]|$)/iu
+  )?.[1];
+  const candidate = (labeledTarget ?? normalized)
+    .replace(/[.;,]\s*$/u, "")
+    .trim();
+
+  if (!isLikelyVisualTargetHint(candidate)) return undefined;
+
+  return candidate;
+}
+
 function isGenericVisualTarget(value: string): boolean {
   const normalized = value
     .toLocaleLowerCase("it-IT")
@@ -329,6 +385,17 @@ function isGenericVisualTarget(value: string): boolean {
     /\bfrase target generica\b/iu.test(normalized) ||
     /\bosserva\s+\w+\s+nel\s+contesto\b/iu.test(normalized)
   );
+}
+
+function extractVisualPromptRows(text: string): string[] {
+  const promptText = extractGeneratedSectionBody(text, "Prompt immagini", []);
+
+  return promptText
+    .split(/\n/u)
+    .map(row => row.trim())
+    .filter(row =>
+      /^(?:[-*•]|\d+[.)])?\s*(?:Target|Distrattore\s*\d+)\s*:/iu.test(row)
+    );
 }
 
 function hasComprehensionQuestions(text: string): boolean {
@@ -436,8 +503,7 @@ export function validateVisualDiscriminationPlan(
   const target = extractGeneratedSectionLine(text, "Target");
   const context = extractGeneratedSectionLine(text, "Contesto comune");
   const distractors = splitVisualDistractors(text);
-  const promptRows =
-    text.match(/^\s*(?:Target|Distrattore\s*\d+)\s*:/gimu) ?? [];
+  const promptRows = extractVisualPromptRows(text);
   const check = extractGeneratedSectionLine(text, "Check coerenza") ?? "";
   const axes = extractGeneratedSectionLine(text, "Assi di variazione") ?? "";
 
@@ -447,7 +513,7 @@ export function validateVisualDiscriminationPlan(
     !isGenericVisualTarget(target) &&
     Boolean(context) &&
     distractors.length >= optionCount - 1 &&
-    promptRows.length >= optionCount + 1 &&
+    promptRows.length >= optionCount &&
     /stess[ioa] (?:stile|ambiente|scenario|personaggi)|coerenza|frame/iu.test(
       check
     ) &&
@@ -497,7 +563,7 @@ ISTRUZIONI DI GENERAZIONE:
 1. Se il tipo è "storia": scrivi una storia brevissima (max 150 parole) sul tema indicato dal campo "interesse". Se il campo "interesse" vale "libero", non c'è un interesse specifico: scegli liberamente un tema tra gli interessi disponibili nel messaggio utente. Inserisci in modo naturale le parole contenenti il fonema indicato dal campo "fonema".
 2. Se il tipo è "filastrocca": componi una filastrocca facile e ritmata (8-12 versi) a tema indicato dal campo "interesse". Se il campo "interesse" vale "libero", scegli liberamente un tema tra gli interessi disponibili nel messaggio utente. Usa parole con il fonema indicato dal campo "fonema".
 3. Se il tipo è "lista": crea una lista di 15-20 parole con il fonema indicato dal campo "fonema", divise per difficoltà (semplici, medie, complesse) e vicine agli interessi del bambino. Se il campo "interesse" vale "libero", usa liberamente uno degli interessi disponibili nel messaggio utente.
-4. Se il tipo è "discriminazione_visiva": crea una scheda "Trova l'intruso" di VERA DISCRIMINAZIONE VISIVA, non una selezione semantica tra scene scollegate. Parti dalla frase target esplicita data nello scenarioSmart e dalla struttura morfosintattica/asse clinico richiesto quando presente; se scenarioSmart manca, inventa tu una scena clinica concreta, osservabile e precisa usando età e interesse (es. soggetto + azione + oggetto + posizione), mai una frase generica. Il numero totale di opzioni deve rispettare esattamente "numeroOpzioni": 2 significa target + 1 distrattore, 3 significa target + 2 distrattori, 4 significa target + 3 distrattori. Genera 1 immagine bersaglio che rappresenta esattamente la frase target: questa immagine deve essere inequivocabilmente corretta, altrimenti l'esercizio non è valido. Genera i distrattori con difficoltà graduata obbligatoria: Distrattore 1 = difficilissimo, estremamente simile al bersaglio, cambia solo 1 dettaglio e al massimo 2 dettagli piccoli e osservabili (es. colore della palla da rossa a blu); Distrattore 2 = intermedio, mantiene tema e direzione generale ma cambia un elemento più evidente come azione, modalità o posizione (es. palla vicino alla porta oppure lanciata con le mani verso la porta); Distrattore 3 = facilissimo, presenta differenze sostanziali come agente, oggetto principale o elemento scenico (es. bambina invece di bambino, racchetta invece di palla, tavolo invece di porta). Se numeroOpzioni è 2 usa solo il bersaglio e Distrattore 1; se è 3 usa bersaglio, Distrattore 1 e Distrattore 2; se è 4 usa tutti e tre i livelli. Mantieni stesso stile illustrativo, stessa palette e qualità visiva in tutte le opzioni; mantieni ambiente e inquadratura molto simili nel Distrattore 1, abbastanza simili nel Distrattore 2, e consenti differenze evidenti ma coerenti nel Distrattore 3. È vietato introdurre temi non richiesti dall'utente (es. dinosauri) se non presenti nei parametri clinici sanitizzati. Ogni opzione deve essere una singola immagine separata: non creare collage, griglie o vignette multiple dentro la stessa immagine. Nel testoGenerato includi sezioni in italiano: "Obiettivo clinico", "Struttura morfosintattica", "Consegna", "Target", "Distrattori", "Contesto comune", "Assi di variazione", "Check coerenza" e "Prompt immagini". Nella sezione "Distrattori" etichetta esplicitamente ogni riga con il livello: "Distrattore 1 (difficile)", "Distrattore 2 (intermedio)", "Distrattore 3 (facile)". In "Assi di variazione" indica per ogni distrattore asse e livello di difficoltà. In "Check coerenza" dichiara che il bersaglio è esatto e che i distrattori seguono la scala difficile/intermedio/facile; se non puoi rispettarlo, rigenera mentalmente prima di rispondere. La "Consegna" deve essere clinica e contestualizzata, nel formato "Indica l'immagine in cui..."; non usare consegne generiche come "Trova l'intruso tra le immagini" quando il target è noto. Sono vietate frasi target vaghe come "Il bambino osserva ... nel contesto scelto" o "frase target generica": il target deve descrivere una scena illustrabile con azione, oggetto e/o posizione. In "Prompt immagini" scrivi una riga separata per Target e una riga separata per ogni Distrattore richiesto. Ogni riga deve descrivere solo una singola immagine pronta per una API di generazione immagini e deve ripetere il contesto comune, lo stile coerente, il livello di difficoltà e la differenza specifica rispetto al bersaglio.
+4. Se il tipo è "discriminazione_visiva": crea una scheda "Trova l'intruso" di VERA DISCRIMINAZIONE VISIVA, non una selezione semantica tra scene scollegate. Il campo scenarioSmart è opzionale: se contiene una frase target esplicita, rispettala; se contiene solo indicazioni di struttura/assi clinici, usale senza trattarle come frase target; se scenarioSmart manca o è vuoto, inventa tu una scena clinica concreta, osservabile e precisa usando età e interesse (es. soggetto + azione + oggetto + posizione), mai una frase generica. Il numero totale di opzioni deve rispettare esattamente "numeroOpzioni": 2 significa target + 1 distrattore, 3 significa target + 2 distrattori, 4 significa target + 3 distrattori. Genera 1 immagine bersaglio che rappresenta esattamente la frase target fornita oppure, quando non è stata fornita, il target clinico concreto che hai inventato: questa immagine deve essere inequivocabilmente corretta, altrimenti l'esercizio non è valido. Genera i distrattori con difficoltà graduata obbligatoria: Distrattore 1 = difficilissimo, estremamente simile al bersaglio, cambia solo 1 dettaglio e al massimo 2 dettagli piccoli e osservabili (es. colore della palla da rossa a blu); Distrattore 2 = intermedio, mantiene tema e direzione generale ma cambia un elemento più evidente come azione, modalità o posizione (es. palla vicino alla porta oppure lanciata con le mani verso la porta); Distrattore 3 = facilissimo, presenta differenze sostanziali come agente, oggetto principale o elemento scenico (es. bambina invece di bambino, racchetta invece di palla, tavolo invece di porta). Se numeroOpzioni è 2 usa solo il bersaglio e Distrattore 1; se è 3 usa bersaglio, Distrattore 1 e Distrattore 2; se è 4 usa tutti e tre i livelli. Mantieni stesso stile illustrativo, stessa palette e qualità visiva in tutte le opzioni; mantieni ambiente e inquadratura molto simili nel Distrattore 1, abbastanza simili nel Distrattore 2, e consenti differenze evidenti ma coerenti nel Distrattore 3. È vietato introdurre temi non richiesti dall'utente (es. dinosauri) se non presenti nei parametri clinici sanitizzati. Ogni opzione deve essere una singola immagine separata: non creare collage, griglie o vignette multiple dentro la stessa immagine. Nel testoGenerato includi sezioni in italiano: "Obiettivo clinico", "Struttura morfosintattica", "Consegna", "Target", "Distrattori", "Contesto comune", "Assi di variazione", "Check coerenza" e "Prompt immagini". Nella sezione "Distrattori" etichetta esplicitamente ogni riga con il livello: "Distrattore 1 (difficile)", "Distrattore 2 (intermedio)", "Distrattore 3 (facile)". In "Assi di variazione" indica per ogni distrattore asse e livello di difficoltà. In "Check coerenza" dichiara che il bersaglio è esatto e che i distrattori seguono la scala difficile/intermedio/facile; se non puoi rispettarlo, rigenera mentalmente prima di rispondere. La "Consegna" deve essere clinica e contestualizzata, nel formato "Indica l'immagine in cui..."; non usare consegne generiche come "Trova l'intruso tra le immagini" quando il target è noto. Sono vietate frasi target vaghe come "Il bambino osserva ... nel contesto scelto" o "frase target generica": il target deve descrivere una scena illustrabile con azione, oggetto e/o posizione. In "Prompt immagini" scrivi una riga separata per Target e una riga separata per ogni Distrattore richiesto. Ogni riga deve descrivere solo una singola immagine pronta per una API di generazione immagini e deve ripetere il contesto comune, lo stile coerente, il livello di difficoltà e la differenza specifica rispetto al bersaglio.
 5. Se il tipo è "morfosintassi_complessa": crea una scheda su morfosintassi complessa partendo da elemento grammaticale, complessità e scena. Nel testoGenerato includi sempre sezioni in italiano: "Obiettivo morfosintattico", "Frase target", "Scena da illustrare", "Domande di comprensione" e "Prompt immagine". La sezione "Domande di comprensione" è obbligatoria e deve contenere 2-4 domande semplici con punto interrogativo. Accetta strutture come pronomi clitici, relative e subordinate quando richieste.
 6. Se il tipo è "storia" o "filastrocca", genera SEMPRE domande di comprensione nuove e specifiche sul testo appena scritto: devono nominare personaggi, luoghi, oggetti o azioni realmente presenti nel testo, non formule generiche riutilizzabili. Il campo JSON "testoGenerato" deve contenere prima il testo narrativo/poetico e poi, in fondo nello stesso campo, una riga vuota seguita dalla sezione obbligatoria "Domande di comprensione:" con 3-5 domande semplici, numerate e coerenti con il contenuto; ogni domanda deve terminare con un punto interrogativo. Devi valorizzare anche il campo JSON opzionale "domande" con le stesse domande, come array di stringhe, così possono essere salvate se la sezione manca da testoGenerato.
 
@@ -652,12 +718,12 @@ export const aiRouter = createRouter({
         !validateVisualDiscriminationPlan(
           parsed.data.testoGenerato,
           sanitizedInput.numeroOpzioni ?? 4,
-          sanitizedInput.scenarioSmart
+          extractExpectedVisualTargetHint(sanitizedInput.scenarioSmart)
         )
       ) {
         throw userFacingError(
           "SERVICE_UNAVAILABLE",
-          "La generazione non ha rispettato i criteri clinici della discriminazione visiva. Riprova modificando leggermente la frase target."
+          "La generazione non ha rispettato i criteri clinici della discriminazione visiva. Riprova modificando leggermente la frase target, se presente, oppure gli altri parametri."
         );
       }
       const data = ensureComprehensionQuestions(parsed.data, sanitizedInput);
