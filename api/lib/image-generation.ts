@@ -178,14 +178,14 @@ function buildVisualOptionScene(params: {
 
   return [
     `Frame separato di una serie visiva coerente: ${params.label}.`,
-    "Le immagini della serie devono appartenere alla stessa attività clinica: stesso stile illustrativo, stessa palette e stessa qualità visiva; mantieni inquadratura e ambiente uguali nei distrattori difficili, ma consenti differenze più evidenti nei distrattori facili quando richieste dal livello.",
+    "Le immagini della serie devono appartenere alla stessa attività clinica: stesso stile illustrativo, stessa palette e stessa qualità visiva; mantieni inquadratura e ambiente uguali solo per target e distrattore difficile, usa differenze progressivamente più visibili per il distrattore intermedio e sostanziali per quello facile.",
     context,
     matchingRule,
     difficultyGuidance,
     variationAxis,
     `Rappresenta solo questa scena, senza sostituire il soggetto richiesto: ${params.description}.`,
     "La scena generata deve combaciare letteralmente con la descrizione: soggetti, azione, oggetto e posizione devono essere quelli indicati.",
-    "Rispetta la scala di difficoltà indicata: il distrattore 1 deve essere quasi identico al target, il distrattore 2 deve avere differenze intermedie, il distrattore 3 deve essere chiaramente diverso e più facile da escludere.",
+    "Rispetta la scala di difficoltà indicata: il distrattore 1 deve essere quasi identico al target e differire per 1, massimo 2 dettagli; il distrattore 2 deve modificare azione, posizione o modalità in modo evidente ma restare nel tema; il distrattore 3 deve cambiare agente, oggetto principale o luogo/elemento scenico ed essere il più facile da escludere.",
     exclusions,
     "Non creare collage, griglie, vignette multiple o scene combinate con altre opzioni.",
   ]
@@ -197,9 +197,9 @@ function buildVisualOptionScene(params: {
 function getVisualDistractorDifficulty(index: number): string {
   return (
     [
-      "difficile, quasi identico al target; cambia solo 1 dettaglio, massimo 2 dettagli piccoli e osservabili, per esempio colore, dimensione o posizione precisa dell'oggetto",
-      "intermedio; mantieni tema, ambiente e direzione generale dell'azione, ma cambia un elemento più evidente come azione, modalità o posizione principale",
-      "facile; crea una differenza sostanziale rispetto al target, per esempio agente, oggetto principale o luogo/elemento scenico, così l'opzione è chiaramente falsa",
+      "difficile: immagine estremamente simile al target; mantieni stesso soggetto, stessa azione generale, stesso oggetto e stesso contesto, cambiando solo 1 dettaglio saliente, massimo 2, come colore della palla, dimensione dell'oggetto o posizione precisa",
+      "intermedio: mantieni tema e scenario riconoscibili, ma introduci differenze evidenti; cambia la modalità dell'azione, la posizione rispetto all'obiettivo o un passaggio dell'azione, per esempio calciare vicino alla porta oppure lanciare con le mani verso la porta",
+      "facile: distrattore più semplice; crea differenze sostanziali e immediate cambiando agente, oggetto principale oppure elemento/luogo di destinazione, per esempio bambina al posto del bambino, racchetta al posto della palla o tavolo al posto della porta",
     ][index] ?? "graduato; differenza coerente con il livello clinico richiesto"
   );
 }
@@ -238,27 +238,64 @@ export function buildImageRequests(params: {
   descrizioneScena?: string;
 }): ImageRequest[] {
   const baseStyleTags = ["stile:vettoriale_bambini", "formato:quadrato_1024"];
-  const visualStyleTags = [...baseStyleTags, "prompt_version:visual_graded_v3"];
+  const visualStyleTags = [...baseStyleTags, "prompt_version:visual_graded_v4"];
   const unifiedSheet = parseUnifiedSheetContent(params.testoGenerato);
 
   if (unifiedSheet) {
+    const visualTarget =
+      unifiedSheet.testo || params.scenarioSmart || "target clinico";
+    const visualContext =
+      unifiedSheet.tipo === "discriminazione_visiva"
+        ? `consegna: ${unifiedSheet.consegna}; frase target: ${visualTarget}`
+        : undefined;
+    const visualDistractorDescriptions = unifiedSheet.immagini
+      .filter(image => image.ruolo === "distrattore")
+      .map(image => image.prompt);
+    let distractorIndex = 0;
+
     return unifiedSheet.immagini.map((image, index) => {
       const role = image.ruolo === "illustrazione" ? "base" : image.ruolo;
+      const isVisual = unifiedSheet.tipo === "discriminazione_visiva";
+      const currentDistractorIndex =
+        image.ruolo === "distrattore" ? distractorIndex++ : -1;
       const label =
         image.ruolo === "target"
           ? "Target"
           : image.ruolo === "distrattore"
-            ? `Distrattore ${index}`
+            ? `Distrattore ${currentDistractorIndex + 1}`
             : `Illustrazione ${index + 1}`;
+      const visualPrompt = isVisual
+        ? buildVisualOptionScene({
+            label,
+            description: image.prompt,
+            target: visualTarget,
+            isTarget: image.ruolo === "target",
+            context: visualContext,
+            variationAxis:
+              image.ruolo === "distrattore"
+                ? extractVariationAxis(
+                    image.prompt,
+                    undefined,
+                    currentDistractorIndex
+                  )
+                : undefined,
+            difficultyGuidance:
+              image.ruolo === "distrattore"
+                ? getVisualDistractorDifficulty(currentDistractorIndex)
+                : undefined,
+            exclude:
+              image.ruolo === "target"
+                ? visualDistractorDescriptions
+                : [visualTarget],
+          })
+        : image.prompt;
 
       return {
         role,
         label,
-        prompt: buildClinicalImagePrompt(image.prompt),
+        prompt: buildClinicalImagePrompt(visualPrompt),
         semanticTags: [
-          ...(unifiedSheet.tipo === "discriminazione_visiva"
-            ? visualStyleTags
-            : baseStyleTags),
+          ...(isVisual ? visualStyleTags : baseStyleTags),
           `tipo:${unifiedSheet.tipo}`,
           `ruolo:${image.ruolo}`,
           `livello:${image.livello}`,
