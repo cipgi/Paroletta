@@ -404,7 +404,7 @@ export const aiRouter = createRouter({
       const supabaseUserId = getSupabaseUserIdFromUnionId(ctx.user.unionId);
       if (!supabaseUserId) throw invalidSessionError();
       const account = await getAccountContext(
-        ctx.user.unionId,
+        supabaseUserId,
         ctx.supabaseAccessToken
       );
       const subscription = await assertActiveSubscription({
