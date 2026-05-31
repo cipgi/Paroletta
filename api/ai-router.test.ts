@@ -100,6 +100,12 @@ describe("AI prompt security", () => {
     expect(messages[0].content).toContain('"immagini"');
     expect(messages[0].content).toContain('"domande"');
     expect(messages[0].content).toContain("Rispondi SOLO con JSON valido");
+    expect(messages[0].content).toContain(
+      "D1 difficile estremamente simile al target"
+    );
+    expect(messages[0].content).toContain(
+      "D3 facile con differenze sostanziali"
+    );
     expect(messages[1].content).toContain(
       '"tipoOutput":"discriminazione_visiva"'
     );

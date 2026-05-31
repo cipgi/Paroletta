@@ -61,12 +61,14 @@ Distrattore 3: cane che mangia una pera in cucina.`,
       "target esatto: il cane mangia la mela"
     );
     expect(requests[0].semanticTags.map(normalizeSemanticTag)).toContain(
-      "prompt_version:visual_graded_v3"
+      "prompt_version:visual_graded_v4"
     );
     expect(requests[1].prompt).toContain("Unico asse di variazione");
-    expect(requests[1].prompt).toContain("difficile, quasi identico");
+    expect(requests[1].prompt).toContain(
+      "difficile: immagine estremamente simile"
+    );
     expect(requests[2].prompt).toContain("intermedio");
-    expect(requests[3].prompt).toContain("facile");
+    expect(requests[3].prompt).toContain("facile: distrattore più semplice");
     expect(requests[2].prompt).toContain("stesso stile");
     expect(requests[0].semanticTags.map(normalizeSemanticTag)).toContain(
       "ruolo:target"
@@ -121,6 +123,70 @@ Distrattore 1: singola immagine con un falco al centro nel cielo azzurro.`,
     expect(requests[0].semanticTags.map(normalizeSemanticTag)).toContain(
       "consegna_target:laquila"
     );
+  });
+
+  it("enriches unified visual sheet prompts with target and graded distractor rules", () => {
+    const requests = buildImageRequests({
+      tipoOutput: "discriminazione_visiva",
+      interesse: "calcio",
+      numeroOpzioni: 4,
+      testoGenerato: JSON.stringify({
+        tipo: "discriminazione_visiva",
+        titolo: "Calcia la palla",
+        consegna:
+          "Indica l'immagine in cui il bambino calcia la palla rossa dentro la porta piccola.",
+        testo: "Il bambino calcia la palla rossa dentro la porta piccola.",
+        immagini: [
+          {
+            ruolo: "target",
+            livello: "principale",
+            prompt:
+              "A boy kicks a red ball into a small soccer goal in a child-friendly field, no text.",
+          },
+          {
+            ruolo: "distrattore",
+            livello: "difficile",
+            prompt:
+              "The same boy kicks a blue ball into the same small soccer goal in the same field, no text.",
+          },
+          {
+            ruolo: "distrattore",
+            livello: "intermedio",
+            prompt:
+              "The same boy throws the red ball with his hands toward the small soccer goal, no text.",
+          },
+          {
+            ruolo: "distrattore",
+            livello: "facile",
+            prompt:
+              "A girl holds a tennis racket near a table in a park, no text.",
+          },
+        ],
+        domande: [],
+      }),
+    });
+
+    expect(requests).toHaveLength(4);
+    expect(requests.map(request => request.label)).toEqual([
+      "Target",
+      "Distrattore 1",
+      "Distrattore 2",
+      "Distrattore 3",
+    ]);
+    expect(requests[0].prompt).toContain("deve rendere vera la consegna");
+    expect(requests[0].prompt).toContain(
+      "target esatto: Il bambino calcia la palla rossa dentro la porta piccola."
+    );
+    expect(requests[1].prompt).toContain(
+      "difficile: immagine estremamente simile"
+    );
+    expect(requests[1].prompt).toContain("solo 1 dettaglio saliente");
+    expect(requests[2].prompt).toContain(
+      "intermedio: mantieni tema e scenario riconoscibili"
+    );
+    expect(requests[2].prompt).toContain("lanciare con le mani verso la porta");
+    expect(requests[3].prompt).toContain("facile: distrattore più semplice");
+    expect(requests[3].prompt).toContain("tavolo al posto della porta");
   });
 
   it("calls OpenAI with the requested GPT Image generation settings", async () => {
