@@ -1,136 +1,120 @@
+import { z } from "zod";
+
+export const unifiedSheetTypeSchema = z.enum([
+  "discriminazione_visiva",
+  "morfosintassi",
+  "storia",
+  "filastrocca",
+  "lista_parole",
+]);
+
+export const unifiedImageRoleSchema = z.enum([
+  "target",
+  "distrattore",
+  "illustrazione",
+]);
+
+export const unifiedImageLevelSchema = z.enum([
+  "difficile",
+  "intermedio",
+  "facile",
+  "principale",
+]);
+
+export const unifiedSheetImageSchema = z.object({
+  ruolo: unifiedImageRoleSchema,
+  livello: unifiedImageLevelSchema,
+  prompt: z.string(),
+});
+
+export const unifiedSheetQuestionSchema = z.object({
+  domanda: z.string(),
+  risposta: z.string(),
+});
+
+export const unifiedSheetSchema = z.object({
+  tipo: unifiedSheetTypeSchema,
+  titolo: z.string(),
+  consegna: z.string(),
+  testo: z.string(),
+  immagini: z.array(unifiedSheetImageSchema),
+  domande: z.array(unifiedSheetQuestionSchema),
+});
+
+export type UnifiedSheetType = z.infer<typeof unifiedSheetTypeSchema>;
+export type UnifiedSheetImage = z.infer<typeof unifiedSheetImageSchema>;
+export type UnifiedSheetQuestion = z.infer<typeof unifiedSheetQuestionSchema>;
+export type UnifiedSheet = z.infer<typeof unifiedSheetSchema>;
+
 export type SheetContentType =
-  | "storia"
-  | "filastrocca"
+  | UnifiedSheetType
   | "lista"
-  | "discriminazione_visiva"
   | "morfosintassi_complessa"
   | (string & {});
 
-const KNOWN_SECTION_NAMES = [
-  "Obiettivo clinico",
-  "Obiettivo morfosintattico",
-  "Consegna",
-  "Target",
-  "Distrattori",
-  "Contesto comune",
-  "Prompt immagini",
-  "Prompt immagine",
-  "Frase target",
-  "Testo",
-  "Scena da illustrare",
-  "Struttura morfosintattica",
-  "Assi di variazione",
-  "Check coerenza",
-  "Domande di comprensione",
-  "Domande",
-  "Parole semplici",
-  "Parole medie",
-  "Parole complesse",
-] as const;
+const GENERIC_INSTRUCTION_PATTERNS = [
+  /^\s*trova l['’]intruso tra le immagini\.?\s*$/iu,
+  /^\s*leggi il testo e svolgi l['’]?esercizio\.?\s*$/iu,
+  /^\s*leggi il testo e completa l['’]?esercizio\.?\s*$/iu,
+  /^\s*osserva le immagini e scegli quella corretta\.?\s*$/iu,
+];
 
-const INTERNAL_SECTION_NAMES = new Set<string>([
-  "obiettivo clinico",
-  "obiettivo morfosintattico",
-  "target",
-  "distrattori",
-  "contesto comune",
-  "prompt immagini",
-  "prompt immagine",
-  "scena da illustrare",
-]);
-
-function sectionBody(block: string | undefined, label: string) {
-  if (!block) return "";
-  return block
-    .replace(new RegExp(`^${escapeRegExp(label)}\\s*:\\s*`, "iu"), "")
-    .trim();
+function isNonEmptyString(value: string) {
+  return value.trim().length > 0;
 }
 
-const SECTION_LINE_PATTERN = (section: string) =>
-  new RegExp(
-    `^\\s*(?:[-*]\\s*)?(?:#{1,6}\\s*)?(?:\\*\\*)?${escapeRegExp(section)}(?:\\*\\*)?\\s*:\\s*(.+?)\\s*$`,
-    "imu"
-  );
-const ANY_KNOWN_SECTION_PATTERN = new RegExp(
-  `^\\s*(?:[-*]\\s*)?(?:#{1,6}\\s*)?(?:\\*\\*)?(${KNOWN_SECTION_NAMES.map(escapeRegExp).join("|")})(?:\\*\\*)?\\s*:\\s*(.*)$`,
-  "iu"
-);
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function isGenericInstruction(value: string) {
+  return GENERIC_INSTRUCTION_PATTERNS.some(pattern => pattern.test(value));
 }
 
-function sectionHeaderPattern(section: string) {
-  return new RegExp(
-    `(?:^|[\\s.;!?])(?:[-*]\\s*)?(?:#{1,6}\\s*)?(?:\\*\\*)?${escapeRegExp(section)}(?:\\*\\*)?\\s*:\\s*`,
-    "iu"
+export function normalizeUnifiedSheetType(
+  tipo: SheetContentType
+): UnifiedSheetType {
+  if (tipo === "lista") return "lista_parole";
+  if (tipo === "morfosintassi_complessa") return "morfosintassi";
+  if (unifiedSheetTypeSchema.safeParse(tipo).success)
+    return tipo as UnifiedSheetType;
+  return "storia";
+}
+
+export function validateSheet(
+  json: unknown,
+  tipo: SheetContentType,
+  numeroOpzioni = 4
+): json is UnifiedSheet {
+  const parsed = unifiedSheetSchema.safeParse(json);
+  if (!parsed.success) return false;
+
+  const sheet = parsed.data;
+  const expectedType = normalizeUnifiedSheetType(tipo);
+  if (sheet.tipo !== expectedType) return false;
+  if (!isNonEmptyString(sheet.titolo)) return false;
+  if (!isNonEmptyString(sheet.consegna)) return false;
+  if (isGenericInstruction(sheet.consegna)) return false;
+  if (!isNonEmptyString(sheet.testo)) return false;
+
+  if (expectedType === "discriminazione_visiva") {
+    if (sheet.immagini.length !== numeroOpzioni) return false;
+  } else if (sheet.immagini.length < 1) {
+    return false;
+  }
+
+  return sheet.immagini.every(
+    image => isNonEmptyString(image.ruolo) && isNonEmptyString(image.prompt)
   );
 }
 
-function anySectionHeaderPattern() {
-  return new RegExp(
-    `(?:^|[\\s.;!?])(?:[-*]\\s*)?(?:#{1,6}\\s*)?(?:\\*\\*)?(${KNOWN_SECTION_NAMES.map(escapeRegExp).join("|")})(?:\\*\\*)?\\s*:\\s*`,
-    "igu"
-  );
-}
+export function parseUnifiedSheetContent(
+  value: string
+): UnifiedSheet | undefined {
+  const text = decodeEscapedNewlines(value).trim();
+  if (!text.startsWith("{")) return undefined;
 
-function extractSectionLine(text: string, section: string): string | undefined {
-  const lineMatch = text.match(SECTION_LINE_PATTERN(section))?.[1]?.trim();
-  if (lineMatch) return lineMatch;
-
-  const block = extractSectionBlock(text, section);
-  return block
-    ?.replace(new RegExp(`^${escapeRegExp(section)}\\s*:\\s*`, "iu"), "")
-    .split(/\r?\n/u)[0]
-    ?.trim();
-}
-
-function extractSectionBlock(
-  text: string,
-  section: string
-): string | undefined {
-  const match = sectionHeaderPattern(section).exec(text);
-  if (!match) return undefined;
-
-  const bodyStart = match.index + match[0].length;
-  const nextSectionPattern = anySectionHeaderPattern();
-  nextSectionPattern.lastIndex = bodyStart;
-  const nextSection = nextSectionPattern.exec(text);
-  const bodyEnd = nextSection?.index ?? text.length;
-  const body = text.slice(bodyStart, bodyEnd).trim();
-
-  return `${section}: ${body}`.trim();
-}
-
-function removeTrailingPunctuation(value: string) {
-  return value.trim().replace(/[.;:,\s]+$/u, "");
-}
-
-function lowerFirstLetter(value: string) {
-  const trimmed = removeTrailingPunctuation(value);
-  return trimmed
-    ? `${trimmed.charAt(0).toLocaleLowerCase("it-IT")}${trimmed.slice(1)}`
-    : "";
-}
-
-function getVisualInstructionAction(instruction: string) {
-  if (/evidenz/iu.test(instruction)) return "Evidenzia";
-  if (/cerchia/iu.test(instruction)) return "Cerchia";
-  if (/colora/iu.test(instruction)) return "Colora";
-  if (/seleziona/iu.test(instruction)) return "Seleziona";
-  if (/indica/iu.test(instruction)) return "Indica";
-  return "Trova";
-}
-
-function formatContextualVisualInstruction(text: string) {
-  const target = lowerFirstLetter(extractSectionLine(text, "Target") ?? "");
-  const rawInstruction = extractSectionLine(text, "Consegna") ?? "";
-
-  if (!target) return "";
-
-  return formatInstruction(
-    `${getVisualInstructionAction(rawInstruction)} l'immagine corrispondente alla frase: ${target}`
-  );
+  try {
+    return unifiedSheetSchema.parse(JSON.parse(text));
+  } catch {
+    return undefined;
+  }
 }
 
 function normalizeSentence(value: string) {
@@ -148,180 +132,62 @@ function formatInstruction(instruction: string) {
   return normalized ? `Consegna: ${normalized}` : "";
 }
 
-function removeInternalSections(text: string): string {
-  const output: string[] = [];
-  let isSkippingInternalSection = false;
+function formatQuestions(questions: UnifiedSheetQuestion[]) {
+  if (questions.length === 0) return undefined;
 
-  for (const line of text.split(/\r?\n/u)) {
-    const sectionMatch = line.match(ANY_KNOWN_SECTION_PATTERN);
-
-    if (sectionMatch) {
-      const sectionName = sectionMatch[1]?.toLocaleLowerCase("it-IT") ?? "";
-      isSkippingInternalSection = INTERNAL_SECTION_NAMES.has(sectionName);
-      if (isSkippingInternalSection) continue;
-    }
-
-    if (!isSkippingInternalSection) output.push(line);
-  }
-
-  return output
-    .join("\n")
-    .replace(/\n{3,}/gu, "\n\n")
-    .trim();
+  return `Domande: ${questions
+    .map(
+      (question, index) =>
+        `${index + 1}. ${question.domanda}${question.domanda.trim().endsWith("?") ? "" : "?"} Risposta: ${question.risposta}`
+    )
+    .join(" ")}`;
 }
 
-function removeSectionBlocks(text: string, sections: string[]) {
-  let output = text;
+function formatImageSummary(images: UnifiedSheetImage[]) {
+  if (images.length === 0) return undefined;
 
-  for (const section of sections) {
-    const sectionMatch = sectionHeaderPattern(section).exec(output);
-    if (!sectionMatch) continue;
-
-    const nextSectionPattern = anySectionHeaderPattern();
-    nextSectionPattern.lastIndex = sectionMatch.index + sectionMatch[0].length;
-    const nextSection = nextSectionPattern.exec(output);
-    output = `${output.slice(0, sectionMatch.index)}${
-      nextSection ? output.slice(nextSection.index) : ""
-    }`;
-  }
-
-  return output.replace(/\n{3,}/gu, "\n\n").trim();
-}
-function buildDisplayFallbackQuestions(
-  tipoOutput: SheetContentType,
-  text: string
-) {
-  if (tipoOutput === "morfosintassi_complessa") {
-    const target =
-      sectionBody(extractSectionBlock(text, "Frase target"), "Frase target") ||
-      sectionBody(extractSectionBlock(text, "Testo"), "Testo") ||
-      "la frase";
-
-    return `Domande di comprensione: Chi compie l'azione nella frase? Che cosa succede? Quale parola aiuta a capire il significato di "${removeTrailingPunctuation(target)}"?`;
-  }
-
-  if (tipoOutput === "storia" || tipoOutput === "filastrocca") {
-    return buildNarrativeFallbackQuestions(text);
-  }
-
-  return undefined;
-}
-
-function splitIntoSentences(text: string): string[] {
-  return removeSectionBlocks(removeInternalSections(text), [
-    "Consegna",
-    "Domande di comprensione",
-    "Domande",
-  ])
-    .split(/(?<=[.!?])\s+/u)
-    .map(sentence => removeTrailingPunctuation(sentence))
-    .filter(Boolean);
-}
-
-function extractFirstSubjectPhrase(value: string): string {
-  const articlePattern =
-    /^(il|lo|la|i|gli|le|un|uno|una)\s+([\p{L}]+(?:['’][\p{L}]+)?)/iu;
-  const articleMatch = value.trim().match(articlePattern);
-  if (articleMatch)
-    return lowerFirstLetter(`${articleMatch[1]} ${articleMatch[2]}`);
-
-  return lowerFirstLetter(
-    value.match(/[\p{L}]+(?:['’][\p{L}]+)?/u)?.[0] ?? "testo"
-  );
-}
-
-function buildNarrativeFallbackQuestions(text: string) {
-  const sentences = splitIntoSentences(text);
-  const firstSentence = sentences[0] ?? "il testo";
-  const secondSentence = sentences[1] ?? firstSentence;
-  const subject = extractFirstSubjectPhrase(firstSentence);
-
-  return `Domande di comprensione: 1. Che cosa succede in questa parte: ${firstSentence}? 2. Che cosa fa ${subject} nel testo? 3. Che cosa succede dopo questa parte: ${secondSentence}?`;
-}
-
-function joinVisibleBlocks(blocks: Array<string | undefined>) {
-  return blocks.filter(Boolean).join("\n\n").trim();
+  return `Immagini: ${images
+    .map((image, index) => `${index + 1}. ${image.ruolo} (${image.livello})`)
+    .join("; ")}.`;
 }
 
 function getSheetTitle(tipoOutput: SheetContentType): string {
-  if (tipoOutput === "discriminazione_visiva")
-    return "Titolo: Discriminazione visiva";
-  if (tipoOutput === "morfosintassi_complessa")
-    return "Titolo: Morfosintassi complessa";
-  if (tipoOutput === "storia") return "Titolo: Storia con fonema";
-  if (tipoOutput === "filastrocca") return "Titolo: Filastrocca con fonema";
-  if (tipoOutput === "lista") return "Titolo: Lista parole con fonema";
-  return "Titolo: Scheda personalizzata";
+  const titles: Record<UnifiedSheetType, string> = {
+    discriminazione_visiva: "Discriminazione visiva",
+    morfosintassi: "Morfosintassi",
+    storia: "Storia con fonema",
+    filastrocca: "Filastrocca con fonema",
+    lista_parole: "Lista parole con fonema",
+  };
+
+  return `Titolo: ${titles[normalizeUnifiedSheetType(tipoOutput)]}`;
 }
 
 export function getUserFacingSheetContent(params: {
   tipoOutput: SheetContentType;
   testoGenerato: string;
 }): string {
+  const unifiedSheet = parseUnifiedSheetContent(params.testoGenerato);
+  if (unifiedSheet) {
+    return [
+      `Titolo: ${unifiedSheet.titolo}`,
+      formatInstruction(unifiedSheet.consegna),
+      `Testo: ${unifiedSheet.testo}`,
+      formatQuestions(unifiedSheet.domande),
+      formatImageSummary(unifiedSheet.immagini),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+  }
+
   const text = decodeEscapedNewlines(params.testoGenerato).trim();
-
-  if (params.tipoOutput === "discriminazione_visiva") {
-    const target = extractSectionLine(text, "Target");
-    const instruction =
-      formatContextualVisualInstruction(text) ||
-      formatInstruction(extractSectionLine(text, "Consegna") ?? "") ||
-      "Consegna: Trova l'immagine corrispondente alla frase.";
-
-    return joinVisibleBlocks([
-      getSheetTitle(params.tipoOutput),
-      target ? `Testo: ${normalizeSentence(target)}` : undefined,
-      instruction,
-      "Immagini: osserva le opzioni e scegli quella corretta.",
-    ]);
-  }
-
-  if (params.tipoOutput === "morfosintassi_complessa") {
-    const explicitInstruction = formatInstruction(
-      extractSectionLine(text, "Consegna") ?? ""
-    );
-    const targetPhrase =
-      extractSectionBlock(text, "Frase target") ??
-      extractSectionBlock(text, "Testo");
-    const comprehensionQuestions =
-      extractSectionBlock(text, "Domande di comprensione") ??
-      extractSectionBlock(text, "Domande");
-
-    const cleaned = removeInternalSections(text);
-    return joinVisibleBlocks([
-      getSheetTitle(params.tipoOutput),
-      explicitInstruction || "Consegna: Leggi il testo e completa l'esercizio.",
-      targetPhrase
-        ? `Testo: ${targetPhrase.replace(/^(Frase target|Testo):\s*/iu, "")}`
-        : cleaned
-          ? `Testo: ${cleaned}`
-          : undefined,
-      comprehensionQuestions ??
-        buildDisplayFallbackQuestions(params.tipoOutput, text),
-      "Immagini: usa l'immagine per rispondere alle domande.",
-    ]);
-  }
-
-  const explicitInstruction =
-    formatInstruction(extractSectionLine(text, "Consegna") ?? "") ||
-    "Consegna: Leggi il testo e svolgi l'esercizio.";
-  const bodyText =
-    sectionBody(extractSectionBlock(text, "Testo"), "Testo") ||
-    removeSectionBlocks(removeInternalSections(text), [
-      "Consegna",
-      "Domande di comprensione",
-      "Domande",
-    ]);
-  const questions =
-    extractSectionBlock(text, "Domande di comprensione") ??
-    extractSectionBlock(text, "Domande");
-
-  return joinVisibleBlocks([
+  return [
     getSheetTitle(params.tipoOutput),
-    explicitInstruction,
-    bodyText ? `Testo: ${bodyText}` : undefined,
-    questions ?? buildDisplayFallbackQuestions(params.tipoOutput, text),
-    "Immagini: osserva l'illustrazione collegata al testo.",
-  ]);
+    "Consegna: Leggi il contenuto della scheda e svolgi l'esercizio.",
+    text ? `Testo: ${text}` : undefined,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 export function getNeutralVisualOptionLabel(index: number): string {
