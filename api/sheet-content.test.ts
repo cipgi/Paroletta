@@ -3,130 +3,77 @@ import { describe, expect, it } from "vitest";
 import {
   getNeutralVisualOptionLabel,
   getUserFacingSheetContent,
+  parseUnifiedSheetContent,
+  validateSheet,
+  type UnifiedSheet,
 } from "@contracts/sheet-content";
 
-describe("getUserFacingSheetContent", () => {
-  it("shows title, text, instruction and images section for visual discrimination sheets", () => {
-    const result = getUserFacingSheetContent({
-      tipoOutput: "discriminazione_visiva",
-      testoGenerato: `Obiettivo clinico: Riconoscere l'immagine corretta.
-Consegna: Trova l'intruso tra le immagini.
-Target: Un trenino sotto un tavolo.
-Distrattori: Un aereo sopra un tavolo.
-Contesto comune: Un tavolo.
-Prompt immagini:
-Target: prompt tecnico`,
-    });
+const unifiedSheet: UnifiedSheet = {
+  tipo: "storia",
+  titolo: "Il gatto nel prato",
+  consegna: "Leggi la storia del gatto e rispondi alle domande sulla palla.",
+  testo: "Il gatto corre nel prato. Poi prende una palla rossa.",
+  immagini: [
+    {
+      ruolo: "illustrazione",
+      livello: "principale",
+      prompt:
+        "Realistic child-friendly illustration of a cat running in a meadow with a red ball, no text.",
+    },
+  ],
+  domande: [
+    { domanda: "Chi corre nel prato?", risposta: "Il gatto." },
+    { domanda: "Che cosa prende il gatto?", risposta: "Una palla rossa." },
+    { domanda: "Dove corre il gatto?", risposta: "Nel prato." },
+  ],
+};
 
-    expect(result).toBe(
-      "Titolo: Discriminazione visiva\n\nTesto: Un trenino sotto un tavolo.\n\nConsegna: Trova l'immagine corrispondente alla frase: un trenino sotto un tavolo.\n\nImmagini: osserva le opzioni e scegli quella corretta."
-    );
-    expect(result).not.toContain("Prompt");
-  });
-
-  it("preserves the requested action in contextual visual instructions", () => {
-    const result = getUserFacingSheetContent({
-      tipoOutput: "discriminazione_visiva",
-      testoGenerato: `Consegna: Evidenzia l'immagine corretta.
-Target: Un trenino sotto al tavolo.
-Prompt immagini:
-Target: prompt tecnico`,
-    });
-
-    expect(result).toContain(
-      "Consegna: Evidenzia l'immagine corrispondente alla frase: un trenino sotto al tavolo."
-    );
-    expect(result).not.toContain("Prompt");
-  });
-
-  it("falls back to generated delivery when no visual target is available", () => {
-    const result = getUserFacingSheetContent({
-      tipoOutput: "discriminazione_visiva",
-      testoGenerato: "Consegna: Trova l'intruso tra le immagini.",
-    });
-
-    expect(result).toBe(
-      "Titolo: Discriminazione visiva\n\nConsegna: Trova l'intruso tra le immagini.\n\nImmagini: osserva le opzioni e scegli quella corretta."
+describe("unified sheet content", () => {
+  it("parses unified JSON content", () => {
+    expect(parseUnifiedSheetContent(JSON.stringify(unifiedSheet))).toEqual(
+      unifiedSheet
     );
   });
 
-  it("does not show generic therapist-only instruction for morphosyntax sheets", () => {
-    const result = getUserFacingSheetContent({
-      tipoOutput: "morfosintassi_complessa",
-      testoGenerato: `Obiettivo morfosintattico: pronome clitico lo.
-Frase target: La bambina lava il cane.
-Scena da illustrare: una bambina lava il cane.
-Domande di comprensione: Chi lava il cane?
-Prompt immagine: tecnico`,
-    });
-
-    expect(result).toBe(
-      "Titolo: Morfosintassi complessa\n\nConsegna: Leggi il testo e completa l'esercizio.\n\nTesto: La bambina lava il cane.\n\nDomande di comprensione: Chi lava il cane?\n\nImmagini: usa l'immagine per rispondere alle domande."
-    );
-    expect(result).not.toContain("insieme al logopedista");
-  });
-
-  it("shows fallback comprehension questions instead of n/d for legacy morphosyntax sheets", () => {
-    const result = getUserFacingSheetContent({
-      tipoOutput: "morfosintassi_complessa",
-      testoGenerato: `Obiettivo morfosintattico: pronome clitico lo.
-Frase target: La bambina lava il cane.
-Scena da illustrare: una bambina lava il cane.
-Prompt immagine: tecnico`,
-    });
-
-    expect(result).toContain("Domande di comprensione:");
-    expect(result).not.toContain("n/d");
-  });
-
-  it("extracts morphosyntax text and questions even with markdown-style section headers", () => {
-    const result = getUserFacingSheetContent({
-      tipoOutput: "morfosintassi_complessa",
-      testoGenerato: `## Obiettivo morfosintattico: pronomi clitici
-**Frase target**: Il gatto insegue la palla e poi la prende.
-**Scena da illustrare**: un gatto bianco in giardino con una palla rossa.
-**Domande di comprensione**: Cosa insegue il gatto? Cosa prende poi?
-**Prompt immagine**: tecnico`,
-    });
-
-    expect(result).toBe(
-      "Titolo: Morfosintassi complessa\n\nConsegna: Leggi il testo e completa l'esercizio.\n\nTesto: Il gatto insegue la palla e poi la prende.\n\nDomande di comprensione: Cosa insegue il gatto? Cosa prende poi?\n\nImmagini: usa l'immagine per rispondere alle domande."
-    );
-  });
-
-  it("extracts inline morphosyntax questions before the image prompt", () => {
-    const result = getUserFacingSheetContent({
-      tipoOutput: "morfosintassi_complessa",
-      testoGenerato:
-        "Obiettivo morfosintattico: soggetto-verbo-oggetto. Frase target: Il gatto mangia la palla. Scena da illustrare: gatto nero con palla rossa. Domande di comprensione: 1. Chi mangia la palla? 2. Di che colore è il gatto? 3. Dove si trova il gatto? Prompt immagine: tecnico",
-    });
-
-    expect(result).toContain(
-      "Domande di comprensione: 1. Chi mangia la palla? 2. Di che colore è il gatto? 3. Dove si trova il gatto?"
-    );
-    expect(result).not.toContain("Prompt immagine");
-    expect(result).not.toContain("n/d");
-  });
-
-  it("adds the standard structure and contextual questions for story sheets", () => {
+  it("renders title, contextual delivery, text, questions and image summary from unified JSON", () => {
     const result = getUserFacingSheetContent({
       tipoOutput: "storia",
-      testoGenerato: "Il gatto salta sul prato. Poi prende una palla rossa.",
+      testoGenerato: JSON.stringify(unifiedSheet),
     });
 
-    expect(result).toContain("Titolo: Storia con fonema");
-    expect(result).toContain("Consegna: Leggi il testo e svolgi l'esercizio.");
+    expect(result).toContain("Titolo: Il gatto nel prato");
     expect(result).toContain(
-      "Testo: Il gatto salta sul prato. Poi prende una palla rossa."
+      "Consegna: Leggi la storia del gatto e rispondi alle domande sulla palla."
     );
-    expect(result).toContain("Che cosa fa il gatto nel testo?");
-    expect(result).toContain("Poi prende una palla rossa?");
     expect(result).toContain(
-      "Immagini: osserva l'illustrazione collegata al testo."
+      "Testo: Il gatto corre nel prato. Poi prende una palla rossa."
     );
-    expect(result).not.toContain("Di chi parla il testo?");
-    expect(result).not.toContain("Dove si svolge la scena?");
-    expect(result).not.toContain("Prompt");
+    expect(result).toContain("1. Chi corre nel prato? Risposta: Il gatto.");
+    expect(result).toContain("Immagini: 1. illustrazione (principale).");
+    expect(result).not.toContain("prompt");
+  });
+
+  it("validates only the unified structural rules", () => {
+    expect(validateSheet(unifiedSheet, "storia", 4)).toBe(true);
+    expect(
+      validateSheet(
+        { ...unifiedSheet, consegna: "Trova l'intruso tra le immagini" },
+        "storia",
+        4
+      )
+    ).toBe(false);
+  });
+
+  it("keeps a simple legacy fallback for old saved sheets", () => {
+    const result = getUserFacingSheetContent({
+      tipoOutput: "morfosintassi_complessa",
+      testoGenerato: "Frase target: La bambina corre nel parco.",
+    });
+
+    expect(result).toContain("Titolo: Morfosintassi");
+    expect(result).toContain(
+      "Testo: Frase target: La bambina corre nel parco."
+    );
   });
 });
 

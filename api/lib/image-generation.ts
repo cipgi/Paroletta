@@ -1,3 +1,4 @@
+import { parseUnifiedSheetContent } from "../../contracts/sheet-content";
 export const IMAGE_GENERATION_MODEL =
   process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-2";
 export const IMAGE_GENERATION_MODEL_CODE_NAME = "GPT Image 2";
@@ -238,6 +239,34 @@ export function buildImageRequests(params: {
 }): ImageRequest[] {
   const baseStyleTags = ["stile:vettoriale_bambini", "formato:quadrato_1024"];
   const visualStyleTags = [...baseStyleTags, "prompt_version:visual_graded_v3"];
+  const unifiedSheet = parseUnifiedSheetContent(params.testoGenerato);
+
+  if (unifiedSheet) {
+    return unifiedSheet.immagini.map((image, index) => {
+      const role = image.ruolo === "illustrazione" ? "base" : image.ruolo;
+      const label =
+        image.ruolo === "target"
+          ? "Target"
+          : image.ruolo === "distrattore"
+            ? `Distrattore ${index}`
+            : `Illustrazione ${index + 1}`;
+
+      return {
+        role,
+        label,
+        prompt: buildClinicalImagePrompt(image.prompt),
+        semanticTags: [
+          ...(unifiedSheet.tipo === "discriminazione_visiva"
+            ? visualStyleTags
+            : baseStyleTags),
+          `tipo:${unifiedSheet.tipo}`,
+          `ruolo:${image.ruolo}`,
+          `livello:${image.livello}`,
+          `prompt:${image.prompt}`,
+        ],
+      };
+    });
+  }
 
   if (params.tipoOutput === "discriminazione_visiva") {
     const optionCount = Math.min(Math.max(params.numeroOpzioni ?? 4, 2), 4);
