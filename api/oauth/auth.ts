@@ -4,8 +4,8 @@ import { verifySessionToken } from "./session";
 import { findUserByUnionId } from "../queries/users";
 import { getSessionCookieOptions } from "../lib/cookies";
 import {
-  SUPABASE_ACCESS_COOKIE,
-  getSupabaseAccessTokenFromHeaders,
+  appendClearedSupabaseSessionCookies,
+  resolveSupabaseAccessToken,
 } from "../lib/session-cookies";
 
 function clearAuthCookies(headers: Headers, resHeaders?: Headers) {
@@ -24,10 +24,7 @@ function clearAuthCookies(headers: Headers, resHeaders?: Headers) {
     "set-cookie",
     cookie.serialize(Session.cookieName, "", cookieOptions)
   );
-  resHeaders.append(
-    "set-cookie",
-    cookie.serialize(SUPABASE_ACCESS_COOKIE, "", cookieOptions)
-  );
+  appendClearedSupabaseSessionCookies(headers, resHeaders);
 }
 
 export async function authenticateRequest(
@@ -51,8 +48,15 @@ export async function authenticateRequest(
     return undefined;
   }
 
-  return findUserByUnionId(
-    payload.unionId,
-    getSupabaseAccessTokenFromHeaders(headers)
-  );
+  const supabaseAccessToken =
+    payload.clientId === "supabase"
+      ? await resolveSupabaseAccessToken(headers, resHeaders)
+      : undefined;
+  if (payload.clientId === "supabase" && !supabaseAccessToken) {
+    clearAuthCookies(headers, resHeaders);
+    return undefined;
+  }
+
+  const user = await findUserByUnionId(payload.unionId, supabaseAccessToken);
+  return user ? { user, supabaseAccessToken } : undefined;
 }
