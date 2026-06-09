@@ -340,4 +340,79 @@ describe("validateSheet unified schema", () => {
       )
     ).toBe(false);
   });
+
+  it("rejects non-visual sheets with non-illustration roles or weak image prompts", () => {
+    expect(
+      validateSheet(
+        validSheet({
+          tipo: "morfosintassi",
+          titolo: "La bambina corre nel parco",
+          consegna:
+            "Osserva la bambina nel parco e rispondi alle domande sulla frase.",
+          testo: "La bambina corre nel parco.",
+          immagini: [
+            {
+              ruolo: "target",
+              livello: "principale",
+              prompt:
+                "Realistic child-friendly illustration of a girl running in a green park, simple background, no text.",
+            },
+          ],
+          domande: [
+            { domanda: "Chi corre nel parco?", risposta: "La bambina." },
+            { domanda: "Dove corre la bambina?", risposta: "Nel parco." },
+            { domanda: "Che azione fa la bambina?", risposta: "Corre." },
+          ],
+        }),
+        "morfosintassi_complessa",
+        4
+      )
+    ).toBe(false);
+
+    expect(
+      validateSheet(
+        validSheet({
+          tipo: "storia",
+          immagini: [
+            {
+              ruolo: "illustrazione",
+              livello: "principale",
+              prompt: "Illustration, no text.",
+            },
+          ],
+        }),
+        "storia",
+        4
+      )
+    ).toBe(false);
+  });
+
+  it("rejects duplicated image prompts in word-list sheets", () => {
+    expect(
+      validateSheet(
+        validSheet({
+          tipo: "lista_parole",
+          titolo: "Parole con R",
+          consegna:
+            "Leggi le parole con R e abbinale alle immagini una alla volta.",
+          testo: "rana, ramo",
+          immagini: [
+            {
+              ruolo: "illustrazione",
+              livello: "principale",
+              prompt: "Realistic child-friendly image of a green frog, no text.",
+            },
+            {
+              ruolo: "illustrazione",
+              livello: "principale",
+              prompt: "Realistic child-friendly image of a green frog, no text.",
+            },
+          ],
+          domande: [],
+        }),
+        "lista",
+        4
+      )
+    ).toBe(false);
+  });
 });

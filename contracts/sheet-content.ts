@@ -92,10 +92,10 @@ function countMeaningfulWords(value: string) {
     .filter(word => word.length > 2).length;
 }
 
-function isGenericImagePrompt(value: string) {
+function isGenericImagePrompt(value: string, minimumMeaningfulWords = 8) {
   const normalized = value.trim();
   return (
-    countMeaningfulWords(normalized) < 8 ||
+    countMeaningfulWords(normalized) < minimumMeaningfulWords ||
     TOO_GENERIC_IMAGE_PROMPT_PATTERNS.some(pattern => pattern.test(normalized))
   );
 }
@@ -126,6 +126,18 @@ function validateVisualDiscriminationImages(
       !isGenericImagePrompt(image.prompt)
     );
   });
+}
+
+function validateIllustrationImages(images: UnifiedSheetImage[]) {
+  if (images.length < 1) return false;
+  if (!hasUniquePrompts(images)) return false;
+
+  return images.every(
+    image =>
+      image.ruolo === "illustrazione" &&
+      image.livello === "principale" &&
+      !isGenericImagePrompt(image.prompt, 5)
+  );
 }
 
 function validateQuestions(
@@ -184,8 +196,8 @@ export function validateSheet(
     if (!validateVisualDiscriminationImages(sheet.immagini, numeroOpzioni)) {
       return false;
     }
-  } else if (sheet.immagini.length < 1) {
-    return false;
+  } else {
+    if (!validateIllustrationImages(sheet.immagini)) return false;
   }
 
   return sheet.immagini.every(
