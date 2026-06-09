@@ -232,14 +232,6 @@ function formatQuestions(questions: UnifiedSheetQuestion[]) {
     .join(" ")}`;
 }
 
-function formatImageSummary(images: UnifiedSheetImage[]) {
-  if (images.length === 0) return undefined;
-
-  return `Immagini: ${images
-    .map((image, index) => `${index + 1}. ${image.ruolo} (${image.livello})`)
-    .join("; ")}.`;
-}
-
 function getSheetTitle(tipoOutput: SheetContentType): string {
   const titles: Record<UnifiedSheetType, string> = {
     discriminazione_visiva: "Discriminazione visiva",
@@ -252,18 +244,86 @@ function getSheetTitle(tipoOutput: SheetContentType): string {
   return `Titolo: ${titles[normalizeUnifiedSheetType(tipoOutput)]}`;
 }
 
+function getStableHash(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function getVisualOptionStableKey(
+  option: { role?: string; cacheKey?: string; label?: string },
+  index: number
+) {
+  return [option.role, option.cacheKey, option.label, index]
+    .filter(Boolean)
+    .join(":");
+}
+
+function stableShuffleVisualOptions<T extends { role?: string }>(
+  options: T[],
+  seed: string
+) {
+  return options
+    .map((option, index) => ({
+      option,
+      index,
+      sortKey: getStableHash(
+        `${seed}:${getVisualOptionStableKey(option, index)}`
+      ),
+    }))
+    .sort((a, b) => a.sortKey - b.sortKey || a.index - b.index)
+    .map(item => item.option);
+}
+
+export function orderVisualOptionsForDisplay<T extends { role?: string }>(
+  options: T[],
+  seed: string | number
+): T[] {
+  if (options.length <= 1) return options;
+
+  const seedValue = String(seed);
+  const targetEntry = options
+    .map((option, index) => ({ option, index }))
+    .find(item => item.option.role === "target");
+  if (!targetEntry) return stableShuffleVisualOptions(options, seedValue);
+
+  const distractors = stableShuffleVisualOptions(
+    options.filter((_, index) => index !== targetEntry.index),
+    `${seedValue}:distrattori`
+  );
+  const targetIndex =
+    getStableHash(`${seedValue}:target-position`) % options.length;
+
+  return [
+    ...distractors.slice(0, targetIndex),
+    targetEntry.option,
+    ...distractors.slice(targetIndex),
+  ];
+}
+
 export function getUserFacingSheetContent(params: {
   tipoOutput: SheetContentType;
   testoGenerato: string;
 }): string {
   const unifiedSheet = parseUnifiedSheetContent(params.testoGenerato);
   if (unifiedSheet) {
+    if (unifiedSheet.tipo === "discriminazione_visiva") {
+      return [
+        formatInstruction("Indica l'immagine corretta."),
+        `Frase: ${normalizeSentence(unifiedSheet.testo)}`,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+    }
+
     return [
       `Titolo: ${unifiedSheet.titolo}`,
       formatInstruction(unifiedSheet.consegna),
       `Testo: ${unifiedSheet.testo}`,
       formatQuestions(unifiedSheet.domande),
-      formatImageSummary(unifiedSheet.immagini),
     ]
       .filter(Boolean)
       .join("\n\n");

@@ -4,6 +4,7 @@ import { trpc } from "@/providers/trpc";
 import {
   getNeutralVisualOptionLabel,
   getUserFacingSheetContent,
+  orderVisualOptionsForDisplay,
 } from "@contracts/sheet-content";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -326,6 +327,10 @@ export default function SheetDetail() {
   const visualImageAssets = imageAssets.filter(asset =>
     ["target", "distrattore"].includes(asset.role)
   );
+  const visualDisplayAssets = orderVisualOptionsForDisplay(
+    visualImageAssets,
+    sheet.id
+  );
   const visualOptionCount = Math.min(
     Math.max(getVisualOptionCount(words), visualImageAssets.length || 0),
     4
@@ -445,7 +450,7 @@ export default function SheetDetail() {
                 </div>
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6">
                   {Array.from({ length: visualOptionCount }, (_, index) => {
-                    const asset = visualImageAssets[index];
+                    const asset = visualDisplayAssets[index];
                     const label = getNeutralVisualOptionLabel(index);
                     return (
                       <div
