@@ -247,22 +247,31 @@ function buildTypeSpecificSection(params: GenerationParams): string {
     "Le domande, quando richieste, devono essere oggetti con domanda e risposta, specifiche al testo generato e non formule riutilizzabili.";
 
   if (tipo === "discriminazione_visiva") {
-    return `discriminazione_visiva: testo = frase target. immagini = esattamente numeroOpzioni elementi: 1 target con ruolo "target" e livello "principale", poi distrattori con ruolo "distrattore" e livelli in ordine "difficile", "intermedio", "facile" secondo numeroOpzioni. domande = []. La consegna deve nominare la frase target, per esempio "Indica l'immagine in cui ...", mai "Trova l'intruso tra le immagini". Ogni prompt immagine deve essere in inglese, realistico, child-friendly, una singola immagine separata, senza collage. Regola fondamentale: il target deve rispecchiare esattamente frase e consegna, altrimenti l'esercizio non è valido. I distrattori devono seguire questa scala: D1 difficile estremamente simile al target, con solo 1 o massimo 2 dettagli modificati (es. colore della palla); D2 intermedio con differenze evidenti ma stesso tema/direzione generale (es. vicino alla porta o lancia con le mani verso la porta); D3 facile con differenze sostanziali e immediate su agente, oggetto o destinazione/luogo (es. bambina, racchetta o tavolo). Mantieni stessa palette/stile; non rendere tutti i distrattori quasi identici.`;
+    return `discriminazione_visiva: crea un esercizio "indica l'immagine corretta", non un "trova l'intruso".
+Output obbligatorio: testo = una sola frase target visualmente rappresentabile; consegna = "Indica l'immagine in cui ..." e deve contenere lo stesso significato della frase target; domande = []; immagini = esattamente numeroOpzioni elementi ordinati così: target, distrattore difficile, distrattore intermedio, distrattore facile. Se numeroOpzioni è 2 usa solo target + distrattore difficile; se è 3 usa target + difficile + intermedio.
+Procedura obbligatoria prima di scrivere il JSON:
+1. Scegli una frase target concreta con soggetto, azione, oggetto e almeno un dettaglio verificabile (colore, posizione, luogo o destinazione). Evita concetti astratti non visibili.
+2. Definisci un contesto comune semplice che possa restare stabile nella serie.
+3. Definisci un solo asse di variazione per ogni distrattore: agente, azione, oggetto, colore, posizione spaziale, destinazione o luogo. Non modificare casualmente più elementi.
+4. Scrivi prompt immagine in inglese come singole scene quadrate, child-friendly, senza testo, senza collage, senza più vignette e senza etichette.
+5. Ogni prompt deve nominare esplicitamente soggetto, azione, oggetto, luogo/contesto e dettaglio variato; non usare pronomi o descrizioni vaghe come "similar image".
+Scala didattica obbligatoria: D1 difficile estremamente simile al target, con solo 1 dettaglio saliente modificato; D2 intermedio con differenze evidenti ma stesso tema e contesto generale; D3 facile con differenze sostanziali e immediate su agente, oggetto principale, destinazione o luogo. D3 facile con differenze sostanziali non deve essere assurdo o fuori tema.
+Controllo qualità obbligatorio: il target deve rendere vera la consegna; ogni distrattore deve rendere falsa la consegna per un motivo preciso; i distrattori non devono essere tutti quasi identici e non devono essere tutti ovviamente scollegati. Mantieni coerenza di stile, palette e livello di dettaglio in tutta la serie.`;
   }
 
   if (tipo === "morfosintassi") {
-    return `morfosintassi: testo = frase o struttura grammaticale target basata su elementoGrammaticale, livelloComplessita e descrizioneScena. immagini = 1-2 illustrazioni con ruolo "illustrazione" e livello "principale". domande = 3-5 domande specifiche AI-generated con risposta. ${questionRule}`;
+    return `morfosintassi: testo = frase o breve micro-scenario basato su elementoGrammaticale, livelloComplessita e descrizioneScena. La struttura grammaticale target deve comparire in modo esplicito, corretto e ripetibile, senza frasi ambigue. immagini = 1-2 illustrazioni con ruolo "illustrazione" e livello "principale"; il prompt immagine deve rappresentare una scena concreta coerente con la frase, non il concetto grammaticale astratto. domande = 3-5 domande specifiche con risposta che verificano comprensione e uso dell'elemento grammaticale, non domande generiche. ${questionRule}`;
   }
 
   if (tipo === "storia") {
-    return `storia: testo = narrazione completa, semplice e coerente. immagini = 1-3 illustrazioni con ruolo "illustrazione" e livello "principale". domande = 3-5 domande di comprensione AI-generated con risposta. ${questionRule}`;
+    return `storia: testo = narrazione completa, semplice e coerente con 4-7 frasi brevi. Il fonema target deve comparire in più parole naturali, senza forzature. immagini = 1-3 illustrazioni con ruolo "illustrazione" e livello "principale". domande = 3-5 domande di comprensione specifiche sul testo con risposta esatta. ${questionRule}`;
   }
 
   if (tipo === "filastrocca") {
-    return `filastrocca: testo = testo in rima, semplice e child-friendly. immagini = 1-2 illustrazioni con ruolo "illustrazione" e livello "principale". domande = 3-5 domande AI-generated con risposta. ${questionRule}`;
+    return `filastrocca: testo = testo in rima, semplice e child-friendly con lessico adatto all'età. Il fonema target deve comparire in parole naturali e pronunciabili. immagini = 1-2 illustrazioni con ruolo "illustrazione" e livello "principale". domande = 3-5 domande specifiche sul contenuto con risposta. ${questionRule}`;
   }
 
-  return `lista_parole: testo = lista di parole target con il fonema indicato, adatta all'età e vicina all'interesse. immagini = 1 immagine per parola, ciascuna con ruolo "illustrazione" e livello "principale". domande = [].`;
+  return `lista_parole: testo = lista di parole target con il fonema indicato, adatta all'età, concreta, pronunciabile e vicina all'interesse. Evita parole astratte o troppo simili se confondono il bambino. immagini = 1 immagine per parola, ciascuna con ruolo "illustrazione" e livello "principale", prompt in inglese con singolo oggetto/azione chiaramente rappresentabile. domande = [].`;
 }
 
 export function buildPromptMessages(params: GenerationParams): PromptMessage[] {
@@ -300,7 +309,9 @@ REGOLE CLINICHE GENERALI:
 - La consegna deve essere contestualizzata per il bambino e citare contenuti concreti della scheda; non deve essere generica.
 - Se il campo "interesse" vale "libero", scegli un interesse tra quelli disponibili nel messaggio utente.
 - Rispetta il fonema target nelle schede con parole, storie e filastrocche.
-- Ogni prompt in immagini deve essere in inglese, realistico, child-friendly, semanticamente fedele e senza testo nell'immagine.
+- Ogni prompt in immagini deve essere in inglese, descrivere una sola scena generabile, essere child-friendly, semanticamente fedele e senza testo nell'immagine.
+- Non creare esercizi risolvibili per differenze irrilevanti come stile, luminosità, distanza, quantità di dettagli o qualità dell'immagine.
+- Non creare esercizi impossibili: deve esistere una sola risposta corretta e ogni distrattore deve essere plausibile ma falso rispetto alla consegna.
 
 SCHEMA JSON UNIFICATO OBBLIGATORIO:
 {
@@ -328,7 +339,8 @@ REGOLE RIGIDE PER IL JSON:
 - Compila sempre tutti i campi dello schema, anche quando domande è [].
 - Il campo "tipo" deve essere esattamente "${normalizeUnifiedSheetType(params.tipoOutput)}".
 - Non usare consegne generiche come "Trova l'intruso tra le immagini".
-- Prima di rispondere verifica mentalmente: titolo, consegna, testo e prompt non vuoti; immagini coerenti con il tipo; numero immagini corretto.`,
+- Non usare prompt immagine generici, duplicati o basati su "same image"; descrivi sempre la scena completa.
+- Prima di rispondere verifica mentalmente: titolo, consegna, testo e prompt non vuoti; immagini coerenti con il tipo; numero immagini corretto; ruoli e livelli ordinati; risposta corretta unica; distrattori graduati.`,
     },
     {
       role: "user",
@@ -351,7 +363,7 @@ async function callOpenAI(messages: PromptMessage[]): Promise<unknown> {
     body: JSON.stringify({
       model: "gpt-4o-mini",
       messages,
-      temperature: 0.7,
+      temperature: 0.2,
       response_format: { type: "json_object" },
     }),
   });

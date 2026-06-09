@@ -58,6 +58,15 @@ const GENERIC_INSTRUCTION_PATTERNS = [
   /^\s*leggi il testo e completa l['’]?esercizio\.?\s*$/iu,
   /^\s*osserva le immagini e scegli quella corretta\.?\s*$/iu,
 ];
+const VISUAL_LEVEL_ORDER: UnifiedSheetImage["livello"][] = [
+  "difficile",
+  "intermedio",
+  "facile",
+];
+const TOO_GENERIC_IMAGE_PROMPT_PATTERNS = [
+  /^\s*(?:target|distrattore|illustrazione|immagine)\s*(?:\d+)?\s*$/iu,
+  /^\s*(?:realistic\s+)?(?:child-friendly\s+)?(?:target|distractor|image|illustration)(?:\s+image)?(?:,\s*no\s+text\.?)?\s*$/iu,
+];
 
 function isNonEmptyString(value: string) {
   return value.trim().length > 0;
@@ -65,6 +74,82 @@ function isNonEmptyString(value: string) {
 
 function isGenericInstruction(value: string) {
   return GENERIC_INSTRUCTION_PATTERNS.some(pattern => pattern.test(value));
+}
+
+function normalizeForValidation(value: string) {
+  return value
+    .toLocaleLowerCase("it-IT")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function countMeaningfulWords(value: string) {
+  return normalizeForValidation(value)
+    .split(" ")
+    .filter(word => word.length > 2).length;
+}
+
+function isGenericImagePrompt(value: string) {
+  const normalized = value.trim();
+  return (
+    countMeaningfulWords(normalized) < 8 ||
+    TOO_GENERIC_IMAGE_PROMPT_PATTERNS.some(pattern => pattern.test(normalized))
+  );
+}
+
+function hasUniquePrompts(images: UnifiedSheetImage[]) {
+  const prompts = images.map(image => normalizeForValidation(image.prompt));
+  return new Set(prompts).size === prompts.length;
+}
+
+function validateVisualDiscriminationImages(
+  images: UnifiedSheetImage[],
+  numeroOpzioni: number
+) {
+  if (images.length !== numeroOpzioni) return false;
+  if (!hasUniquePrompts(images)) return false;
+
+  const [target, ...distractors] = images;
+  if (target?.ruolo !== "target" || target.livello !== "principale") {
+    return false;
+  }
+  if (isGenericImagePrompt(target.prompt)) return false;
+
+  return distractors.every((image, index) => {
+    const expectedLevel = VISUAL_LEVEL_ORDER[index];
+    return (
+      image.ruolo === "distrattore" &&
+      image.livello === expectedLevel &&
+      !isGenericImagePrompt(image.prompt)
+    );
+  });
+}
+
+function validateQuestions(
+  sheet: UnifiedSheet,
+  expectedType: UnifiedSheetType
+) {
+  if (expectedType === "discriminazione_visiva") {
+    return sheet.domande.length === 0;
+  }
+  if (expectedType === "lista_parole") {
+    return sheet.domande.length === 0;
+  }
+
+  return (
+    sheet.domande.length >= 3 &&
+    sheet.domande.length <= 5 &&
+    sheet.domande.every(
+      question =>
+        isNonEmptyString(question.domanda) &&
+        isNonEmptyString(question.risposta) &&
+        countMeaningfulWords(question.domanda) >= 3 &&
+        countMeaningfulWords(question.risposta) >= 1
+    )
+  );
 }
 
 export function normalizeUnifiedSheetType(
@@ -93,8 +178,12 @@ export function validateSheet(
   if (isGenericInstruction(sheet.consegna)) return false;
   if (!isNonEmptyString(sheet.testo)) return false;
 
+  if (!validateQuestions(sheet, expectedType)) return false;
+
   if (expectedType === "discriminazione_visiva") {
-    if (sheet.immagini.length !== numeroOpzioni) return false;
+    if (!validateVisualDiscriminationImages(sheet.immagini, numeroOpzioni)) {
+      return false;
+    }
   } else if (sheet.immagini.length < 1) {
     return false;
   }

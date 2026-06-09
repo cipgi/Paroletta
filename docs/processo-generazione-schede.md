@@ -92,17 +92,21 @@ Tipi inclusi: `storia`, `filastrocca`, `lista`.
 ### Prompt processing
 
 - Template system molto prescrittivo:
-  - obbligo sezioni: obiettivo, consegna, target, distrattori, contesto, assi, check coerenza, prompt immagini.
-  - target esplicito,
+  - obbligo di produrre JSON unificato valido, senza testo extra,
+  - `testo` = frase target concreta e visualmente rappresentabile,
+  - `consegna` = istruzione "Indica l'immagine in cui ..." allineata alla frase target,
+  - `immagini` ordinate come target, D1 difficile, D2 intermedio, D3 facile, secondo `numeroOpzioni`,
   - immagine bersaglio inequivocabilmente corretta rispetto alla frase target,
-  - distrattori con difficoltà graduata e non più tutti quasi identici: D1 difficile estremamente simile con solo 1 o massimo 2 dettagli cambiati, D2 intermedio con differenze evidenti su azione/modalità/posizione ma nello stesso tema, D3 facile con differenze sostanziali su agente/oggetto/destinazione o luogo,
-  - coerenza visiva forte (stesso stile/palette; ambiente molto simile solo per target e D1, poi differenze progressivamente più visibili per D2 e D3),
+  - distrattori con difficoltà graduata e non più tutti quasi identici: D1 difficile estremamente simile con 1 dettaglio saliente cambiato, D2 intermedio con differenze evidenti su azione/modalità/posizione ma nello stesso tema, D3 facile con differenze sostanziali su agente/oggetto/destinazione o luogo,
+  - un solo asse di variazione per distrattore, senza cambi casuali multipli,
+  - prompt immagini in inglese con soggetto, azione, oggetto, contesto e dettaglio variato espliciti,
+  - coerenza visiva forte: stesso stile, palette e livello di dettaglio,
   - no collage/griglie.
-- Dopo output: validazione formale con `validateVisualDiscriminationPlan`.
+- Dopo output: `validateSheet` rifiuta piani con ruoli/livelli fuori ordine, numero opzioni errato, prompt generici, prompt duplicati o domande presenti dove non devono esserci.
 
 ### Output atteso
 
-- piano testuale strutturato,
+- JSON unificato strutturato,
 - prompt immagini separati (target + distrattori),
 - metadati coerenti con numero opzioni.
 

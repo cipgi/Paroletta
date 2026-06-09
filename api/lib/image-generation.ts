@@ -27,7 +27,7 @@ function sanitizeImageText(input: string, maxLength: number): string {
 }
 
 const MAX_TAG_LENGTH = 80;
-const MAX_PROMPT_LENGTH = 1800;
+const MAX_PROMPT_LENGTH = 3000;
 const SENSITIVE_PATIENT_PATTERN =
   /\b(?:paziente|patient|nome|cognome|codice\s*fiscale|telefono|email|indirizzo|diagnosi|cartella|nato\s+il|nata\s+il)\b(?:\s+[^,.;:]+)?/giu;
 const NON_SEMANTIC_PATTERN = /[^a-z0-9_:-]+/giu;
@@ -178,16 +178,17 @@ function buildVisualOptionScene(params: {
 
   return [
     `Frame separato di una serie visiva coerente: ${params.label}.`,
-    "Le immagini della serie devono appartenere alla stessa attività clinica: stesso stile illustrativo, stessa palette e stessa qualità visiva; mantieni inquadratura e ambiente uguali solo per target e distrattore difficile, usa differenze progressivamente più visibili per il distrattore intermedio e sostanziali per quello facile.",
+    "Genera un solo pannello quadrato, non una griglia. La serie deve sembrare disegnata dallo stesso illustratore: stessa palette, stesso stile vettoriale, stessa nitidezza e stesso livello di dettaglio. Non rendere l'esercizio risolvibile usando differenze di stile, luce, qualità o distanza della camera.",
     context,
     matchingRule,
     difficultyGuidance,
     variationAxis,
     `Rappresenta solo questa scena, senza sostituire il soggetto richiesto: ${params.description}.`,
-    "La scena generata deve combaciare letteralmente con la descrizione: soggetti, azione, oggetto e posizione devono essere quelli indicati.",
-    "Rispetta la scala di difficoltà indicata: il distrattore 1 deve essere quasi identico al target e differire per 1, massimo 2 dettagli; il distrattore 2 deve modificare azione, posizione o modalità in modo evidente ma restare nel tema; il distrattore 3 deve cambiare agente, oggetto principale o luogo/elemento scenico ed essere il più facile da escludere.",
+    "La scena generata deve combaciare letteralmente con la descrizione: soggetto principale, azione, oggetto, colore, luogo e posizione devono essere quelli indicati.",
+    "Non aggiungere elementi non richiesti che possano rendere vera anche una scena distrattore o falsa la scena target.",
+    "Rispetta la scala di difficoltà indicata: il distrattore 1 deve essere quasi identico al target e differire per 1 solo dettaglio saliente; il distrattore 2 deve modificare azione, posizione o modalità in modo evidente ma restare nel tema; il distrattore 3 deve cambiare agente, oggetto principale o luogo/destinazione ed essere il più facile da escludere.",
     exclusions,
-    "Non creare collage, griglie, vignette multiple o scene combinate con altre opzioni.",
+    "Non creare collage, griglie, vignette multiple, fumetti, frecce, simboli, testo o scene combinate con altre opzioni.",
   ]
     .join(" ")
     .replace(/\s+/g, " ")
@@ -197,9 +198,9 @@ function buildVisualOptionScene(params: {
 function getVisualDistractorDifficulty(index: number): string {
   return (
     [
-      "difficile: immagine estremamente simile al target; mantieni stesso soggetto, stessa azione generale, stesso oggetto e stesso contesto, cambiando solo 1 dettaglio saliente, massimo 2, come colore della palla, dimensione dell'oggetto o posizione precisa",
-      "intermedio: mantieni tema e scenario riconoscibili, ma introduci differenze evidenti; cambia la modalità dell'azione, la posizione rispetto all'obiettivo o un passaggio dell'azione, per esempio calciare vicino alla porta oppure lanciare con le mani verso la porta",
-      "facile: distrattore più semplice; crea differenze sostanziali e immediate cambiando agente, oggetto principale oppure elemento/luogo di destinazione, per esempio bambina al posto del bambino, racchetta al posto della palla o tavolo al posto della porta",
+      "difficile: immagine estremamente simile al target; mantieni soggetto, azione generale, oggetto principale e contesto, cambiando 1 solo dettaglio clinicamente rilevante come colore, dimensione o posizione precisa",
+      "intermedio: mantieni tema e scenario riconoscibili, ma cambia chiaramente la modalità dell'azione, la posizione rispetto all'obiettivo o un passaggio dell'azione, per esempio calciare vicino alla porta oppure lanciare con le mani verso la porta",
+      "facile: distrattore più semplice; crea differenze sostanziali e immediate cambiando agente, oggetto principale oppure luogo/destinazione, per esempio bambina al posto del bambino, racchetta al posto della palla o tavolo al posto della porta",
     ][index] ?? "graduato; differenza coerente con il livello clinico richiesto"
   );
 }
@@ -238,7 +239,7 @@ export function buildImageRequests(params: {
   descrizioneScena?: string;
 }): ImageRequest[] {
   const baseStyleTags = ["stile:vettoriale_bambini", "formato:quadrato_1024"];
-  const visualStyleTags = [...baseStyleTags, "prompt_version:visual_graded_v4"];
+  const visualStyleTags = [...baseStyleTags, "prompt_version:visual_graded_v5"];
   const unifiedSheet = parseUnifiedSheetContent(params.testoGenerato);
 
   if (unifiedSheet) {
@@ -430,7 +431,8 @@ export function buildClinicalImagePrompt(scene: string): string {
     "Illustrazione pediatrica per esercizio di logopedia.",
     "Priorità massima: l'immagine deve essere semanticamente fedele alla consegna clinica; non aggiungere soggetti alternativi o non richiesti.",
     `Scena: ${sanitizedScene}.`,
-    "Stile vettoriale per bambini, colori chiari, sfondo semplice, nessun testo nell'immagine.",
+    "Crea una sola scena, un solo pannello, nessuna griglia, nessun collage, nessuna vignetta multipla.",
+    "Stile vettoriale per bambini, colori chiari, sfondo semplice, nessun testo nell'immagine, nessuna etichetta, nessun fumetto.",
     `Output obbligatorio: aspect ratio ${IMAGE_GENERATION_ASPECT_RATIO}, risoluzione ${IMAGE_GENERATION_SIZE}.`,
     "Non includere nomi, dati clinici o identificativi di pazienti.",
   ].join(" ");

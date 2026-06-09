@@ -61,7 +61,7 @@ Distrattore 3: cane che mangia una pera in cucina.`,
       "target esatto: il cane mangia la mela"
     );
     expect(requests[0].semanticTags.map(normalizeSemanticTag)).toContain(
-      "prompt_version:visual_graded_v4"
+      "prompt_version:visual_graded_v5"
     );
     expect(requests[1].prompt).toContain("Unico asse di variazione");
     expect(requests[1].prompt).toContain(
@@ -180,7 +180,7 @@ Distrattore 1: singola immagine con un falco al centro nel cielo azzurro.`,
     expect(requests[1].prompt).toContain(
       "difficile: immagine estremamente simile"
     );
-    expect(requests[1].prompt).toContain("solo 1 dettaglio saliente");
+    expect(requests[1].prompt).toContain("1 solo dettaglio saliente");
     expect(requests[2].prompt).toContain(
       "intermedio: mantieni tema e scenario riconoscibili"
     );
