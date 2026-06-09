@@ -28,7 +28,10 @@ import {
   MAX_PROFILE_NAME_LENGTH,
   sanitizeProfileNameOrFallback,
 } from "./lib/sanitize";
-import { SUPABASE_ACCESS_COOKIE } from "./lib/session-cookies";
+import {
+  appendClearedSupabaseSessionCookies,
+  appendSupabaseSessionCookies,
+} from "./lib/session-cookies";
 
 // Supabase email/password authentication lives in this router. OAuth provider
 // handlers are intentionally separate so removing Google OAuth does not affect
@@ -244,16 +247,11 @@ export const authRouter = createRouter({
           maxAge: Session.maxAgeMs / 1000,
         })
       );
-      if (data.session?.access_token) {
-        ctx.resHeaders.append(
-          "set-cookie",
-          cookie.serialize(SUPABASE_ACCESS_COOKIE, data.session.access_token, {
-            httpOnly: true,
-            path: opts.path,
-            sameSite: opts.sameSite?.toLowerCase() as "lax" | "none" | "strict",
-            secure: opts.secure,
-            maxAge: 15 * 60,
-          })
+      if (data.session) {
+        appendSupabaseSessionCookies(
+          ctx.req.headers,
+          ctx.resHeaders,
+          data.session
         );
       }
       return { success: true };
@@ -308,16 +306,7 @@ export const authRouter = createRouter({
           maxAge: 0,
         })
       );
-      ctx.resHeaders.append(
-        "set-cookie",
-        cookie.serialize(SUPABASE_ACCESS_COOKIE, "", {
-          httpOnly: true,
-          path: opts.path,
-          sameSite: opts.sameSite?.toLowerCase() as "lax" | "none" | "strict",
-          secure: opts.secure,
-          maxAge: 0,
-        })
-      );
+      appendClearedSupabaseSessionCookies(ctx.req.headers, ctx.resHeaders);
 
       return { success: true };
     }),
@@ -333,16 +322,7 @@ export const authRouter = createRouter({
         maxAge: 0,
       })
     );
-    ctx.resHeaders.append(
-      "set-cookie",
-      cookie.serialize(SUPABASE_ACCESS_COOKIE, "", {
-        httpOnly: true,
-        path: opts.path,
-        sameSite: opts.sameSite?.toLowerCase() as "lax" | "none" | "strict",
-        secure: opts.secure,
-        maxAge: 0,
-      })
-    );
+    appendClearedSupabaseSessionCookies(ctx.req.headers, ctx.resHeaders);
     return { success: true };
   }),
 });

@@ -2,7 +2,6 @@ import type { FetchCreateContextFnOptions } from "@trpc/server/adapters/fetch";
 import type { User } from "./store";
 import { authenticateRequest } from "./oauth/auth";
 import { extractClientIp } from "./lib/login-security";
-import { getSupabaseAccessTokenFromHeaders } from "./lib/session-cookies";
 
 export type TrpcContext = {
   req: Request;
@@ -19,12 +18,14 @@ export async function createContext(
     req: opts.req,
     resHeaders: opts.resHeaders,
     clientIp: extractClientIp(opts.req.headers),
-    supabaseAccessToken: getSupabaseAccessTokenFromHeaders(opts.req.headers),
   };
   try {
-    ctx.user = await authenticateRequest(opts.req.headers, opts.resHeaders);
+    const auth = await authenticateRequest(opts.req.headers, opts.resHeaders);
+    ctx.user = auth?.user;
+    ctx.supabaseAccessToken = auth?.supabaseAccessToken;
   } catch {
     ctx.user = undefined;
+    ctx.supabaseAccessToken = undefined;
   }
   return ctx;
 }
