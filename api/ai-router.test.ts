@@ -106,6 +106,8 @@ describe("AI prompt security", () => {
     expect(messages[0].content).toContain(
       "D3 facile con differenze sostanziali"
     );
+    expect(messages[0].content).toContain("risposta corretta unica");
+    expect(messages[0].content).toContain("una sola scena generabile");
     expect(messages[1].content).toContain(
       '"tipoOutput":"discriminazione_visiva"'
     );
@@ -277,6 +279,64 @@ describe("validateSheet unified schema", () => {
         }),
         "discriminazione_visiva",
         4
+      )
+    ).toBe(false);
+  });
+
+  it("rejects weak visual discrimination plans with wrong order or generic prompts", () => {
+    expect(
+      validateSheet(
+        validSheet({
+          tipo: "discriminazione_visiva",
+          titolo: "Palla rossa nella porta",
+          consegna:
+            "Indica l'immagine in cui il bambino calcia la palla rossa nella porta.",
+          testo: "Il bambino calcia la palla rossa nella porta.",
+          immagini: [
+            {
+              ruolo: "distrattore",
+              livello: "difficile",
+              prompt:
+                "A boy kicks a blue ball into a small soccer goal in a simple child-friendly field, no text.",
+            },
+            {
+              ruolo: "target",
+              livello: "principale",
+              prompt:
+                "A boy kicks a red ball into a small soccer goal in a simple child-friendly field, no text.",
+            },
+          ],
+          domande: [],
+        }),
+        "discriminazione_visiva",
+        2
+      )
+    ).toBe(false);
+
+    expect(
+      validateSheet(
+        validSheet({
+          tipo: "discriminazione_visiva",
+          titolo: "Palla rossa nella porta",
+          consegna:
+            "Indica l'immagine in cui il bambino calcia la palla rossa nella porta.",
+          testo: "Il bambino calcia la palla rossa nella porta.",
+          immagini: [
+            {
+              ruolo: "target",
+              livello: "principale",
+              prompt: "Target image, no text.",
+            },
+            {
+              ruolo: "distrattore",
+              livello: "difficile",
+              prompt: "Distractor image, no text.",
+            },
+          ],
+          domande: [],
+        }),
+        "discriminazione_visiva",
+        2
       )
     ).toBe(false);
   });
