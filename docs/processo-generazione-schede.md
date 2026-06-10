@@ -55,7 +55,7 @@ Tipi inclusi: `storia`, `filastrocca`, `lista`.
 ### Prompt processing
 
 - Il prompt system impone semplicità linguistica, formato testuale per tipo, vincoli su `listaParole` e JSON finale.
-- Se interesse = `libero`, il server sceglie un interesse specifico disponibile per la generazione.
+- Se interesse = `libero`, il server sceglie casualmente un interesse specifico disponibile prima di costruire il prompt.
 
 ### Output atteso
 

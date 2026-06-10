@@ -97,7 +97,12 @@ function resolveInterestForGeneration(
   interesse: (typeof ALLOWED_INTERESSI)[number]
 ): (typeof AVAILABLE_SPECIFIC_INTERESTS)[number] {
   if (interesse !== FREE_INTEREST_VALUE) return interesse;
-  return AVAILABLE_SPECIFIC_INTERESTS[0];
+  const randomIndex = Math.floor(
+    Math.random() * AVAILABLE_SPECIFIC_INTERESTS.length
+  );
+  return (
+    AVAILABLE_SPECIFIC_INTERESTS[randomIndex] ?? AVAILABLE_SPECIFIC_INTERESTS[0]
+  );
 }
 
 export function sanitizePromptVariable(
@@ -162,14 +167,16 @@ export function sanitizeGenerationParams(input: {
       )
     : undefined;
 
+  const allowedInterest = assertAllowedValue(
+    input.interesse,
+    ALLOWED_INTERESSI,
+    "Interesse"
+  );
+
   return {
     eta,
     fonema: assertAllowedValue(input.fonema, ALLOWED_FONEMI, "Fonema"),
-    interesse: assertAllowedValue(
-      input.interesse,
-      ALLOWED_INTERESSI,
-      "Interesse"
-    ),
+    interesse: resolveInterestForGeneration(allowedInterest),
     tipoOutput: input.tipoOutput,
     aspettoSpecifico: aspettoSpecifico || undefined,
     scenarioSmart: scenarioSmart || undefined,

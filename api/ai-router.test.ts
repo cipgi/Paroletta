@@ -54,7 +54,7 @@ describe("AI prompt security", () => {
     ).toBe("le e admin 6 anni");
   });
 
-  it("allows only server-defined fonemi and interests, including free interest", () => {
+  it("allows only server-defined fonemi and interests and randomizes free interest", () => {
     expect(() =>
       sanitizeGenerationParams({
         eta: "6 anni",
@@ -73,6 +73,8 @@ describe("AI prompt security", () => {
       })
     ).toThrow("Interesse non valido");
 
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.99);
+
     expect(
       sanitizeGenerationParams({
         eta: "6 anni",
@@ -80,7 +82,9 @@ describe("AI prompt security", () => {
         interesse: "libero",
         tipoOutput: "storia",
       }).interesse
-    ).toBe("libero");
+    ).toBe("musica");
+
+    randomSpy.mockRestore();
   });
 
   it("builds one unified JSON prompt for every worksheet type", () => {
