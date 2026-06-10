@@ -23,6 +23,8 @@ import {
   Eye,
   Brain,
   Images,
+  ListOrdered,
+  MessageCircle,
 } from "lucide-react";
 
 const interessi = [
@@ -46,12 +48,16 @@ type TipoScheda =
   | "filastrocca"
   | "lista"
   | "discriminazione_visiva"
-  | "morfosintassi_complessa";
+  | "morfosintassi_complessa"
+  | "narrazione_sequenze"
+  | "pragmatica";
 
 type TipoSchedaPrincipale =
   | "testo_con_fonema"
   | "discriminazione_visiva"
-  | "morfosintassi_complessa";
+  | "morfosintassi_complessa"
+  | "narrazione_sequenze"
+  | "pragmatica";
 
 type TipoTestoConFonema = Extract<
   TipoScheda,
@@ -95,10 +101,22 @@ const tipoSchedaConfig: Record<
     icona: Eye,
   },
   morfosintassi_complessa: {
-    titolo: "Morfosintassi complessa",
+    titolo: "Morfologia e morfosintassi",
     descrizione:
-      "Pronomi clitici, relative e subordinate con scena visiva precisa e frase target.",
+      "Articoli, accordi, tempi verbali, clitici, relative e subordinate.",
     icona: Brain,
+  },
+  narrazione_sequenze: {
+    titolo: "Narrazione e sequenze",
+    descrizione:
+      "Storia in 3-5 scene ordinate con domande su prima/dopo, problema e soluzione.",
+    icona: ListOrdered,
+  },
+  pragmatica: {
+    titolo: "Pragmatica",
+    descrizione:
+      "Turni conversazionali, inferenze, emozioni e intenzioni comunicative.",
+    icona: MessageCircle,
   },
   testo_con_fonema: {
     titolo: "Testo con fonema",
@@ -129,6 +147,7 @@ export default function Generator() {
         livelloComplessita?: LivelloComplessita;
         descrizioneScena?: string;
         numeroOpzioni?: number;
+        numeroScene?: number;
       };
       return {
         eta: parsed.eta ?? "6-8 anni",
@@ -146,6 +165,7 @@ export default function Generator() {
         livelloComplessita: parsed.livelloComplessita ?? "intermedio",
         descrizioneScena: parsed.descrizioneScena ?? "",
         numeroOpzioni: parsed.numeroOpzioni ?? 4,
+        numeroScene: parsed.numeroScene ?? 4,
       };
     } catch {
       return null;
@@ -179,6 +199,9 @@ export default function Generator() {
   const [numeroOpzioni, setNumeroOpzioni] = useState(
     savedPreferences?.numeroOpzioni ?? 4
   );
+  const [numeroScene, setNumeroScene] = useState(
+    savedPreferences?.numeroScene ?? 4
+  );
 
   useEffect(() => {
     localStorage.setItem(
@@ -194,6 +217,7 @@ export default function Generator() {
         livelloComplessita,
         descrizioneScena,
         numeroOpzioni,
+        numeroScene,
       })
     );
   }, [
@@ -207,6 +231,7 @@ export default function Generator() {
     livelloComplessita,
     descrizioneScena,
     numeroOpzioni,
+    numeroScene,
   ]);
 
   const generate = trpc.ai.generate.useMutation({
@@ -247,6 +272,7 @@ export default function Generator() {
       livelloComplessita,
       descrizioneScena: descrizioneScena.trim() || undefined,
       numeroOpzioni,
+      numeroScene,
     });
   };
 
@@ -306,19 +332,119 @@ export default function Generator() {
       );
     }
 
+    if (tipoOutput === "narrazione_sequenze") {
+      return (
+        <div className="space-y-5 rounded-2xl border border-amber-100 bg-amber-50/50 p-4">
+          <div className="space-y-2">
+            <Label htmlFor="scenarioSmart" className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-amber-600" />
+              Tema narrativo e obiettivo
+            </Label>
+            <Textarea
+              id="scenarioSmart"
+              value={scenarioSmart}
+              onChange={e => setScenarioSmart(e.target.value)}
+              placeholder='es. "Un bambino perde la palla al parco, chiede aiuto e la ritrova. Lavora su prima/dopo, problema e soluzione."'
+              rows={5}
+            />
+            <p className="text-xs text-slate-500">
+              Paroletta crea una sequenza ordinata con personaggi coerenti,
+              problema semplice e soluzione finale.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="numeroScene" className="flex items-center gap-2">
+              <Images className="w-4 h-4 text-amber-600" />
+              Numero di scene
+            </Label>
+            <Select
+              value={String(numeroScene)}
+              onValueChange={value => setNumeroScene(Number(value))}
+            >
+              <SelectTrigger id="numeroScene">
+                <SelectValue placeholder="Seleziona numero scene" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="3">3 scene</SelectItem>
+                <SelectItem value="4">4 scene</SelectItem>
+                <SelectItem value="5">5 scene</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      );
+    }
+
+    if (tipoOutput === "pragmatica") {
+      return (
+        <div className="space-y-5 rounded-2xl border border-rose-100 bg-rose-50/50 p-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="aspettoSpecifico">
+                Abilità pragmatica target
+              </Label>
+              <Input
+                id="aspettoSpecifico"
+                value={aspettoSpecifico}
+                onChange={e => setAspettoSpecifico(e.target.value)}
+                placeholder="es. turno conversazionale, inferenza, emozione, richiesta di aiuto"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="livelloComplessita">Complessità richiesta</Label>
+              <Select
+                value={livelloComplessita}
+                onValueChange={(value: LivelloComplessita) =>
+                  setLivelloComplessita(value)
+                }
+              >
+                <SelectTrigger id="livelloComplessita">
+                  <SelectValue placeholder="Seleziona complessità" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="base">Base</SelectItem>
+                  <SelectItem value="intermedio">Intermedio</SelectItem>
+                  <SelectItem value="avanzato">Avanzato</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="scenarioSmart" className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-rose-600" />
+              Scenario sociale
+            </Label>
+            <Textarea
+              id="scenarioSmart"
+              value={scenarioSmart}
+              onChange={e => setScenarioSmart(e.target.value)}
+              placeholder='es. "Due bambini vogliono lo stesso gioco. Uno è triste e l’altro deve scegliere cosa dire."'
+              rows={5}
+            />
+            <p className="text-xs text-slate-500">
+              L’IA genera uno scenario quotidiano con domande su emozioni,
+              intenzioni, inferenze e frasi possibili.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
     if (tipoOutput === "morfosintassi_complessa") {
       return (
         <div className="space-y-5 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="elementoGrammaticale">
-                Elemento grammaticale target
+                Obiettivo morfologico o morfosintattico
               </Label>
               <Input
                 id="elementoGrammaticale"
                 value={elementoGrammaticale}
                 onChange={e => setElementoGrammaticale(e.target.value)}
-                placeholder="es. pronome clitico lo, frase relativa, subordinata causale"
+                placeholder="es. articoli, plurali, accordi nome-aggettivo, pronome clitico lo, frase relativa"
               />
             </div>
             <div className="space-y-2">
@@ -353,12 +479,12 @@ export default function Generator() {
               id="descrizioneScena"
               value={descrizioneScena}
               onChange={e => setDescrizioneScena(e.target.value)}
-              placeholder='es. "Una bambina lava il cane e poi lo asciuga. Voglio lavorare su chi riceve l’azione del pronome lo."'
+              placeholder='es. "Due bambini hanno una palla rossa e due palle blu: voglio lavorare su plurali e accordo nome-aggettivo."'
               rows={5}
             />
             <p className="text-xs text-slate-500">
-              L’IA ottimizza la consegna, la frase target e il prompt immagine
-              per rappresentare esattamente la struttura grammaticale.
+              L’IA adatta consegna, frase target, domande e prompt immagine al
+              livello scelto: morfologia di base o struttura complessa.
             </p>
           </div>
         </div>
@@ -431,6 +557,8 @@ export default function Generator() {
                 [
                   "discriminazione_visiva",
                   "morfosintassi_complessa",
+                  "narrazione_sequenze",
+                  "pragmatica",
                   "testo_con_fonema",
                 ] as TipoSchedaPrincipale[]
               ).map(tipo => {

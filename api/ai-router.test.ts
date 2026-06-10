@@ -114,6 +114,56 @@ describe("AI prompt security", () => {
     expect(messages[1].content).toContain('"numeroOpzioni":4');
   });
 
+  it("sanitizes narrative scene count and keeps morphology as an existing type", () => {
+    const params = sanitizeGenerationParams({
+      eta: "7 anni",
+      fonema: "s",
+      interesse: "mare",
+      tipoOutput: "narrazione_sequenze",
+      scenarioSmart: "una bambina perde il secchiello e poi lo ritrova",
+      numeroScene: 9,
+    });
+
+    const messages = buildPromptMessages(params);
+
+    expect(params.numeroScene).toBe(5);
+    expect(messages[0].content).toContain("narrazione_sequenze");
+    expect(messages[0].content).toContain("esattamente numeroScene");
+    expect(messages[0].content).not.toContain("morfologia_base");
+    expect(messages[1].content).toContain('"numeroScene":5');
+  });
+
+  it("builds pragmatic and unified morphology prompts without phonological focus", () => {
+    const pragmatic = buildPromptMessages(
+      sanitizeGenerationParams({
+        eta: "8 anni",
+        fonema: "r",
+        interesse: "calcio",
+        tipoOutput: "pragmatica",
+        aspettoSpecifico: "turno conversazionale",
+        scenarioSmart: "due bambini vogliono tirare lo stesso rigore",
+      })
+    );
+    const morphology = buildPromptMessages(
+      sanitizeGenerationParams({
+        eta: "6 anni",
+        fonema: "r",
+        interesse: "gatto",
+        tipoOutput: "morfosintassi_complessa",
+        elementoGrammaticale: "plurali e accordo nome-aggettivo",
+        livelloComplessita: "base",
+      })
+    );
+
+    expect(pragmatic[0].content).toContain("pragmatica");
+    expect(pragmatic[0].content).toContain("turni conversazionali");
+    expect(morphology[0].content).toContain("Morfologia e morfosintassi");
+    expect(morphology[0].content).toContain("morfologia di base");
+    expect(morphology[1].content).toContain(
+      '"tipoOutput":"morfosintassi"'
+    );
+  });
+
   it("keeps sanitized user values as data separate from the fixed server template", () => {
     const params = sanitizeGenerationParams({
       eta: "6 anni",
@@ -260,6 +310,83 @@ describe("validateSheet unified schema", () => {
     });
 
     expect(validateSheet(sheet, "lista", 4)).toBe(true);
+  });
+
+  it("validates narrative sequences with 3 to 5 ordered scenes", () => {
+    const sheet = validSheet({
+      tipo: "narrazione_sequenze",
+      titolo: "La torta finita",
+      consegna:
+        "Osserva le scene in ordine e racconta come i bambini preparano la torta.",
+      testo:
+        "I bambini preparano una torta. Mescolano gli ingredienti. La torta cade sul tavolo. Puliscono e preparano una nuova torta.",
+      immagini: [
+        {
+          ruolo: "illustrazione",
+          livello: "principale",
+          prompt:
+            "Child-friendly illustration of two children preparing a cake in a kitchen, first sequence scene, no text.",
+        },
+        {
+          ruolo: "illustrazione",
+          livello: "principale",
+          prompt:
+            "Child-friendly illustration of the same two children mixing cake ingredients in the same kitchen, second scene, no text.",
+        },
+        {
+          ruolo: "illustrazione",
+          livello: "principale",
+          prompt:
+            "Child-friendly illustration of the cake falling on the table while the same children react, third scene, no text.",
+        },
+        {
+          ruolo: "illustrazione",
+          livello: "principale",
+          prompt:
+            "Child-friendly illustration of the same children cleaning the table and preparing a new cake, fourth scene, no text.",
+        },
+      ],
+      domande: [
+        { domanda: "Che cosa fanno prima i bambini?", risposta: "Preparano una torta." },
+        { domanda: "Che cosa succede alla torta?", risposta: "Cade sul tavolo." },
+        { domanda: "Chi sono i personaggi?", risposta: "Due bambini." },
+        { domanda: "Come finisce la storia?", risposta: "Puliscono e preparano una nuova torta." },
+      ],
+    });
+
+    expect(validateSheet(sheet, "narrazione_sequenze", { numeroScene: 4 })).toBe(
+      true
+    );
+    expect(validateSheet(sheet, "narrazione_sequenze", { numeroScene: 5 })).toBe(
+      false
+    );
+  });
+
+  it("validates pragmatic worksheets with a social scene", () => {
+    const sheet = validSheet({
+      tipo: "pragmatica",
+      titolo: "Aspettare il turno",
+      consegna:
+        "Osserva la scena e rispondi alle domande su cosa pensano, provano e possono dire i bambini.",
+      testo:
+        "Anna aspetta lo scivolo mentre Leo resta seduto in alto e non scende.",
+      immagini: [
+        {
+          ruolo: "illustrazione",
+          livello: "principale",
+          prompt:
+            "Child-friendly illustration of a child waiting near a slide while another child sits at the top, clear social interaction and facial expressions, no text.",
+        },
+      ],
+      domande: [
+        { domanda: "Che cosa vuole fare Anna?", risposta: "Vuole usare lo scivolo." },
+        { domanda: "Come può sentirsi Anna?", risposta: "Può sentirsi impaziente." },
+        { domanda: "Perché Leo resta in alto?", risposta: "Forse ha paura o vuole ancora giocare." },
+        { domanda: "Che cosa può dire Anna?", risposta: "Posso fare un turno anch'io?" },
+      ],
+    });
+
+    expect(validateSheet(sheet, "pragmatica", 4)).toBe(true);
   });
 
   it("rejects generic deliveries and wrong visual option counts", () => {

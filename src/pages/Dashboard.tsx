@@ -12,7 +12,9 @@ function getSheetTypeLabel(tipoOutput: string) {
     filastrocca: "Filastrocca",
     lista: "Lista parole",
     discriminazione_visiva: "Trova l'intruso",
-    morfosintassi_complessa: "Morfosintassi complessa",
+    morfosintassi_complessa: "Morfologia e morfosintassi",
+    narrazione_sequenze: "Narrazione e sequenze",
+    pragmatica: "Pragmatica",
   };
   return labels[tipoOutput] ?? tipoOutput;
 }

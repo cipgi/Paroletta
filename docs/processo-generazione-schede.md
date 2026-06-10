@@ -125,7 +125,7 @@ Tipi inclusi: `storia`, `filastrocca`, `lista`.
 
 ---
 
-## 3) Scheda "Morfosintassi complessa" (`morfosintassi_complessa`)
+## 3) Scheda "Morfologia e morfosintassi" (`morfosintassi_complessa`)
 
 ### Input utente
 
@@ -165,7 +165,53 @@ Tipi inclusi: `storia`, `filastrocca`, `lista`.
 
 ---
 
-## 4) Output finale e uso post-generazione
+## 4) Scheda "Narrazione e sequenze" (`narrazione_sequenze`)
+
+### Input utente
+
+- età, interesse,
+- tema narrativo/obiettivo clinico (`scenarioSmart`),
+- numero scene (`numeroScene`, 3-5).
+
+### Output atteso
+
+- storia breve con personaggi, problema/imprevisto e soluzione,
+- 3-5 immagini ordinate cronologicamente,
+- 4-5 domande su prima/dopo, personaggi, problema e soluzione.
+
+### Cosa può farne l'utente
+
+- riordino e racconto di sequenze,
+- produzione narrativa guidata,
+- lavoro su nessi temporali e causali.
+
+---
+
+## 5) Scheda "Pragmatica" (`pragmatica`)
+
+### Input utente
+
+- età, interesse,
+- abilità pragmatica target,
+- scenario sociale quotidiano,
+- livello di complessità.
+
+### Output atteso
+
+- scenario sociale concreto,
+- una scena illustrata,
+- 4-6 domande con risposte modello su turni, inferenze, emozioni,
+  intenzioni comunicative e frasi possibili.
+
+### Cosa può farne l'utente
+
+- discussione guidata su cosa dire/fare in una situazione,
+- lavoro su emozioni e intenzioni,
+- esercizi di risposta sociale flessibile.
+
+---
+
+## 6) Output finale e uso post-generazione
 
 Dopo la generazione:
 

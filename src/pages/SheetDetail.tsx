@@ -17,6 +17,8 @@ import {
   Sparkles,
   Eye,
   Brain,
+  ListOrdered,
+  MessageCircle,
   Clock3,
   RefreshCcw,
   AlertTriangle,
@@ -28,7 +30,9 @@ function getSheetTypeLabel(tipoOutput: string) {
     filastrocca: "Filastrocca",
     lista: "Lista di parole",
     discriminazione_visiva: "Trova l'intruso",
-    morfosintassi_complessa: "Morfosintassi complessa",
+    morfosintassi_complessa: "Morfologia e morfosintassi",
+    narrazione_sequenze: "Narrazione e sequenze",
+    pragmatica: "Pragmatica",
   };
   return labels[tipoOutput] ?? tipoOutput;
 }
@@ -43,10 +47,18 @@ function getDifficultyLabel(difficulty: string) {
 }
 
 function getClinicalGoalLabel(tipoOutput: string) {
-  if (tipoOutput === "morfosintassi_complessa") return "Obiettivo: morfosintassi";
+  if (tipoOutput === "morfosintassi_complessa")
+    return "Obiettivo: morfologia/morfosintassi";
   if (tipoOutput === "discriminazione_visiva")
     return "Obiettivo: discriminazione visiva";
+  if (tipoOutput === "narrazione_sequenze")
+    return "Obiettivo: narrazione e sequenze";
+  if (tipoOutput === "pragmatica") return "Obiettivo: pragmatica";
   return "Obiettivo: fonologia/articolazione";
+}
+
+function isTextWithPhonemeSheet(tipoOutput: string) {
+  return ["storia", "filastrocca", "lista"].includes(tipoOutput);
 }
 
 function getPhonemePositionHints(fonema: string) {
@@ -323,6 +335,9 @@ export default function SheetDetail() {
   const words = (sheet.listaParole as string[] | null) ?? [];
   const isVisualDiscrimination = sheet.tipoOutput === "discriminazione_visiva";
   const isComplexMorphosyntax = sheet.tipoOutput === "morfosintassi_complessa";
+  const isNarrativeSequence = sheet.tipoOutput === "narrazione_sequenze";
+  const isPragmatic = sheet.tipoOutput === "pragmatica";
+  const hasPhonemeFocus = isTextWithPhonemeSheet(sheet.tipoOutput);
   const imageAssets = sheet.imageAssets ?? [];
   const visualImageAssets = imageAssets.filter(asset =>
     ["target", "distrattore"].includes(asset.role)
@@ -404,7 +419,7 @@ export default function SheetDetail() {
                 <Badge variant="secondary">
                   Livello: {sheet.difficolta.toLowerCase()}
                 </Badge>
-                {!isVisualDiscrimination && !isComplexMorphosyntax ? (
+                {hasPhonemeFocus ? (
                   <>
                     <Badge variant="secondary">/{sheet.fonema}/</Badge>
                     <Badge variant="outline">
@@ -427,7 +442,12 @@ export default function SheetDetail() {
                   Consegna bambino
                 </p>
                 <div className="text-slate-800 leading-relaxed whitespace-pre-line text-lg">
-                  {renderHighlightedPhonemeText(userFacingContent, sheet.fonema)}
+                  {hasPhonemeFocus
+                    ? renderHighlightedPhonemeText(
+                        userFacingContent,
+                        sheet.fonema
+                      )
+                    : userFacingContent}
                 </div>
               </div>
 
@@ -487,10 +507,66 @@ export default function SheetDetail() {
                 <div className="mb-4 flex items-center gap-2 text-indigo-800">
                   <Brain className="h-5 w-5" />
                   <p className="font-semibold">
-                    Scena morfosintattica illustrata
+                    Scena morfologica o morfosintattica illustrata
                   </p>
                 </div>
                 <div className="rounded-[1.35rem] border border-indigo-100 bg-white p-4 text-center shadow-lg shadow-indigo-900/5 ring-4 ring-white/80 sm:p-5">
+                  <div className="mx-auto flex h-72 max-w-2xl items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-slate-50 sm:h-80 md:h-[26rem]">
+                    {isDisplayableImagePath(primaryImageAsset?.filePath) ? (
+                      <img
+                        src={primaryImageAsset.filePath}
+                        alt={primaryImageAsset.label}
+                        className="h-full w-full object-contain"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <span className="px-4 text-sm font-medium text-slate-500">
+                        Immagine non disponibile
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : isNarrativeSequence ? (
+              <div className="mt-8 rounded-[1.5rem] border border-amber-100 bg-gradient-to-br from-amber-50 to-orange-50 p-5 shadow-inner sm:p-6">
+                <div className="mb-4 flex items-center gap-2 text-amber-800">
+                  <ListOrdered className="h-5 w-5" />
+                  <p className="font-semibold">Sequenza narrativa</p>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {imageAssets.map((asset, index) => (
+                    <div
+                      key={asset.cacheKey}
+                      className="rounded-[1.35rem] border border-amber-100 bg-white p-3 text-center shadow-lg shadow-amber-900/5 ring-4 ring-white/80 sm:p-4"
+                    >
+                      <div className="flex h-52 items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-slate-50 sm:h-60">
+                        {isDisplayableImagePath(asset.filePath) ? (
+                          <img
+                            src={asset.filePath}
+                            alt={asset.label}
+                            className="h-full w-full object-contain"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <span className="px-4 text-sm font-medium text-slate-500">
+                            Immagine non disponibile
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-3 text-base font-bold text-slate-700">
+                        Scena {index + 1}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : isPragmatic ? (
+              <div className="mt-8 rounded-[1.5rem] border border-rose-100 bg-gradient-to-br from-rose-50 to-pink-50 p-5 shadow-inner sm:p-6">
+                <div className="mb-4 flex items-center gap-2 text-rose-800">
+                  <MessageCircle className="h-5 w-5" />
+                  <p className="font-semibold">Scenario pragmatico illustrato</p>
+                </div>
+                <div className="rounded-[1.35rem] border border-rose-100 bg-white p-4 text-center shadow-lg shadow-rose-900/5 ring-4 ring-white/80 sm:p-5">
                   <div className="mx-auto flex h-72 max-w-2xl items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-slate-50 sm:h-80 md:h-[26rem]">
                     {isDisplayableImagePath(primaryImageAsset?.filePath) ? (
                       <img

@@ -3,6 +3,8 @@ import { z } from "zod";
 export const unifiedSheetTypeSchema = z.enum([
   "discriminazione_visiva",
   "morfosintassi",
+  "narrazione_sequenze",
+  "pragmatica",
   "storia",
   "filastrocca",
   "lista_parole",
@@ -51,6 +53,13 @@ export type SheetContentType =
   | "lista"
   | "morfosintassi_complessa"
   | (string & {});
+
+type ValidateSheetOptions =
+  | number
+  | {
+      numeroOpzioni?: number;
+      numeroScene?: number;
+    };
 
 const GENERIC_INSTRUCTION_PATTERNS = [
   /^\s*trova l['’]intruso tra le immagini\.?\s*$/iu,
@@ -150,6 +159,45 @@ function validateQuestions(
   if (expectedType === "lista_parole") {
     return sheet.domande.length === 0;
   }
+  if (expectedType === "narrazione_sequenze") {
+    return (
+      sheet.domande.length >= 4 &&
+      sheet.domande.length <= 5 &&
+      sheet.domande.every(
+        question =>
+          isNonEmptyString(question.domanda) &&
+          isNonEmptyString(question.risposta) &&
+          countMeaningfulWords(question.domanda) >= 3 &&
+          countMeaningfulWords(question.risposta) >= 1
+      )
+    );
+  }
+  if (expectedType === "pragmatica") {
+    return (
+      sheet.domande.length >= 4 &&
+      sheet.domande.length <= 6 &&
+      sheet.domande.every(
+        question =>
+          isNonEmptyString(question.domanda) &&
+          isNonEmptyString(question.risposta) &&
+          countMeaningfulWords(question.domanda) >= 3 &&
+          countMeaningfulWords(question.risposta) >= 1
+      )
+    );
+  }
+  if (expectedType === "morfosintassi") {
+    return (
+      sheet.domande.length >= 3 &&
+      sheet.domande.length <= 8 &&
+      sheet.domande.every(
+        question =>
+          isNonEmptyString(question.domanda) &&
+          isNonEmptyString(question.risposta) &&
+          countMeaningfulWords(question.domanda) >= 3 &&
+          countMeaningfulWords(question.risposta) >= 1
+      )
+    );
+  }
 
   return (
     sheet.domande.length >= 3 &&
@@ -162,6 +210,30 @@ function validateQuestions(
         countMeaningfulWords(question.risposta) >= 1
     )
   );
+}
+
+function normalizeValidateSheetOptions(options: ValidateSheetOptions) {
+  if (typeof options === "number") {
+    return { numeroOpzioni: options, numeroScene: undefined };
+  }
+
+  return options;
+}
+
+function validateNarrativeSequenceImages(
+  images: UnifiedSheetImage[],
+  numeroScene?: number
+) {
+  const expectedSceneCount =
+    typeof numeroScene === "number"
+      ? Math.min(Math.max(numeroScene, 3), 5)
+      : undefined;
+
+  if (expectedSceneCount && images.length !== expectedSceneCount) return false;
+  if (!expectedSceneCount && (images.length < 3 || images.length > 5))
+    return false;
+
+  return validateIllustrationImages(images);
 }
 
 export function normalizeUnifiedSheetType(
@@ -177,13 +249,14 @@ export function normalizeUnifiedSheetType(
 export function validateSheet(
   json: unknown,
   tipo: SheetContentType,
-  numeroOpzioni = 4
+  options: ValidateSheetOptions = 4
 ): json is UnifiedSheet {
   const parsed = unifiedSheetSchema.safeParse(json);
   if (!parsed.success) return false;
 
   const sheet = parsed.data;
   const expectedType = normalizeUnifiedSheetType(tipo);
+  const validationOptions = normalizeValidateSheetOptions(options);
   if (sheet.tipo !== expectedType) return false;
   if (!isNonEmptyString(sheet.titolo)) return false;
   if (!isNonEmptyString(sheet.consegna)) return false;
@@ -193,7 +266,21 @@ export function validateSheet(
   if (!validateQuestions(sheet, expectedType)) return false;
 
   if (expectedType === "discriminazione_visiva") {
-    if (!validateVisualDiscriminationImages(sheet.immagini, numeroOpzioni)) {
+    if (
+      !validateVisualDiscriminationImages(
+        sheet.immagini,
+        validationOptions.numeroOpzioni ?? 4
+      )
+    ) {
+      return false;
+    }
+  } else if (expectedType === "narrazione_sequenze") {
+    if (
+      !validateNarrativeSequenceImages(
+        sheet.immagini,
+        validationOptions.numeroScene
+      )
+    ) {
       return false;
     }
   } else {
@@ -247,7 +334,9 @@ function formatQuestions(questions: UnifiedSheetQuestion[]) {
 function getSheetTitle(tipoOutput: SheetContentType): string {
   const titles: Record<UnifiedSheetType, string> = {
     discriminazione_visiva: "Discriminazione visiva",
-    morfosintassi: "Morfosintassi",
+    morfosintassi: "Morfologia e morfosintassi",
+    narrazione_sequenze: "Narrazione e sequenze",
+    pragmatica: "Pragmatica",
     storia: "Storia con fonema",
     filastrocca: "Filastrocca con fonema",
     lista_parole: "Lista parole con fonema",
