@@ -326,7 +326,7 @@ function formatQuestions(questions: UnifiedSheetQuestion[]) {
   return `Domande: ${questions
     .map(
       (question, index) =>
-        `${index + 1}. ${question.domanda}${question.domanda.trim().endsWith("?") ? "" : "?"} Risposta: ${question.risposta}`
+        `${index + 1}. ${question.domanda}${question.domanda.trim().endsWith("?") ? "" : "?"}`
     )
     .join(" ")}`;
 }
@@ -363,7 +363,13 @@ function getVisualOptionStableKey(
     .join(":");
 }
 
-function stableShuffleVisualOptions<T extends { role?: string }>(
+type StableDisplayItem = {
+  role?: string;
+  cacheKey?: string;
+  label?: string;
+};
+
+function stableShuffleVisualOptions<T extends StableDisplayItem>(
   options: T[],
   seed: string
 ) {
@@ -379,7 +385,7 @@ function stableShuffleVisualOptions<T extends { role?: string }>(
     .map(item => item.option);
 }
 
-export function orderVisualOptionsForDisplay<T extends { role?: string }>(
+export function orderVisualOptionsForDisplay<T extends StableDisplayItem>(
   options: T[],
   seed: string | number
 ): T[] {
@@ -405,6 +411,30 @@ export function orderVisualOptionsForDisplay<T extends { role?: string }>(
   ];
 }
 
+export function orderNarrativeSequenceForDisplay<T extends StableDisplayItem>(
+  options: T[],
+  seed: string | number
+): T[] {
+  if (options.length <= 1) return options;
+
+  const seedValue = String(seed);
+  const shuffled = stableShuffleVisualOptions(
+    options,
+    `${seedValue}:narrative-sequence`
+  );
+  const keptOriginalOrder = shuffled.every(
+    (option, index) => option === options[index]
+  );
+
+  if (!keptOriginalOrder) return shuffled;
+
+  const offset =
+    (getStableHash(`${seedValue}:narrative-rotation`) %
+      (options.length - 1)) +
+    1;
+  return [...shuffled.slice(offset), ...shuffled.slice(0, offset)];
+}
+
 export function getUserFacingSheetContent(params: {
   tipoOutput: SheetContentType;
   testoGenerato: string;
@@ -415,6 +445,19 @@ export function getUserFacingSheetContent(params: {
       return [
         formatInstruction("Indica l'immagine corretta."),
         `Frase: ${normalizeSentence(unifiedSheet.testo)}`,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+    }
+
+    if (unifiedSheet.tipo === "narrazione_sequenze") {
+      return [
+        `Titolo: ${unifiedSheet.titolo}`,
+        formatInstruction(
+          "Osserva le immagini mescolate, riordinale nella sequenza corretta e racconta la storia."
+        ),
+        `Testo: ${unifiedSheet.testo}`,
+        formatQuestions(unifiedSheet.domande),
       ]
         .filter(Boolean)
         .join("\n\n");

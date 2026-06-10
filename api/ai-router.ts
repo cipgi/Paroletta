@@ -279,7 +279,7 @@ Controllo qualità obbligatorio: il target deve rendere vera la consegna; ogni d
   }
 
   if (tipo === "narrazione_sequenze") {
-    return `narrazione_sequenze: crea una scheda per narrazione e sequenze temporali. testo = una breve storia coerente divisa implicitamente in numeroScene passaggi ordinati, con personaggi, evento iniziale, problema o imprevisto semplice, tentativo/azione e soluzione. immagini = esattamente numeroScene illustrazioni ordinate cronologicamente, tutte con ruolo "illustrazione" e livello "principale"; ogni prompt immagine deve descrivere un solo frame quadrato, senza testo, con lo stesso stile e gli stessi personaggi riconoscibili. domande = 4-5 domande specifiche con risposta che coprano almeno: cosa succede prima/dopo, personaggi, problema, soluzione. La consegna deve chiedere di osservare le immagini in ordine e raccontare la storia. ${questionRule}`;
+    return `narrazione_sequenze: crea una scheda per narrazione e sequenze temporali. testo = una breve storia coerente divisa implicitamente in numeroScene passaggi ordinati, con personaggi, evento iniziale, problema o imprevisto semplice, tentativo/azione e soluzione. immagini = esattamente numeroScene illustrazioni in ordine cronologico nel JSON, tutte con ruolo "illustrazione" e livello "principale"; ogni prompt immagine deve descrivere un solo frame quadrato, senza testo, con lo stesso stile e gli stessi personaggi riconoscibili. domande = 4-5 domande specifiche con risposta che coprano almeno: cosa succede prima/dopo, personaggi, problema, soluzione. La consegna deve chiedere di osservare immagini mescolate, riordinarle nella sequenza corretta e raccontare la storia. ${questionRule}`;
   }
 
   if (tipo === "pragmatica") {
