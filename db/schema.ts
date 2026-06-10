@@ -7,7 +7,9 @@ export type SheetOutputType =
   | "filastrocca"
   | "lista"
   | "discriminazione_visiva"
-  | "morfosintassi_complessa";
+  | "morfosintassi_complessa"
+  | "narrazione_sequenze"
+  | "pragmatica";
 export type Difficulty = "bassa" | "media" | "alta";
 
 export interface Profile {

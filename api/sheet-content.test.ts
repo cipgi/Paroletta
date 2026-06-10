@@ -105,10 +105,87 @@ describe("unified sheet content", () => {
       testoGenerato: "Frase target: La bambina corre nel parco.",
     });
 
-    expect(result).toContain("Titolo: Morfosintassi");
+    expect(result).toContain("Titolo: Morfologia e morfosintassi");
     expect(result).toContain(
       "Testo: Frase target: La bambina corre nel parco."
     );
+  });
+
+  it("validates narrative sequences with the requested number of scenes", () => {
+    const sheet: UnifiedSheet = {
+      tipo: "narrazione_sequenze",
+      titolo: "La palla ritrovata",
+      consegna:
+        "Osserva le scene in ordine e racconta come il bambino ritrova la palla.",
+      testo:
+        "Luca gioca con la palla al parco. La palla rotola sotto una panchina. Luca chiede aiuto alla sorella. Insieme ritrovano la palla.",
+      immagini: [
+        {
+          ruolo: "illustrazione",
+          livello: "principale",
+          prompt:
+            "Child-friendly illustration of Luca playing with a red ball in a park, first scene of a story sequence, no text.",
+        },
+        {
+          ruolo: "illustrazione",
+          livello: "principale",
+          prompt:
+            "Child-friendly illustration of the same red ball rolling under a bench in the same park, second scene, no text.",
+        },
+        {
+          ruolo: "illustrazione",
+          livello: "principale",
+          prompt:
+            "Child-friendly illustration of Luca asking his sister for help near the bench in the same park, third scene, no text.",
+        },
+        {
+          ruolo: "illustrazione",
+          livello: "principale",
+          prompt:
+            "Child-friendly illustration of Luca and his sister finding the red ball under the bench in the same park, fourth scene, no text.",
+        },
+      ],
+      domande: [
+        { domanda: "Che cosa succede prima?", risposta: "Luca gioca con la palla." },
+        { domanda: "Dove rotola la palla?", risposta: "Sotto una panchina." },
+        { domanda: "Chi aiuta Luca?", risposta: "La sorella." },
+        { domanda: "Come finisce la storia?", risposta: "Ritrovano la palla." },
+      ],
+    };
+
+    expect(validateSheet(sheet, "narrazione_sequenze", { numeroScene: 4 })).toBe(
+      true
+    );
+    expect(validateSheet(sheet, "narrazione_sequenze", { numeroScene: 3 })).toBe(
+      false
+    );
+  });
+
+  it("validates pragmatic worksheets with model answers", () => {
+    const sheet: UnifiedSheet = {
+      tipo: "pragmatica",
+      titolo: "Chiedere un turno",
+      consegna:
+        "Osserva la scena e rispondi alle domande su cosa provano e cosa possono dire i bambini.",
+      testo:
+        "Due bambini vogliono usare lo stesso camion. Marco lo tiene in mano e Sara aspetta il suo turno.",
+      immagini: [
+        {
+          ruolo: "illustrazione",
+          livello: "principale",
+          prompt:
+            "Child-friendly illustration of two children near a toy truck, one child holding the truck and another waiting, clear facial expressions, no text.",
+        },
+      ],
+      domande: [
+        { domanda: "Che cosa vuole Sara?", risposta: "Vuole giocare con il camion." },
+        { domanda: "Come può sentirsi Sara?", risposta: "Può sentirsi impaziente o triste." },
+        { domanda: "Che cosa può dire Sara?", risposta: "Posso giocare dopo di te?" },
+        { domanda: "Che cosa può fare Marco?", risposta: "Può darle un turno o rispondere con gentilezza." },
+      ],
+    };
+
+    expect(validateSheet(sheet, "pragmatica", 4)).toBe(true);
   });
 });
 

@@ -31,9 +31,15 @@ function getSheetTypeLabel(tipoOutput: string) {
     filastrocca: "Filastrocca",
     lista: "Lista parole",
     discriminazione_visiva: "Trova l'intruso",
-    morfosintassi_complessa: "Morfosintassi complessa",
+    morfosintassi_complessa: "Morfologia e morfosintassi",
+    narrazione_sequenze: "Narrazione e sequenze",
+    pragmatica: "Pragmatica",
   };
   return labels[tipoOutput] ?? tipoOutput;
+}
+
+function isTextWithPhonemeSheet(tipoOutput: string) {
+  return ["storia", "filastrocca", "lista"].includes(tipoOutput);
 }
 
 export default function Management() {
@@ -367,7 +373,10 @@ export default function Management() {
                         </p>
                         <p className="text-sm text-slate-500 truncate">
                           {accountById.get(sheet.userId)?.name ?? "Account"} ·{" "}
-                          {sheet.interesse} · /{sheet.fonema}/ ·{" "}
+                          {sheet.interesse} ·{" "}
+                          {isTextWithPhonemeSheet(sheet.tipoOutput)
+                            ? `/${sheet.fonema}/ · `
+                            : ""}
                           {new Date(sheet.createdAt).toLocaleDateString(
                             "it-IT"
                           )}

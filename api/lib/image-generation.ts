@@ -264,6 +264,10 @@ export function buildImageRequests(params: {
           ? "Target"
           : image.ruolo === "distrattore"
             ? `Distrattore ${currentDistractorIndex + 1}`
+            : unifiedSheet.tipo === "narrazione_sequenze"
+              ? `Scena ${index + 1}`
+              : unifiedSheet.tipo === "pragmatica"
+                ? "Scenario pragmatico"
             : `Illustrazione ${index + 1}`;
       const visualPrompt = isVisual
         ? buildVisualOptionScene({

@@ -31,7 +31,9 @@ export type Sheet = {
     | "filastrocca"
     | "lista"
     | "discriminazione_visiva"
-    | "morfosintassi_complessa";
+    | "morfosintassi_complessa"
+    | "narrazione_sequenze"
+    | "pragmatica";
   testoGenerato: string;
   tagImmagine: string | null;
   listaParole: string[] | null;

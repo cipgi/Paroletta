@@ -274,6 +274,8 @@ export const sheetsRouter = createRouter({
           "lista",
           "discriminazione_visiva",
           "morfosintassi_complessa",
+          "narrazione_sequenze",
+          "pragmatica",
         ]),
         testoGenerato: z.string(),
         tagImmagine: z.string().max(100).optional(),

@@ -57,7 +57,9 @@ type TipoOutput =
   | "lista_parole"
   | "discriminazione_visiva"
   | "morfosintassi_complessa"
-  | "morfosintassi";
+  | "morfosintassi"
+  | "narrazione_sequenze"
+  | "pragmatica";
 
 type GenerationParams = {
   eta: string;
@@ -70,6 +72,7 @@ type GenerationParams = {
   livelloComplessita?: "base" | "intermedio" | "avanzato";
   descrizioneScena?: string;
   numeroOpzioni?: number;
+  numeroScene?: number;
 };
 
 type PromptMessage = {
@@ -134,6 +137,7 @@ export function sanitizeGenerationParams(input: {
   livelloComplessita?: "base" | "intermedio" | "avanzato";
   descrizioneScena?: string;
   numeroOpzioni?: number;
+  numeroScene?: number;
 }): GenerationParams {
   const eta = sanitizePromptVariable(input.eta, MAX_ETA_LENGTH) || "6 anni";
   const aspettoSpecifico = input.aspettoSpecifico
@@ -173,6 +177,7 @@ export function sanitizeGenerationParams(input: {
     livelloComplessita: input.livelloComplessita,
     descrizioneScena: descrizioneScena || undefined,
     numeroOpzioni: Math.min(Math.max(input.numeroOpzioni ?? 4, 2), 4),
+    numeroScene: Math.min(Math.max(input.numeroScene ?? 4, 3), 5),
   };
 }
 
@@ -217,7 +222,9 @@ function serializeUnifiedSheet(sheet: UnifiedSheet): string {
 
 function getSheetTag(sheet: UnifiedSheet): string {
   if (sheet.tipo === "discriminazione_visiva") return "discriminazione visiva";
-  if (sheet.tipo === "morfosintassi") return "morfosintassi";
+  if (sheet.tipo === "morfosintassi") return "morfologia e morfosintassi";
+  if (sheet.tipo === "narrazione_sequenze") return "narrazione e sequenze";
+  if (sheet.tipo === "pragmatica") return "pragmatica";
   const firstWord = splitWordsFromListText(sheet.testo)[0];
   return firstWord ?? resolveInterestForGeneration("libero");
 }
@@ -234,6 +241,14 @@ function getSheetWords(
 
   if (sheet.tipo === "lista_parole")
     return splitWordsFromListText(sheet.testo).slice(0, 30);
+
+  if (sheet.tipo === "narrazione_sequenze") {
+    return sheet.immagini.map((_, index) => `Scena ${index + 1}`);
+  }
+
+  if (sheet.tipo === "pragmatica" || sheet.tipo === "morfosintassi") {
+    return [];
+  }
 
   const words = extractTargetWordsFromText(sheet.testo, params.fonema);
   return words.length > 0
@@ -260,7 +275,15 @@ Controllo qualità obbligatorio: il target deve rendere vera la consegna; ogni d
   }
 
   if (tipo === "morfosintassi") {
-    return `morfosintassi: testo = frase o breve micro-scenario basato su elementoGrammaticale, livelloComplessita e descrizioneScena. La struttura grammaticale target deve comparire in modo esplicito, corretto e ripetibile, senza frasi ambigue. immagini = 1-2 illustrazioni con ruolo "illustrazione" e livello "principale"; il prompt immagine deve rappresentare una scena concreta coerente con la frase, non il concetto grammaticale astratto. domande = 3-5 domande specifiche con risposta che verificano comprensione e uso dell'elemento grammaticale, non domande generiche. ${questionRule}`;
+    return `morfosintassi: crea una scheda unica di "Morfologia e morfosintassi". Può lavorare su morfologia di base (articoli, genere/numero, plurali, accordi nome-aggettivo, tempi verbali semplici) oppure su strutture più complesse (pronomi clitici, relative, subordinate), in base a elementoGrammaticale, livelloComplessita e descrizioneScena. testo = frase target o breve micro-scenario concreto; la struttura target deve comparire in modo esplicito, corretto e ripetibile, senza frasi ambigue. immagini = 1-2 illustrazioni con ruolo "illustrazione" e livello "principale"; il prompt immagine deve rappresentare una scena concreta coerente con la frase, non il concetto grammaticale astratto. domande = 3-8 domande specifiche con risposta: per livello base includi esercizi brevi di scelta/completamento/produzione guidata, per livello intermedio o avanzato includi domande di comprensione e trasformazione mirate alla struttura. ${questionRule}`;
+  }
+
+  if (tipo === "narrazione_sequenze") {
+    return `narrazione_sequenze: crea una scheda per narrazione e sequenze temporali. testo = una breve storia coerente divisa implicitamente in numeroScene passaggi ordinati, con personaggi, evento iniziale, problema o imprevisto semplice, tentativo/azione e soluzione. immagini = esattamente numeroScene illustrazioni ordinate cronologicamente, tutte con ruolo "illustrazione" e livello "principale"; ogni prompt immagine deve descrivere un solo frame quadrato, senza testo, con lo stesso stile e gli stessi personaggi riconoscibili. domande = 4-5 domande specifiche con risposta che coprano almeno: cosa succede prima/dopo, personaggi, problema, soluzione. La consegna deve chiedere di osservare le immagini in ordine e raccontare la storia. ${questionRule}`;
+  }
+
+  if (tipo === "pragmatica") {
+    return `pragmatica: crea una scheda per abilità comunicativo-pragmatiche, senza diagnosi e senza scenari sensibili. testo = uno scenario sociale concreto e quotidiano basato su scenarioSmart/aspettoSpecifico, con 2-4 frasi e un punto comunicativo chiaro. immagini = 1 illustrazione con ruolo "illustrazione" e livello "principale" che rappresenti la scena sociale, le espressioni e il contesto senza testo scritto. domande = 4-6 domande specifiche con risposta modello che lavorino su turni conversazionali, inferenze semplici, emozioni, intenzioni comunicative e formulazioni tipo "cosa potresti dire se...". Le risposte devono essere esempi accettabili, non un'unica formula rigida quando sono possibili più risposte pragmatiche corrette. ${questionRule}`;
   }
 
   if (tipo === "storia") {
@@ -286,6 +309,7 @@ export function buildPromptMessages(params: GenerationParams): PromptMessage[] {
     livelloComplessita: params.livelloComplessita ?? null,
     descrizioneScena: params.descrizioneScena ?? null,
     numeroOpzioni: params.numeroOpzioni ?? null,
+    numeroScene: params.numeroScene ?? null,
     interessiDisponibili:
       params.interesse === FREE_INTEREST_VALUE
         ? AVAILABLE_SPECIFIC_INTERESTS
@@ -315,7 +339,7 @@ REGOLE CLINICHE GENERALI:
 
 SCHEMA JSON UNIFICATO OBBLIGATORIO:
 {
-  "tipo": "discriminazione_visiva | morfosintassi | storia | filastrocca | lista_parole",
+  "tipo": "discriminazione_visiva | morfosintassi | narrazione_sequenze | pragmatica | storia | filastrocca | lista_parole",
   "titolo": "titolo leggibile della scheda",
   "consegna": "istruzione contestualizzata per il bambino (mai generica)",
   "testo": "contenuto principale: frase target, storia, filastrocca, lista parole, ecc.",
@@ -391,6 +415,8 @@ export const aiRouter = createRouter({
           "discriminazione_visiva",
           "morfosintassi_complessa",
           "morfosintassi",
+          "narrazione_sequenze",
+          "pragmatica",
         ]),
         aspettoSpecifico: z
           .string()
@@ -409,6 +435,7 @@ export const aiRouter = createRouter({
           .max(MAX_SCENE_DESCRIPTION_LENGTH)
           .optional(),
         numeroOpzioni: z.number().int().min(2).max(4).optional(),
+        numeroScene: z.number().int().min(3).max(5).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -485,7 +512,10 @@ export const aiRouter = createRouter({
         !validateSheet(
           parsed.success ? parsed.data : raw,
           sanitizedInput.tipoOutput,
-          sanitizedInput.numeroOpzioni ?? 4
+          {
+            numeroOpzioni: sanitizedInput.numeroOpzioni ?? 4,
+            numeroScene: sanitizedInput.numeroScene ?? 4,
+          }
         )
       ) {
         throw userFacingError(

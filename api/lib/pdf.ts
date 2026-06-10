@@ -61,7 +61,9 @@ export function createDidacticPdf(params: {
     filastrocca: "Filastrocca",
     lista: "Lista parole",
     discriminazione_visiva: "Trova l'intruso",
-    morfosintassi_complessa: "Morfosintassi complessa",
+    morfosintassi_complessa: "Morfologia e morfosintassi",
+    narrazione_sequenze: "Narrazione e sequenze",
+    pragmatica: "Pragmatica",
   };
 
   const metadata = [
@@ -112,8 +114,42 @@ export function createDidacticPdf(params: {
     lines.push("80 135 435 155 re f");
     lines.push("0 g");
     lines.push(
-      "BT /F1 13 Tf 105 225 Td (Scena AI vincolata alla frase target) Tj ET"
+      "BT /F1 13 Tf 105 225 Td (Scena AI vincolata all'obiettivo morfologico o morfosintattico) Tj ET"
     );
+    lines.push(
+      `BT /F1 10 Tf 105 205 Td (${escapePdfText(`Etichetta immagine: ${params.illustrationLabel}`)}) Tj ET`
+    );
+    y = 110;
+  } else if (params.tipoOutput === "narrazione_sequenze") {
+    const sceneCount = Math.min(Math.max(params.words.length || 4, 3), 5);
+    const positions = [
+      [55, 240],
+      [225, 240],
+      [395, 240],
+      [140, 120],
+      [310, 120],
+    ];
+    lines.push(
+      "BT /F1 13 Tf 50 310 Td (Layout PDF: sequenza narrativa ordinata) Tj ET"
+    );
+    for (let index = 0; index < sceneCount; index += 1) {
+      const [x, boxY] = positions[index];
+      lines.push("0.92 g");
+      lines.push(`${x} ${boxY} 145 95 re f`);
+      lines.push("0 g");
+      lines.push(
+        `BT /F1 12 Tf ${x + 18} ${boxY + 52} Td (${escapePdfText(`SCENA ${index + 1}`)}) Tj ET`
+      );
+      lines.push(
+        `BT /F1 10 Tf ${x + 18} ${boxY + 33} Td (${escapePdfText("spazio immagine AI")}) Tj ET`
+      );
+    }
+    y = 95;
+  } else if (params.tipoOutput === "pragmatica") {
+    lines.push("0.92 g");
+    lines.push("80 135 435 155 re f");
+    lines.push("0 g");
+    lines.push("BT /F1 13 Tf 105 225 Td (Scenario pragmatico illustrato) Tj ET");
     lines.push(
       `BT /F1 10 Tf 105 205 Td (${escapePdfText(`Etichetta immagine: ${params.illustrationLabel}`)}) Tj ET`
     );
@@ -127,7 +163,9 @@ export function createDidacticPdf(params: {
 
   if (
     params.tipoOutput !== "discriminazione_visiva" &&
-    params.tipoOutput !== "morfosintassi_complessa"
+    params.tipoOutput !== "morfosintassi_complessa" &&
+    params.tipoOutput !== "narrazione_sequenze" &&
+    params.tipoOutput !== "pragmatica"
   ) {
     lines.push(
       `BT /F1 11 Tf 50 ${Math.max(y - 6, 120)} Td (${escapePdfText(`Illustrazione associata: ${params.illustrationLabel}`)}) Tj ET`
