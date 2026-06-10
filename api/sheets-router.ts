@@ -13,6 +13,7 @@ import { sanitizeProfileNameOrFallback } from "./lib/sanitize";
 import { getAccountContext } from "./lib/organization";
 import { createSupabaseImageCacheDb } from "./lib/illustration-cache-db";
 import {
+  buildSemanticCacheKey,
   buildImageRequests,
   resolveImageRequestWithCache,
 } from "./lib/image-generation";
@@ -214,6 +215,56 @@ export const sheetsRouter = createRouter({
       const sheet = mapSheet(data);
       const imageAssets = await resolveSheetImageAssets(sheet);
       return { ...sheet, imageAssets };
+    }),
+  regenerateImage: authedQuery
+    .input(z.object({ id: z.string().uuid(), cacheKey: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
+      const { data, error } = await appDb(ctx.supabaseAccessToken)
+        .from("sheets")
+        .select("*")
+        .eq("id", input.id)
+        .single();
+      if (error || !data) throw missingResourceError("Scheda");
+      await assertCanManageSheetOwner(
+        supabaseUserId,
+        data.user_id,
+        ctx.supabaseAccessToken
+      );
+
+      const sheet = mapSheet(data);
+      const imageRequests = buildImageRequests({
+        tipoOutput: sheet.tipoOutput,
+        interesse: sheet.interesse,
+        tagImmagine: sheet.tagImmagine,
+        testoGenerato: sheet.testoGenerato,
+        numeroOpzioni:
+          sheet.tipoOutput === "discriminazione_visiva"
+            ? getVisualOptionCount(sheet.listaParole)
+            : undefined,
+      });
+      const request = imageRequests.find(
+        item => buildSemanticCacheKey(item.semanticTags) === input.cacheKey
+      );
+      if (!request) throw missingResourceError("Immagine");
+
+      const imageCacheDb = createSupabaseImageCacheDb(adminAppDb());
+      const illustration = await resolveImageRequestWithCache(
+        request,
+        imageCacheDb,
+        { force: true }
+      );
+
+      return {
+        role: request.role,
+        label: request.label,
+        semanticTags: illustration.semanticTags,
+        cacheKey: illustration.cacheKey,
+        filePath: illustration.filePath,
+        source: illustration.source,
+        fallbackReason: illustration.fallbackReason ?? null,
+        cacheHit: illustration.cacheHit,
+      };
     }),
   generatePdf: authedQuery
     .input(z.object({ id: z.string().uuid() }))

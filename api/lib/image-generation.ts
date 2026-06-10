@@ -515,7 +515,8 @@ function buildImageDataUrl(bytes: string, mimeType: string): string {
 
 export async function resolveImageRequestWithCache(
   request: ImageRequest,
-  db: ImageCacheDb
+  db: ImageCacheDb,
+  options: { force?: boolean } = {}
 ): Promise<CachedIllustration & { cacheHit: boolean }> {
   const semanticTags = Array.from(
     new Set(request.semanticTags.map(normalizeSemanticTag).filter(Boolean))
@@ -523,6 +524,7 @@ export async function resolveImageRequestWithCache(
   const cacheKey = buildSemanticCacheKey(semanticTags);
   const cached = await db.findByCacheKey(cacheKey);
   if (
+    !options.force &&
     cached &&
     cached.source !== "mock" &&
     !(
