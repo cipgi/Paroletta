@@ -4,6 +4,7 @@ import { trpc } from "@/providers/trpc";
 import {
   getNeutralVisualOptionLabel,
   getUserFacingSheetContent,
+  orderNarrativeSequenceForDisplay,
   orderVisualOptionsForDisplay,
 } from "@contracts/sheet-content";
 import { useAuth } from "@/hooks/useAuth";
@@ -346,6 +347,10 @@ export default function SheetDetail() {
     visualImageAssets,
     sheet.id
   );
+  const narrativeDisplayAssets = orderNarrativeSequenceForDisplay(
+    imageAssets,
+    sheet.id
+  );
   const visualOptionCount = Math.min(
     Math.max(getVisualOptionCount(words), visualImageAssets.length || 0),
     4
@@ -534,7 +539,7 @@ export default function SheetDetail() {
                   <p className="font-semibold">Sequenza narrativa</p>
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {imageAssets.map((asset, index) => (
+                  {narrativeDisplayAssets.map((asset, index) => (
                     <div
                       key={asset.cacheKey}
                       className="rounded-[1.35rem] border border-amber-100 bg-white p-3 text-center shadow-lg shadow-amber-900/5 ring-4 ring-white/80 sm:p-4"

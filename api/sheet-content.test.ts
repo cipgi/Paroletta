@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   getNeutralVisualOptionLabel,
   getUserFacingSheetContent,
+  orderNarrativeSequenceForDisplay,
   orderVisualOptionsForDisplay,
   parseUnifiedSheetContent,
   validateSheet,
@@ -49,7 +50,9 @@ describe("unified sheet content", () => {
     expect(result).toContain(
       "Testo: Il gatto corre nel prato. Poi prende una palla rossa."
     );
-    expect(result).toContain("1. Chi corre nel prato? Risposta: Il gatto.");
+    expect(result).toContain("1. Chi corre nel prato?");
+    expect(result).not.toContain("Risposta:");
+    expect(result).not.toContain("Il gatto.");
     expect(result).not.toContain("Immagini:");
     expect(result).not.toContain("prompt");
   });
@@ -116,7 +119,7 @@ describe("unified sheet content", () => {
       tipo: "narrazione_sequenze",
       titolo: "La palla ritrovata",
       consegna:
-        "Osserva le scene in ordine e racconta come il bambino ritrova la palla.",
+        "Osserva le immagini mescolate, riordinale e racconta come il bambino ritrova la palla.",
       testo:
         "Luca gioca con la palla al parco. La palla rotola sotto una panchina. Luca chiede aiuto alla sorella. Insieme ritrovano la palla.",
       immagini: [
@@ -223,5 +226,50 @@ describe("orderVisualOptionsForDisplay", () => {
         )
       ).size
     ).toBeGreaterThan(1);
+  });
+});
+
+describe("orderNarrativeSequenceForDisplay", () => {
+  it("uses a stable sheet-specific order that never keeps the chronological sequence", () => {
+    const scenes = [
+      { cacheKey: "scene-1", label: "Scena 1" },
+      { cacheKey: "scene-2", label: "Scena 2" },
+      { cacheKey: "scene-3", label: "Scena 3" },
+      { cacheKey: "scene-4", label: "Scena 4" },
+    ];
+
+    const ordered = orderNarrativeSequenceForDisplay(scenes, "sheet-42");
+
+    expect(ordered).toHaveLength(4);
+    expect(new Set(ordered.map(scene => scene.cacheKey))).toEqual(
+      new Set(scenes.map(scene => scene.cacheKey))
+    );
+    expect(orderNarrativeSequenceForDisplay(scenes, "sheet-42")).toEqual(
+      ordered
+    );
+    expect(ordered.map(scene => scene.cacheKey)).not.toEqual(
+      scenes.map(scene => scene.cacheKey)
+    );
+  });
+
+  it("normalizes narrative instructions so saved sheets do not reveal ordered images", () => {
+    const result = getUserFacingSheetContent({
+      tipoOutput: "narrazione_sequenze",
+      testoGenerato: JSON.stringify({
+        tipo: "narrazione_sequenze",
+        titolo: "La palla ritrovata",
+        consegna:
+          "Osserva le scene in ordine e racconta come il bambino ritrova la palla.",
+        testo:
+          "Luca gioca con la palla. La palla rotola via. Luca cerca la palla. Luca ritrova la palla.",
+        immagini: [],
+        domande: [],
+      }),
+    });
+
+    expect(result).toContain("immagini mescolate");
+    expect(result).toContain("riordinale");
+    expect(result).not.toContain("scene in ordine");
+    expect(result).not.toContain("Risposta:");
   });
 });

@@ -129,6 +129,8 @@ describe("AI prompt security", () => {
     expect(params.numeroScene).toBe(5);
     expect(messages[0].content).toContain("narrazione_sequenze");
     expect(messages[0].content).toContain("esattamente numeroScene");
+    expect(messages[0].content).toContain("immagini mescolate");
+    expect(messages[0].content).toContain("riordinarle");
     expect(messages[0].content).not.toContain("morfologia_base");
     expect(messages[1].content).toContain('"numeroScene":5');
   });
