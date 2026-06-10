@@ -252,6 +252,12 @@ export default function SheetDetail() {
       void utils.sheets.detail.invalidate({ id: sheetId });
     },
   });
+  const regenerateText = trpc.sheets.regenerateText.useMutation({
+    onSuccess: updatedSheet => {
+      utils.sheets.detail.setData({ id: sheetId }, updatedSheet);
+      void utils.sheets.list.invalidate();
+    },
+  });
 
   const printSheetAsPdf = () => {
     const sheetElement = sheetCardRef.current;
@@ -645,8 +651,18 @@ export default function SheetDetail() {
             )}
 
             <div className="mt-4 flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" className="gap-1">
-                <RefreshCcw className="h-4 w-4" />
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1"
+                disabled={regenerateText.isPending}
+                onClick={() => regenerateText.mutate({ id: sheet.id })}
+              >
+                {regenerateText.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCcw className="h-4 w-4" />
+                )}
                 Rigenera solo testo
               </Button>
               <Button variant="outline" size="sm" className="gap-1">
@@ -686,6 +702,12 @@ export default function SheetDetail() {
                 <p className="basis-full text-sm text-red-600">
                   {regenerateImage.error?.message ??
                     "Errore durante la rigenerazione dell'immagine."}
+                </p>
+              ) : null}
+              {regenerateText.isError ? (
+                <p className="basis-full text-sm text-red-600">
+                  {regenerateText.error?.message ??
+                    "Errore durante la rigenerazione del testo."}
                 </p>
               ) : null}
             </div>

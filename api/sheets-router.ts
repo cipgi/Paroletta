@@ -17,6 +17,11 @@ import {
   buildImageRequests,
   resolveImageRequestWithCache,
 } from "./lib/image-generation";
+import {
+  generateUnifiedSheetFromParams,
+  sanitizeGenerationParams,
+  type TipoOutput,
+} from "./ai-router";
 
 function requireSupabaseUserId(unionId: string) {
   const id = getSupabaseUserIdFromUnionId(unionId);
@@ -81,6 +86,32 @@ function getVisualOptionCount(words: string[] | null) {
     /^(target|distrattore)/i.test(word.trim())
   ).length;
   return Math.min(Math.max(count || 4, 2), 4);
+}
+
+function getNarrativeSceneCount(words: string[] | null) {
+  const count = (words ?? []).filter(word => /^scena\s+\d+/i.test(word.trim()))
+    .length;
+  return Math.min(Math.max(count || 4, 3), 5);
+}
+
+function toRegenerableTipoOutput(tipoOutput: string): TipoOutput {
+  if (tipoOutput === "morfosintassi_complessa") return tipoOutput;
+  if (tipoOutput === "morfosintassi") return tipoOutput;
+  if (tipoOutput === "narrazione_sequenze") return tipoOutput;
+  if (tipoOutput === "pragmatica") return tipoOutput;
+  if (tipoOutput === "discriminazione_visiva") return tipoOutput;
+  if (tipoOutput === "storia") return tipoOutput;
+  if (tipoOutput === "filastrocca") return tipoOutput;
+  if (tipoOutput === "lista") return tipoOutput;
+  if (tipoOutput === "lista_parole") return tipoOutput;
+  throw missingResourceError("Tipo scheda");
+}
+
+function getRegenerationAgeRange(difficulty: string | null | undefined) {
+  const normalized = (difficulty ?? "").toLocaleLowerCase("it-IT");
+  if (normalized === "bassa" || normalized === "facile") return "3-5 anni";
+  if (normalized === "alta" || normalized === "difficile") return "9-11 anni";
+  return "6-8 anni";
 }
 
 async function resolveSheetImageAssets(sheet: ReturnType<typeof mapSheet>) {
@@ -265,6 +296,65 @@ export const sheetsRouter = createRouter({
         fallbackReason: illustration.fallbackReason ?? null,
         cacheHit: illustration.cacheHit,
       };
+    }),
+  regenerateText: authedQuery
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
+      const { data, error } = await appDb(ctx.supabaseAccessToken)
+        .from("sheets")
+        .select("*")
+        .eq("id", input.id)
+        .single();
+      if (error || !data) throw missingResourceError("Scheda");
+      await assertCanManageSheetOwner(
+        supabaseUserId,
+        data.user_id,
+        ctx.supabaseAccessToken
+      );
+
+      const sheet = mapSheet(data);
+      const sanitizedInput = sanitizeGenerationParams({
+        eta: getRegenerationAgeRange(sheet.difficolta),
+        fonema: sheet.fonema,
+        interesse: sheet.interesse,
+        tipoOutput: toRegenerableTipoOutput(sheet.tipoOutput),
+        numeroOpzioni:
+          sheet.tipoOutput === "discriminazione_visiva"
+            ? getVisualOptionCount(sheet.listaParole)
+            : undefined,
+        numeroScene:
+          sheet.tipoOutput === "narrazione_sequenze"
+            ? getNarrativeSceneCount(sheet.listaParole)
+            : undefined,
+      });
+      const generatedSheet = await generateUnifiedSheetFromParams(
+        sanitizedInput
+      );
+      const { data: updated, error: updateError } = await appDb(
+        ctx.supabaseAccessToken
+      )
+        .from("sheets")
+        .update({
+          testo_generato: generatedSheet.serializedSheet,
+          tag_immagine: generatedSheet.tagImmagine,
+          lista_parole: generatedSheet.words,
+          pdf_url: null,
+        })
+        .eq("id", input.id)
+        .select("*")
+        .single();
+
+      if (updateError || !updated) {
+        throw databaseOperationError(
+          "rigenerare il testo della scheda",
+          updateError
+        );
+      }
+
+      const updatedSheet = mapSheet(updated);
+      const imageAssets = await resolveSheetImageAssets(updatedSheet);
+      return { ...updatedSheet, imageAssets };
     }),
   generatePdf: authedQuery
     .input(z.object({ id: z.string().uuid() }))

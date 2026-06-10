@@ -50,7 +50,7 @@ const ALLOWED_FONEMI = [
   "v",
 ] as const;
 
-type TipoOutput =
+export type TipoOutput =
   | "storia"
   | "filastrocca"
   | "lista"
@@ -61,7 +61,7 @@ type TipoOutput =
   | "narrazione_sequenze"
   | "pragmatica";
 
-type GenerationParams = {
+export type GenerationParams = {
   eta: string;
   fonema: (typeof ALLOWED_FONEMI)[number];
   interesse: (typeof ALLOWED_INTERESSI)[number];
@@ -407,6 +407,44 @@ async function callOpenAI(messages: PromptMessage[]): Promise<unknown> {
   return JSON.parse(content);
 }
 
+export async function generateUnifiedSheetFromParams(
+  params: GenerationParams
+) {
+  const messages = buildPromptMessages(params);
+  let raw: unknown;
+  try {
+    raw = await callOpenAI(messages);
+  } catch (error) {
+    console.error("[ai-router] OpenAI text generation failed", { error });
+    throw userFacingError(
+      "SERVICE_UNAVAILABLE",
+      "La generazione AI non è disponibile in questo momento. Riprova tra poco."
+    );
+  }
+
+  const parsed = unifiedSheetSchema.safeParse(raw);
+  if (
+    !parsed.success ||
+    !validateSheet(parsed.success ? parsed.data : raw, params.tipoOutput, {
+      numeroOpzioni: params.numeroOpzioni ?? 4,
+      numeroScene: params.numeroScene ?? 4,
+    })
+  ) {
+    throw userFacingError(
+      "SERVICE_UNAVAILABLE",
+      "La generazione non ha restituito una scheda valida. Riprova modificando leggermente i parametri."
+    );
+  }
+
+  const data = parsed.data;
+  return {
+    data,
+    serializedSheet: serializeUnifiedSheet(data),
+    tagImmagine: getSheetTag(data),
+    words: getSheetWords(data, params),
+  };
+}
+
 export const aiRouter = createRouter({
   generate: authedQuery
     .input(
@@ -501,39 +539,9 @@ export const aiRouter = createRouter({
         );
       }
 
-      const messages = buildPromptMessages(sanitizedInput);
-      let raw: unknown;
-      try {
-        raw = await callOpenAI(messages);
-      } catch (error) {
-        console.error("[ai-router] OpenAI text generation failed", { error });
-        throw userFacingError(
-          "SERVICE_UNAVAILABLE",
-          "La generazione AI non è disponibile in questo momento. Riprova tra poco."
-        );
-      }
-
-      const parsed = unifiedSheetSchema.safeParse(raw);
-      if (
-        !parsed.success ||
-        !validateSheet(
-          parsed.success ? parsed.data : raw,
-          sanitizedInput.tipoOutput,
-          {
-            numeroOpzioni: sanitizedInput.numeroOpzioni ?? 4,
-            numeroScene: sanitizedInput.numeroScene ?? 4,
-          }
-        )
-      ) {
-        throw userFacingError(
-          "SERVICE_UNAVAILABLE",
-          "La generazione non ha restituito una scheda valida. Riprova modificando leggermente i parametri."
-        );
-      }
-
-      const data = parsed.data;
-      const serializedSheet = serializeUnifiedSheet(data);
-      const sanitizedWords = getSheetWords(data, sanitizedInput);
+      const generatedSheet = await generateUnifiedSheetFromParams(
+        sanitizedInput
+      );
       const { data: inserted, error } = await appDb(ctx.supabaseAccessToken)
         .from("sheets")
         .insert({
@@ -541,9 +549,9 @@ export const aiRouter = createRouter({
           fonema: sanitizedInput.fonema,
           interesse: sanitizedInput.interesse,
           tipo_output: sanitizedInput.tipoOutput,
-          testo_generato: serializedSheet,
-          tag_immagine: getSheetTag(data),
-          lista_parole: sanitizedWords,
+          testo_generato: generatedSheet.serializedSheet,
+          tag_immagine: generatedSheet.tagImmagine,
+          lista_parole: generatedSheet.words,
           difficolta: "media",
           pdf_url: null,
         })
