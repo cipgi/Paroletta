@@ -56,6 +56,7 @@ Tipi inclusi: `storia`, `filastrocca`, `lista`.
 
 - Il prompt system impone semplicità linguistica, formato testuale per tipo, vincoli su `listaParole` e JSON finale.
 - Se interesse = `libero`, il server sceglie casualmente un interesse specifico disponibile prima di costruire il prompt.
+- Se interesse = `nessuno`, il server non applica interessi predefiniti e usa solo argomento, frase target, scenario o descrizione forniti dall'utente; se mancano, la richiesta viene interrotta con errore utente.
 
 ### Output atteso
 

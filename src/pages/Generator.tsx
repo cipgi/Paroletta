@@ -29,6 +29,7 @@ import {
 
 const interessi = [
   "libero",
+  "nessuno",
   "dinosauro",
   "principessa",
   "calcio",
@@ -694,8 +695,10 @@ export default function Generator() {
                   {interessi.map(i => (
                     <SelectItem key={i} value={i}>
                       {i === "libero"
-                        ? "Libero (nessun interesse specifico)"
-                        : i.charAt(0).toUpperCase() + i.slice(1)}
+                        ? "Libero (sceglie il sistema)"
+                        : i === "nessuno"
+                          ? "Nessuno (usa solo il tuo input)"
+                          : i.charAt(0).toUpperCase() + i.slice(1)}
                     </SelectItem>
                   ))}
                 </SelectContent>

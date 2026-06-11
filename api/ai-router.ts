@@ -20,6 +20,7 @@ import { sanitizePlainText } from "./lib/sanitize";
 
 const ALLOWED_INTERESSI = [
   "libero",
+  "nessuno",
   "dinosauro",
   "principessa",
   "calcio",
@@ -33,7 +34,7 @@ const ALLOWED_INTERESSI = [
 ] as const;
 
 const AVAILABLE_SPECIFIC_INTERESTS = ALLOWED_INTERESSI.filter(
-  interesse => interesse !== "libero"
+  interesse => !["libero", "nessuno"].includes(interesse)
 );
 
 const ALLOWED_FONEMI = [
@@ -86,6 +87,7 @@ const MAX_GRAMMAR_ELEMENT_LENGTH = 120;
 const MAX_SCENE_DESCRIPTION_LENGTH = 900;
 const MAX_ETA_LENGTH = 20;
 const FREE_INTEREST_VALUE = "libero";
+const NO_INTEREST_VALUE = "nessuno";
 const INSTRUCTION_MARKER_PATTERN =
   /(?:^|\b)(?:ignora|ignore|disregard|forget|system|developer|assistant|istruzioni|instructions|prompt|jailbreak|override|bypass|rispondi come|act as)(?:\b|$)/giu;
 const SCRIPT_STYLE_CONTENT_PATTERN =
@@ -95,13 +97,27 @@ const ROLE_MARKER_PATTERN = /\b(?:system|developer|assistant|user)\s*:/giu;
 
 function resolveInterestForGeneration(
   interesse: (typeof ALLOWED_INTERESSI)[number]
-): (typeof AVAILABLE_SPECIFIC_INTERESTS)[number] {
+): (typeof ALLOWED_INTERESSI)[number] {
   if (interesse !== FREE_INTEREST_VALUE) return interesse;
   const randomIndex = Math.floor(
     Math.random() * AVAILABLE_SPECIFIC_INTERESTS.length
   );
   return (
     AVAILABLE_SPECIFIC_INTERESTS[randomIndex] ?? AVAILABLE_SPECIFIC_INTERESTS[0]
+  );
+}
+
+function hasUserProvidedGenerationContext(input: {
+  aspettoSpecifico?: string;
+  scenarioSmart?: string;
+  elementoGrammaticale?: string;
+  descrizioneScena?: string;
+}) {
+  return Boolean(
+    input.scenarioSmart ||
+    input.descrizioneScena ||
+    input.aspettoSpecifico ||
+    input.elementoGrammaticale
   );
 }
 
@@ -172,6 +188,22 @@ export function sanitizeGenerationParams(input: {
     ALLOWED_INTERESSI,
     "Interesse"
   );
+
+  if (
+    allowedInterest === NO_INTEREST_VALUE &&
+    !hasUserProvidedGenerationContext({
+      aspettoSpecifico,
+      scenarioSmart,
+      elementoGrammaticale,
+      descrizioneScena,
+    })
+  ) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "Inserisci un argomento o una frase target quando l'interesse è Nessuno.",
+    });
+  }
 
   return {
     eta,
@@ -377,6 +409,7 @@ REGOLE CLINICHE GENERALI:
 - Usa linguaggio italiano semplice, quotidiano e letterale per titolo, consegna, testo, domande e risposte.
 - La consegna deve essere contestualizzata per il bambino e citare contenuti concreti della scheda; non deve essere generica.
 - Se il campo "interesse" vale "libero", scegli un interesse tra quelli disponibili nel messaggio utente.
+- Se il campo "interesse" vale "nessuno", non scegliere temi o interessi predefiniti: usa solo argomento, frase target, scenario o descrizione forniti nei valori utente.
 - Rispetta il fonema target nelle schede con parole, storie e filastrocche.
 - Ogni prompt in immagini deve essere in inglese, descrivere una sola scena generabile, essere child-friendly, semanticamente fedele e senza testo nell'immagine.
 - Non creare esercizi risolvibili per differenze irrilevanti come stile, luminosità, distanza, quantità di dettagli o qualità dell'immagine.
