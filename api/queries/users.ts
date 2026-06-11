@@ -5,9 +5,25 @@ import { getAccountContext } from "../lib/organization";
 
 type InsertUser = Omit<
   User,
-  "id" | "piano" | "seats" | "trialSchedeUsate" | "schedeMese"
+  | "id"
+  | "piano"
+  | "seats"
+  | "trialSchedeUsate"
+  | "schedeMese"
+  | "trialImmaginiUsate"
+  | "immaginiMese"
 > &
-  Partial<Pick<User, "piano" | "seats" | "trialSchedeUsate" | "schedeMese">>;
+  Partial<
+    Pick<
+      User,
+      | "piano"
+      | "seats"
+      | "trialSchedeUsate"
+      | "schedeMese"
+      | "trialImmaginiUsate"
+      | "immaginiMese"
+    >
+  >;
 
 export async function findUserByUnionId(unionId: string, accessToken?: string) {
   const cachedUser = users.find(u => u.unionId === unionId);
@@ -24,7 +40,7 @@ export async function findUserByUnionId(unionId: string, accessToken?: string) {
   const { data: profile, error } = await appDb(accessToken)
     .from("profiles")
     .select(
-      "email,name,first_name,last_name,role,is_team_manager,piano,seats,trial_schede_usate,schede_mese"
+      "email,name,first_name,last_name,role,is_team_manager,piano,seats,trial_schede_usate,schede_mese,trial_immagini_usate,immagini_mese"
     )
     .eq("id", supabaseUserId)
     .maybeSingle();
@@ -60,6 +76,8 @@ export async function findUserByUnionId(unionId: string, accessToken?: string) {
     seats: profile.seats ?? 1,
     trialSchedeUsate: profile.trial_schede_usate ?? 0,
     schedeMese: profile.schede_mese ?? 0,
+    trialImmaginiUsate: profile.trial_immagini_usate ?? 0,
+    immaginiMese: profile.immagini_mese ?? 0,
     lastSignInAt: cachedUser?.lastSignInAt,
   };
 }
@@ -91,6 +109,8 @@ export async function upsertUser(data: InsertUser) {
     seats: data.seats ?? 1,
     trialSchedeUsate: data.trialSchedeUsate ?? 0,
     schedeMese: data.schedeMese ?? 0,
+    trialImmaginiUsate: data.trialImmaginiUsate ?? 0,
+    immaginiMese: data.immaginiMese ?? 0,
     lastSignInAt: new Date(),
   });
 }

@@ -15,7 +15,11 @@ import {
   userFacingError,
 } from "./lib/errors";
 import { getAccountContext } from "./lib/organization";
-import { assertActiveSubscription } from "./lib/subscription";
+import {
+  assertActiveSubscription,
+  assertSheetLimitAvailable,
+  getUsageSummary,
+} from "./lib/subscription";
 import { sanitizePlainText } from "./lib/sanitize";
 
 const ALLOWED_INTERESSI = [
@@ -303,11 +307,12 @@ export function normalizeVisualDiscriminationSheet(
 
   const optionCount = Math.min(Math.max(numeroOpzioni, 2), 4);
   const target =
-    sheet.immagini.find(image => image.ruolo === "target") ??
-    sheet.immagini[0];
+    sheet.immagini.find(image => image.ruolo === "target") ?? sheet.immagini[0];
   const distractors = sheet.immagini.filter(image => image !== target);
   const normalizedImages = [target, ...distractors]
-    .filter((image): image is UnifiedSheet["immagini"][number] => Boolean(image))
+    .filter((image): image is UnifiedSheet["immagini"][number] =>
+      Boolean(image)
+    )
     .slice(0, optionCount)
     .map((image, index) => {
       if (index === 0) {
@@ -478,9 +483,7 @@ async function callOpenAI(messages: PromptMessage[]): Promise<unknown> {
   return JSON.parse(content);
 }
 
-export async function generateUnifiedSheetFromParams(
-  params: GenerationParams
-) {
+export async function generateUnifiedSheetFromParams(params: GenerationParams) {
   const messages = buildPromptMessages(params);
   let raw: unknown;
   try {
@@ -579,40 +582,12 @@ export const aiRouter = createRouter({
         accessToken: ctx.supabaseAccessToken,
       });
       const piano = subscription.plan ?? "trial";
-      const { data: planData, error: planError } = await appDb(
-        ctx.supabaseAccessToken
-      )
-        .from("subscription_plans")
-        .select("sheet_limit")
-        .eq("code", piano)
-        .eq("active", true)
-        .maybeSingle();
-      if (planError)
-        throw databaseOperationError("caricare il limite del piano", planError);
-      const limit = planData?.sheet_limit ?? 5;
-      const { data: profileUsage, error: profileUsageError } = await appDb(
-        ctx.supabaseAccessToken
-      )
-        .from("profiles")
-        .select("trial_schede_usate,schede_mese")
-        .eq("id", account.ownerUserId)
-        .single();
-      if (profileUsageError) {
-        throw databaseOperationError(
-          "leggere l’utilizzo delle schede",
-          profileUsageError
-        );
-      }
-      const used =
-        piano === "trial"
-          ? (profileUsage.trial_schede_usate ?? 0)
-          : (profileUsage.schede_mese ?? 0);
-      if (used >= limit) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: `Hai raggiunto il limite di ${limit} schede per il piano ${piano}. Passa a un piano superiore per continuare.`,
-        });
-      }
+      const usageBeforeGeneration = await getUsageSummary({
+        ownerUserId: account.ownerUserId,
+        plan: piano,
+        accessToken: ctx.supabaseAccessToken,
+      });
+      assertSheetLimitAvailable(usageBeforeGeneration);
 
       const sanitizedInput = sanitizeGenerationParams(input);
       if (sanitizedInput.tipoOutput === "discriminazione_visiva") {
@@ -622,9 +597,8 @@ export const aiRouter = createRouter({
         );
       }
 
-      const generatedSheet = await generateUnifiedSheetFromParams(
-        sanitizedInput
-      );
+      const generatedSheet =
+        await generateUnifiedSheetFromParams(sanitizedInput);
       const { data: inserted, error } = await appDb(ctx.supabaseAccessToken)
         .from("sheets")
         .insert({
@@ -645,7 +619,7 @@ export const aiRouter = createRouter({
         if (error?.message?.includes("sheet_limit_reached")) {
           throw new TRPCError({
             code: "FORBIDDEN",
-            message: `Hai raggiunto il limite di ${limit} schede per il piano ${piano}. Passa a un piano superiore per continuare.`,
+            message: `Hai raggiunto il limite di ${usageBeforeGeneration.sheets.limit} schede per il tuo piano. Passa a un piano superiore per continuare.`,
           });
         }
         throw databaseOperationError("salvare la scheda generata", error);
@@ -665,28 +639,17 @@ export const aiRouter = createRouter({
         createdAt: new Date(inserted.created_at),
       };
 
-      const { data: updatedUsage, error: updatedUsageError } = await appDb(
-        ctx.supabaseAccessToken
-      )
-        .from("profiles")
-        .select("trial_schede_usate,schede_mese")
-        .eq("id", account.ownerUserId)
-        .single();
-      if (updatedUsageError) {
-        throw databaseOperationError(
-          "aggiornare il conteggio delle schede residue",
-          updatedUsageError
-        );
-      }
+      const usageAfterGeneration = await getUsageSummary({
+        ownerUserId: account.ownerUserId,
+        plan: piano,
+        accessToken: ctx.supabaseAccessToken,
+      });
 
-      const totalUsed =
-        piano === "trial"
-          ? (updatedUsage.trial_schede_usate ?? 0)
-          : (updatedUsage.schede_mese ?? 0);
       return {
         sheet,
-        remaining: Math.max(limit - totalUsed, 0),
-        totalUsed,
+        remaining: usageAfterGeneration.sheets.remaining,
+        totalUsed: usageAfterGeneration.sheets.used,
+        usage: usageAfterGeneration,
       };
     }),
 });

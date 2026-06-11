@@ -268,7 +268,7 @@ export function buildImageRequests(params: {
               ? `Scena ${index + 1}`
               : unifiedSheet.tipo === "pragmatica"
                 ? "Scenario pragmatico"
-            : `Illustrazione ${index + 1}`;
+                : `Illustrazione ${index + 1}`;
       const visualPrompt = isVisual
         ? buildVisualOptionScene({
             label,
@@ -516,7 +516,10 @@ function buildImageDataUrl(bytes: string, mimeType: string): string {
 export async function resolveImageRequestWithCache(
   request: ImageRequest,
   db: ImageCacheDb,
-  options: { force?: boolean } = {}
+  options: {
+    force?: boolean;
+    onGenerateStart?: () => Promise<(() => Promise<void>) | void>;
+  } = {}
 ): Promise<CachedIllustration & { cacheHit: boolean }> {
   const semanticTags = Array.from(
     new Set(request.semanticTags.map(normalizeSemanticTag).filter(Boolean))
@@ -538,12 +541,14 @@ export async function resolveImageRequestWithCache(
   const prompt = sanitizeImagePrompt(request.prompt);
   let filePath: string;
   let mimeType = "image/png";
+  const rollbackGenerationQuota = await options.onGenerateStart?.();
 
   try {
     const generated = await callOpenAIImageApi(prompt);
     filePath = buildImageDataUrl(generated.bytes, generated.mimeType);
     mimeType = generated.mimeType;
   } catch (error) {
+    await rollbackGenerationQuota?.();
     console.error("[image-generation] OpenAI image generation failed", {
       cacheKey,
       error,

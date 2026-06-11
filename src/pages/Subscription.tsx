@@ -104,7 +104,8 @@ export default function SubscriptionPage() {
                 <p className="text-sm text-slate-600">{plan.description}</p>
               )}
               <p className="text-sm text-slate-600">
-                {plan.sheetLimit} schede / {plan.durationDays} giorni
+                {plan.sheetLimit} schede e {plan.imageLimit} immagini /{" "}
+                {plan.durationDays} giorni
               </p>
               {(!plan.isTrial || canActivateTrial) && (
                 <Button

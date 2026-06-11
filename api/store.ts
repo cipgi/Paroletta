@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-export type Plan = "trial" | "base" | "dev";
+export type Plan = "trial" | "starter" | "pro" | "max";
 
 export type User = {
   id: number;
@@ -18,6 +18,8 @@ export type User = {
   seats: number;
   trialSchedeUsate: number;
   schedeMese: number;
+  trialImmaginiUsate: number;
+  immaginiMese: number;
   lastSignInAt?: Date;
 };
 

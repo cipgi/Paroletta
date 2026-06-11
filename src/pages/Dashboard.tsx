@@ -5,6 +5,7 @@ import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Sparkles, FileText, TrendingUp, ArrowRight } from "lucide-react";
+import { SubscriptionPlanLimits } from "@contracts/constants";
 
 function getSheetTypeLabel(tipoOutput: string) {
   const labels: Record<string, string> = {
@@ -75,8 +76,24 @@ export default function Dashboard() {
 
   const planLabels: Record<string, string> = {
     trial: "Prova Gratuita",
-    base: "Base",
+    starter: "Starter",
+    pro: "Pro",
+    max: "Max",
   };
+  const currentPlan = subscription?.plan ?? user?.piano ?? "trial";
+  const currentPlanLabel = planLabels[currentPlan] ?? currentPlan;
+  const currentFallbackLimits =
+    SubscriptionPlanLimits[
+      currentPlan as keyof typeof SubscriptionPlanLimits
+    ] ?? SubscriptionPlanLimits.trial;
+  const fallbackSheetUsage =
+    user?.piano === "trial"
+      ? (user?.trialSchedeUsate ?? 0)
+      : (user?.schedeMese ?? 0);
+  const fallbackImageUsage =
+    user?.piano === "trial"
+      ? (user?.trialImmaginiUsate ?? 0)
+      : (user?.immaginiMese ?? 0);
 
   if (isLoading) {
     return <div className="text-slate-500">Caricamento dashboard...</div>;
@@ -117,14 +134,16 @@ export default function Dashboard() {
             </div>
             <div>
               <p className="text-sm font-medium text-slate-800">
-                {planLabels[subscription?.status ?? "trial"]}
+                {currentPlanLabel}
               </p>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-slate-500 leading-5">
                 {organizationOverview
-                  ? `${organizationOverview.usage.used}/${organizationOverview.usage.limit} pool condiviso`
-                  : user?.piano === "trial"
-                    ? `${user?.trialSchedeUsate ?? 0}/15 schede prova`
-                    : `${user?.schedeMese ?? 0}/100 schede mese`}
+                  ? `${organizationOverview.usage.sheets.used}/${organizationOverview.usage.sheets.limit} schede`
+                  : `${fallbackSheetUsage}/${currentFallbackLimits.sheetLimit} schede`}
+                <br />
+                {organizationOverview
+                  ? `${organizationOverview.usage.images.used}/${organizationOverview.usage.images.limit} immagini`
+                  : `${fallbackImageUsage}/${currentFallbackLimits.imageLimit} immagini`}
               </p>
             </div>
           </CardContent>

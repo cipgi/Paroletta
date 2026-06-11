@@ -42,3 +42,4 @@ coverage/
 
 !db/migrations/008_auth_profile_guard.sql
 !db/migrations/019_add_narrative_pragmatic_sheet_types.sql
+!db/migrations/020_subscription_image_limits.sql

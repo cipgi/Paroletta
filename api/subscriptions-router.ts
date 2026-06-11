@@ -32,7 +32,7 @@ export const subscriptionsRouter = createRouter({
         {
           user_id: supabaseUserId,
           status: "cancellato",
-          plan: currentSub?.plan ?? "base",
+          plan: currentSub?.plan ?? "starter",
           seats_count: 1,
           cancel_at_period_end: true,
           current_period_end:
@@ -110,10 +110,13 @@ export const subscriptionsRouter = createRouter({
   plans: authedQuery.query(async ({ ctx }) => {
     const { data, error } = await appDb(ctx.supabaseAccessToken)
       .from("subscription_plans")
-      .select("code,name,description,sheet_limit,duration_days,is_trial,active")
+      .select(
+        "code,name,description,sheet_limit,image_limit,duration_days,is_trial,active"
+      )
       .eq("active", true)
-      .neq("code", "dev")
-      .order("is_trial", { ascending: false });
+      .eq("is_trial", false)
+      .order("sheet_limit", { ascending: true })
+      .order("image_limit", { ascending: true });
     if (error)
       throw databaseOperationError("caricare i piani disponibili", error);
     return (data ?? []).map(plan => ({
@@ -121,6 +124,7 @@ export const subscriptionsRouter = createRouter({
       name: plan.name,
       description: plan.description,
       sheetLimit: plan.sheet_limit,
+      imageLimit: plan.image_limit,
       durationDays: plan.duration_days,
       isTrial: plan.is_trial,
       active: plan.active,
@@ -129,7 +133,7 @@ export const subscriptionsRouter = createRouter({
   updatePlan: authedQuery
     .input(
       z.object({
-        piano: z.enum(["trial", "base", "dev"]),
+        piano: z.enum(["trial", "starter", "pro", "max"]),
         seatsCount: z.number().min(1).max(TeamLimits.maxSeats).optional(),
       })
     )
@@ -141,7 +145,7 @@ export const subscriptionsRouter = createRouter({
         ctx.supabaseAccessToken
       )
         .from("subscription_plans")
-        .select("code,sheet_limit,duration_days,is_trial,active")
+        .select("code,sheet_limit,image_limit,duration_days,is_trial,active")
         .eq("code", input.piano)
         .eq("active", true)
         .maybeSingle();
@@ -204,6 +208,10 @@ export const subscriptionsRouter = createRouter({
         throw databaseOperationError("salvare il nuovo abbonamento", subError);
       ctx.user.piano = plan;
       ctx.user.seats = seatsCount;
-      return { piano: plan, limit: selectedPlan.sheet_limit };
+      return {
+        piano: plan,
+        sheetLimit: selectedPlan.sheet_limit,
+        imageLimit: selectedPlan.image_limit,
+      };
     }),
 });
