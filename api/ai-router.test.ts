@@ -17,6 +17,7 @@ vi.mock("./middleware", () => ({
 import { validateSheet, type UnifiedSheet } from "../contracts/sheet-content";
 import {
   buildPromptMessages,
+  normalizeVisualDiscriminationSheet,
   sanitizeGenerationParams,
   sanitizePromptVariable,
 } from "./ai-router";
@@ -472,6 +473,59 @@ describe("validateSheet unified schema", () => {
         2
       )
     ).toBe(false);
+  });
+
+  it("normalizes recoverable visual discrimination outputs before validation", () => {
+    const sheet = validSheet({
+      tipo: "discriminazione_visiva",
+      titolo: "La donna fa la spesa",
+      consegna: "Indica l'immagine in cui una donna fa la spesa.",
+      testo: "Una donna fa la spesa.",
+      immagini: [
+        {
+          ruolo: "distrattore",
+          livello: "facile",
+          prompt:
+            "Realistic child-friendly square image of a man buying groceries in a small supermarket aisle with a shopping basket, no text.",
+        },
+        {
+          ruolo: "target",
+          livello: "difficile",
+          prompt:
+            "Realistic child-friendly square image of a woman buying groceries in a small supermarket aisle with a shopping basket, no text.",
+        },
+        {
+          ruolo: "distrattore",
+          livello: "intermedio",
+          prompt:
+            "Realistic child-friendly square image of a woman putting books into a basket in a small shop aisle, no text.",
+        },
+        {
+          ruolo: "distrattore",
+          livello: "facile",
+          prompt:
+            "Realistic child-friendly square image of a child playing with a ball in a sunny park, no text.",
+        },
+      ],
+      domande: [
+        {
+          domanda: "Quale immagine mostra una donna che fa la spesa?",
+          risposta: "Il target.",
+        },
+      ],
+    });
+
+    const normalized = normalizeVisualDiscriminationSheet(sheet, 2);
+
+    expect(normalized.immagini).toHaveLength(2);
+    expect(normalized.domande).toEqual([]);
+    expect(normalized.immagini[0]?.ruolo).toBe("target");
+    expect(normalized.immagini[0]?.livello).toBe("principale");
+    expect(normalized.immagini[1]?.ruolo).toBe("distrattore");
+    expect(normalized.immagini[1]?.livello).toBe("difficile");
+    expect(
+      validateSheet(normalized, "discriminazione_visiva", 2)
+    ).toBe(true);
   });
 
   it("rejects non-visual sheets with non-illustration roles or weak image prompts", () => {

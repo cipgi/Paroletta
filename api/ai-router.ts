@@ -263,6 +263,44 @@ function getSheetWords(
     : splitWordsFromListText(sheet.testo).slice(0, 8);
 }
 
+export function normalizeVisualDiscriminationSheet(
+  sheet: UnifiedSheet,
+  numeroOpzioni: number
+): UnifiedSheet {
+  if (sheet.tipo !== "discriminazione_visiva") return sheet;
+
+  const optionCount = Math.min(Math.max(numeroOpzioni, 2), 4);
+  const target =
+    sheet.immagini.find(image => image.ruolo === "target") ??
+    sheet.immagini[0];
+  const distractors = sheet.immagini.filter(image => image !== target);
+  const normalizedImages = [target, ...distractors]
+    .filter((image): image is UnifiedSheet["immagini"][number] => Boolean(image))
+    .slice(0, optionCount)
+    .map((image, index) => {
+      if (index === 0) {
+        return {
+          ...image,
+          ruolo: "target" as const,
+          livello: "principale" as const,
+        };
+      }
+
+      const levels = ["difficile", "intermedio", "facile"] as const;
+      return {
+        ...image,
+        ruolo: "distrattore" as const,
+        livello: levels[index - 1] ?? "facile",
+      };
+    });
+
+  return {
+    ...sheet,
+    immagini: normalizedImages,
+    domande: [],
+  };
+}
+
 function buildTypeSpecificSection(params: GenerationParams): string {
   const tipo = normalizeUnifiedSheetType(params.tipoOutput);
   const questionRule =
@@ -423,9 +461,22 @@ export async function generateUnifiedSheetFromParams(
   }
 
   const parsed = unifiedSheetSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw userFacingError(
+      "SERVICE_UNAVAILABLE",
+      "La generazione non ha restituito una scheda valida. Riprova modificando leggermente i parametri."
+    );
+  }
+
+  const data =
+    parsed.data.tipo === "discriminazione_visiva"
+      ? normalizeVisualDiscriminationSheet(
+          parsed.data,
+          params.numeroOpzioni ?? 4
+        )
+      : parsed.data;
   if (
-    !parsed.success ||
-    !validateSheet(parsed.success ? parsed.data : raw, params.tipoOutput, {
+    !validateSheet(data, params.tipoOutput, {
       numeroOpzioni: params.numeroOpzioni ?? 4,
       numeroScene: params.numeroScene ?? 4,
     })
@@ -436,7 +487,6 @@ export async function generateUnifiedSheetFromParams(
     );
   }
 
-  const data = parsed.data;
   return {
     data,
     serializedSheet: serializeUnifiedSheet(data),
