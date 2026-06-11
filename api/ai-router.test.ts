@@ -55,7 +55,7 @@ describe("AI prompt security", () => {
     ).toBe("le e admin 6 anni");
   });
 
-  it("allows only server-defined fonemi and interests and randomizes free interest", () => {
+  it("allows only server-defined fonemi and interests, randomizes free interest, and validates no-interest context", () => {
     expect(() =>
       sanitizeGenerationParams({
         eta: "6 anni",
@@ -86,6 +86,25 @@ describe("AI prompt security", () => {
     ).toBe("musica");
 
     randomSpy.mockRestore();
+
+    expect(() =>
+      sanitizeGenerationParams({
+        eta: "6 anni",
+        fonema: "r",
+        interesse: "nessuno",
+        tipoOutput: "discriminazione_visiva",
+      })
+    ).toThrow("Inserisci un argomento o una frase target");
+
+    expect(
+      sanitizeGenerationParams({
+        eta: "6 anni",
+        fonema: "r",
+        interesse: "nessuno",
+        tipoOutput: "discriminazione_visiva",
+        scenarioSmart: "Frase target: il bambino spinge la macchina rossa",
+      }).interesse
+    ).toBe("nessuno");
   });
 
   it("builds one unified JSON prompt for every worksheet type", () => {

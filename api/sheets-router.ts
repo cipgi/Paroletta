@@ -319,6 +319,8 @@ export const sheetsRouter = createRouter({
         fonema: sheet.fonema,
         interesse: sheet.interesse,
         tipoOutput: toRegenerableTipoOutput(sheet.tipoOutput),
+        scenarioSmart:
+          sheet.interesse === "nessuno" ? sheet.testoGenerato : undefined,
         numeroOpzioni:
           sheet.tipoOutput === "discriminazione_visiva"
             ? getVisualOptionCount(sheet.listaParole)
