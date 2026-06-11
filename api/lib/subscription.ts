@@ -1,13 +1,10 @@
 import { TRPCError } from "@trpc/server";
 import { adminAppDb, appDb } from "./db";
 import { databaseOperationError } from "./errors";
-
-export type ActiveSubscription = {
-  status: string;
-  plan: string;
-  created_at: string | null;
-  current_period_end: string | null;
-};
+import {
+  type ActiveSubscription,
+  resolveSubscriptionAccess,
+} from "./subscription-access";
 
 export type PlanLimits = {
   sheetLimit: number;
@@ -191,33 +188,13 @@ export async function assertActiveSubscription(params: {
   }
 
   const nowMs = Date.now();
-  const trialStartedAt = subscription?.created_at
-    ? new Date(subscription.created_at).getTime()
-    : nowMs;
-  const trialEndsAt = trialStartedAt + 15 * 24 * 60 * 60 * 1000;
-  const hasTrialAccess =
-    subscription?.status === "trial" && nowMs <= trialEndsAt;
-  const hasActiveSubscription =
-    subscription?.status === "attivo" &&
-    (subscription.current_period_end
-      ? new Date(subscription.current_period_end).getTime() >= nowMs
-      : true);
-  const manuallyAssignedPlan = profile?.piano ?? "trial";
-  const profileStartedAt = profile?.created_at
-    ? new Date(profile.created_at).getTime()
-    : nowMs;
-  const hasManualPlanAccess = manuallyAssignedPlan !== "trial";
-  const hasProfileTrialAccess =
-    manuallyAssignedPlan === "trial" &&
-    !subscription &&
-    nowMs <= profileStartedAt + 15 * 24 * 60 * 60 * 1000;
+  const access = resolveSubscriptionAccess({
+    subscription,
+    profile,
+    nowMs,
+  });
 
-  if (
-    !hasActiveSubscription &&
-    !hasTrialAccess &&
-    !hasManualPlanAccess &&
-    !hasProfileTrialAccess
-  ) {
+  if (!access.accessActive) {
     throw new TRPCError({
       code: "FORBIDDEN",
       message:
@@ -225,12 +202,10 @@ export async function assertActiveSubscription(params: {
     });
   }
 
-  if (hasActiveSubscription || hasTrialAccess) return subscription;
-
   return {
-    status: manuallyAssignedPlan === "trial" ? "trial" : "attivo",
-    plan: manuallyAssignedPlan,
-    created_at: profile?.created_at ?? null,
-    current_period_end: null,
+    status: access.status,
+    plan: access.plan,
+    created_at: access.created_at,
+    current_period_end: access.current_period_end,
   };
 }

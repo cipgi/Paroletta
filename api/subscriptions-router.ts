@@ -2,6 +2,7 @@ import { createRouter, authedQuery } from "./middleware";
 import { appDb, getSupabaseUserIdFromUnionId } from "./lib/db";
 import { databaseOperationError, invalidSessionError } from "./lib/errors";
 import { getAccountContext } from "./lib/organization";
+import { resolveSubscriptionAccess } from "./lib/subscription-access";
 import type { Plan } from "./store";
 
 function requireSupabaseUserId(unionId: string) {
@@ -31,6 +32,10 @@ export const subscriptionsRouter = createRouter({
       supabaseUserId,
       ctx.supabaseAccessToken
     );
+    const ownerProfile = await getOwnerProfile(
+      account.ownerUserId,
+      ctx.supabaseAccessToken
+    );
     const { data, error } = await appDb(ctx.supabaseAccessToken)
       .from("subscriptions")
       .select(
@@ -39,67 +44,46 @@ export const subscriptionsRouter = createRouter({
       .eq("user_id", account.ownerUserId)
       .maybeSingle();
     if (error) throw databaseOperationError("caricare l’abbonamento", error);
-    if (!data) {
-      const ownerProfile = await getOwnerProfile(
-        account.ownerUserId,
-        ctx.supabaseAccessToken
-      );
-      const plan = (ownerProfile.piano ?? "trial") as Plan;
-      const status = plan === "trial" ? "trial" : "attivo";
+    const access = resolveSubscriptionAccess({
+      subscription: data,
+      profile: ownerProfile,
+    });
 
+    if (access.derivedFromProfile) {
       return {
         accountRole: account.role,
         ownerUserId: account.ownerUserId,
-        id: null,
+        id: data?.id ?? null,
         userId: account.ownerUserId,
-        status,
-        plan,
-        seatsCount: ownerProfile.seats ?? 1,
-        currentPeriodStart: ownerProfile.created_at,
-        currentPeriodEnd: status === "attivo" ? null : ownerProfile.updated_at,
+        status: access.status,
+        plan: access.plan as Plan,
+        seatsCount: data?.seats_count ?? ownerProfile.seats ?? 1,
+        currentPeriodStart:
+          data?.current_period_start ?? ownerProfile.created_at,
+        currentPeriodEnd: access.current_period_end,
         cancelAtPeriodEnd: false,
-        createdAt: ownerProfile.created_at,
+        createdAt: data?.created_at ?? ownerProfile.created_at,
         updatedAt: ownerProfile.updated_at,
+        accessActive: access.accessActive,
         derivedFromProfile: true,
       };
     }
-    if (data.status === "cancellato") {
-      const ownerProfile = await getOwnerProfile(
-        account.ownerUserId,
-        ctx.supabaseAccessToken
-      );
-      const plan = (ownerProfile.piano ?? "trial") as Plan;
-      if (plan !== "trial") {
-        return {
-          accountRole: account.role,
-          ownerUserId: account.ownerUserId,
-          id: data.id,
-          userId: data.user_id,
-          status: "attivo",
-          plan,
-          seatsCount: data.seats_count ?? ownerProfile.seats ?? 1,
-          currentPeriodStart: ownerProfile.updated_at,
-          currentPeriodEnd: null,
-          cancelAtPeriodEnd: false,
-          createdAt: data.created_at,
-          updatedAt: ownerProfile.updated_at,
-          derivedFromProfile: true,
-        };
-      }
-    }
+
     return {
       accountRole: account.role,
       ownerUserId: account.ownerUserId,
-      id: data.id,
-      userId: data.user_id,
-      status: data.status,
-      plan: data.plan,
-      seatsCount: data.seats_count,
-      currentPeriodStart: data.current_period_start,
-      currentPeriodEnd: data.current_period_end,
-      cancelAtPeriodEnd: data.cancel_at_period_end,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
+      id: data?.id ?? null,
+      userId: data?.user_id ?? account.ownerUserId,
+      status: access.status,
+      plan: access.plan as Plan,
+      seatsCount: data?.seats_count ?? ownerProfile.seats ?? 1,
+      currentPeriodStart: data?.current_period_start ?? ownerProfile.created_at,
+      currentPeriodEnd: access.current_period_end,
+      cancelAtPeriodEnd: data?.cancel_at_period_end ?? false,
+      createdAt: data?.created_at ?? ownerProfile.created_at,
+      updatedAt: data?.updated_at ?? ownerProfile.updated_at,
+      accessActive: access.accessActive,
+      derivedFromProfile: false,
     };
   }),
   plans: authedQuery.query(async ({ ctx }) => {

@@ -35,13 +35,62 @@ import {
 import { trpc } from "@/providers/trpc";
 import { SubscriptionPlanLimits } from "@contracts/constants";
 
+function InactiveSubscriptionScreen({
+  email,
+  logout,
+}: {
+  email?: string | null;
+  logout: () => void;
+}) {
+  return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+      <div className="w-full max-w-xl rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-start gap-3">
+          <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-50">
+            <CircleHelp className="h-5 w-5 text-amber-600" />
+          </div>
+          <div className="space-y-3">
+            <div>
+              <h1 className="text-xl font-semibold text-slate-900">
+                Abbonamento non attivo
+              </h1>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Chiedere l'attivazione dell'abbonamento al proprietario del
+                sito.
+              </p>
+            </div>
+            {email ? (
+              <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
+                <p className="text-xs font-medium uppercase text-slate-500">
+                  Email account
+                </p>
+                <p className="mt-1 break-all text-sm font-semibold text-slate-800">
+                  {email}
+                </p>
+              </div>
+            ) : null}
+            <p className="text-sm leading-6 text-slate-600">
+              Comunica questa email al proprietario del sito per l'attivazione
+              manuale dell'abbonamento.
+            </p>
+            <Button variant="outline" onClick={logout}>
+              <LogOut className="mr-2 h-4 w-4" />
+              Esci
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Layout({ children }: { children: ReactNode }) {
   const { user, logout, isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
-  const { isLoading: isSubscriptionLoading } =
+  const { data: subscription, isLoading: isSubscriptionLoading } =
     trpc.subscriptions.mySubscription.useQuery(undefined, {
       enabled: isAuthenticated,
     });
@@ -107,6 +156,10 @@ export default function Layout({ children }: { children: ReactNode }) {
         Verifica abbonamento...
       </div>
     );
+  }
+
+  if (isAuthenticated && subscription?.accessActive === false) {
+    return <InactiveSubscriptionScreen email={user?.email} logout={logout} />;
   }
 
   return (
