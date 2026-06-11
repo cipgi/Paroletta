@@ -167,6 +167,19 @@ export async function assertActiveSubscription(params: {
   ownerUserId: string;
   accessToken?: string;
 }): Promise<ActiveSubscription> {
+  const { data: profile, error: profileError } = await appDb(params.accessToken)
+    .from("profiles")
+    .select("piano,created_at,updated_at")
+    .eq("id", params.ownerUserId)
+    .maybeSingle();
+
+  if (profileError) {
+    throw databaseOperationError(
+      "verificare il profilo abbonamento",
+      profileError
+    );
+  }
+
   const { data: subscription, error } = await appDb(params.accessToken)
     .from("subscriptions")
     .select("status,plan,created_at,current_period_end")
@@ -189,14 +202,35 @@ export async function assertActiveSubscription(params: {
     (subscription.current_period_end
       ? new Date(subscription.current_period_end).getTime() >= nowMs
       : true);
+  const manuallyAssignedPlan = profile?.piano ?? "trial";
+  const profileStartedAt = profile?.created_at
+    ? new Date(profile.created_at).getTime()
+    : nowMs;
+  const hasManualPlanAccess = manuallyAssignedPlan !== "trial";
+  const hasProfileTrialAccess =
+    manuallyAssignedPlan === "trial" &&
+    !subscription &&
+    nowMs <= profileStartedAt + 15 * 24 * 60 * 60 * 1000;
 
-  if (!subscription || (!hasActiveSubscription && !hasTrialAccess)) {
+  if (
+    !hasActiveSubscription &&
+    !hasTrialAccess &&
+    !hasManualPlanAccess &&
+    !hasProfileTrialAccess
+  ) {
     throw new TRPCError({
       code: "FORBIDDEN",
       message:
-        "Il tuo abbonamento non è attivo. Riattivalo dalle impostazioni per continuare.",
+        "Il tuo abbonamento non è attivo. Contatta il supporto per verificare il piano.",
     });
   }
 
-  return subscription;
+  if (hasActiveSubscription || hasTrialAccess) return subscription;
+
+  return {
+    status: manuallyAssignedPlan === "trial" ? "trial" : "attivo",
+    plan: manuallyAssignedPlan,
+    created_at: profile?.created_at ?? null,
+    current_period_end: null,
+  };
 }

@@ -184,7 +184,7 @@ export default function Layout({ children }: { children: ReactNode }) {
               </DropdownMenuItem>
               {user?.accountRole !== "staff" ? (
                 <DropdownMenuItem onClick={() => navigate("/abbonamento")}>
-                  Gestisci abbonamento
+                  Visualizza abbonamento
                 </DropdownMenuItem>
               ) : (
                 <DropdownMenuItem disabled>
