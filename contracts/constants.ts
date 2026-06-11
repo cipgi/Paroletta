@@ -24,3 +24,10 @@ export const TeamLimits = {
   maxSeats: 4,
   maxStaffAccounts: 3,
 } as const;
+
+export const SubscriptionPlanLimits = {
+  trial: { sheetLimit: 15, imageLimit: 15 },
+  starter: { sheetLimit: 25, imageLimit: 25 },
+  pro: { sheetLimit: 100, imageLimit: 100 },
+  max: { sheetLimit: 100, imageLimit: 300 },
+} as const;

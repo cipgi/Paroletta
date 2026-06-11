@@ -33,6 +33,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { trpc } from "@/providers/trpc";
+import { SubscriptionPlanLimits } from "@contracts/constants";
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { user, logout, isAuthenticated, isLoading } = useAuth();
@@ -71,13 +72,17 @@ export default function Layout({ children }: { children: ReactNode }) {
 
   const usageLeftLabel = useMemo(() => {
     if (organizationOverview) {
-      return `Pool condiviso rimanente: ${organizationOverview.usage.remaining}`;
+      return `Rimangono: ${organizationOverview.usage.sheets.remaining} schede, ${organizationOverview.usage.images.remaining} immagini`;
     }
     if (!user) return "";
+    const limits =
+      SubscriptionPlanLimits[
+        user.piano as keyof typeof SubscriptionPlanLimits
+      ] ?? SubscriptionPlanLimits.trial;
     if (user.piano === "trial") {
-      return `Schede prova rimanenti: ${Math.max(15 - (user.trialSchedeUsate ?? 0), 0)}`;
+      return `Rimangono: ${Math.max(limits.sheetLimit - (user.trialSchedeUsate ?? 0), 0)} schede, ${Math.max(limits.imageLimit - (user.trialImmaginiUsate ?? 0), 0)} immagini`;
     }
-    return `Schede mensili rimanenti: ${Math.max(100 - (user.schedeMese ?? 0), 0)}`;
+    return `Rimangono: ${Math.max(limits.sheetLimit - (user.schedeMese ?? 0), 0)} schede, ${Math.max(limits.imageLimit - (user.immaginiMese ?? 0), 0)} immagini`;
   }, [organizationOverview, user]);
 
   if (isLoading) {

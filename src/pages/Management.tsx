@@ -6,6 +6,7 @@ import {
   Copy,
   CreditCard,
   FileText,
+  Images,
   MailPlus,
   ShieldCheck,
   Users,
@@ -152,7 +153,14 @@ export default function Management() {
 
   const isTeamOwner = overview.role === "manager";
   const hasTeam = overview.role === "manager" || overview.role === "staff";
-  const usagePercent = percent(overview.usage.used, overview.usage.limit);
+  const sheetUsagePercent = percent(
+    overview.usage.sheets.used,
+    overview.usage.sheets.limit
+  );
+  const imageUsagePercent = percent(
+    overview.usage.images.used,
+    overview.usage.images.limit
+  );
   const seatsSummary = `${overview.seats.used}/${overview.seats.total} posti attivi`;
 
   function onInvite(event: FormEvent<HTMLFormElement>) {
@@ -244,14 +252,14 @@ export default function Management() {
       <div>
         <h1 className="text-2xl font-bold text-slate-800">Gestione team</h1>
         <p className="text-slate-500 mt-1">
-          Visualizza il team a cui appartieni e il consumo condiviso delle
-          generazioni.
+          Visualizza il team a cui appartieni e il consumo condiviso di schede e
+          immagini.
         </p>
       </div>
 
       {receivedInvitationsCard}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-6 flex items-center gap-4">
             <div className="w-12 h-12 bg-teal-50 rounded-xl flex items-center justify-center">
@@ -272,9 +280,22 @@ export default function Management() {
             </div>
             <div>
               <p className="text-2xl font-bold text-slate-800">
-                {overview.usage.used}/{overview.usage.limit}
+                {overview.usage.sheets.used}/{overview.usage.sheets.limit}
               </p>
-              <p className="text-sm text-slate-500">Generazioni dal pool</p>
+              <p className="text-sm text-slate-500">Schede dal pool</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="w-12 h-12 bg-rose-50 rounded-xl flex items-center justify-center">
+              <Images className="w-6 h-6 text-rose-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-slate-800">
+                {overview.usage.images.used}/{overview.usage.images.limit}
+              </p>
+              <p className="text-sm text-slate-500">Immagini dal pool</p>
             </div>
           </CardContent>
         </Card>
@@ -302,21 +323,45 @@ export default function Management() {
             Utilizzi del team
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-teal-600"
-              style={{ width: `${usagePercent}%` }}
-            />
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex justify-between gap-3 text-sm text-slate-600">
+              <span>Schede</span>
+              <span>
+                {overview.usage.sheets.used}/{overview.usage.sheets.limit}
+              </span>
+            </div>
+            <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-teal-600"
+                style={{ width: `${sheetUsagePercent}%` }}
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex justify-between gap-3 text-sm text-slate-600">
+              <span>Immagini</span>
+              <span>
+                {overview.usage.images.used}/{overview.usage.images.limit}
+              </span>
+            </div>
+            <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-rose-500"
+                style={{ width: `${imageUsagePercent}%` }}
+              />
+            </div>
           </div>
           <div className="flex flex-wrap justify-between gap-3 text-sm text-slate-600">
-            <span>{overview.usage.remaining} generazioni rimanenti</span>
+            <span>{overview.usage.sheets.remaining} schede rimanenti</span>
+            <span>{overview.usage.images.remaining} immagini rimanenti</span>
             <span>{overview.usage.teamSheetsCount} schede totali del team</span>
           </div>
           <p className="text-xs text-slate-500">
-            Ogni scheda generata dal team viene scalata dallo stesso pool
-            mensile. Posti disponibili: {overview.seats.available}. Inviti
-            pendenti: {overview.seats.pending}.
+            Ogni scheda e ogni nuova immagine generata dal team vengono scalate
+            dai rispettivi limiti mensili. Posti disponibili:{" "}
+            {overview.seats.available}. Inviti pendenti:{" "}
+            {overview.seats.pending}.
           </p>
         </CardContent>
       </Card>

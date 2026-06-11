@@ -325,8 +325,8 @@ export default function Generator() {
               </SelectContent>
             </Select>
             <p className="text-xs text-slate-500">
-              Il piano attivo può limitare automaticamente il numero massimo di
-              immagini nel PDF.
+              Ogni nuova immagine generata viene scalata dal limite immagini del
+              piano attivo.
             </p>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("./lib/db", () => ({
+  adminAppDb: vi.fn(),
   appDb: vi.fn(),
   getSupabaseUserIdFromUnionId: vi.fn(),
 }));
@@ -185,9 +186,7 @@ describe("AI prompt security", () => {
     expect(pragmatic[0].content).toContain("turni conversazionali");
     expect(morphology[0].content).toContain("Morfologia e morfosintassi");
     expect(morphology[0].content).toContain("morfologia di base");
-    expect(morphology[1].content).toContain(
-      '"tipoOutput":"morfosintassi"'
-    );
+    expect(morphology[1].content).toContain('"tipoOutput":"morfosintassi"');
   });
 
   it("keeps sanitized user values as data separate from the fixed server template", () => {
@@ -373,19 +372,28 @@ describe("validateSheet unified schema", () => {
         },
       ],
       domande: [
-        { domanda: "Che cosa fanno prima i bambini?", risposta: "Preparano una torta." },
-        { domanda: "Che cosa succede alla torta?", risposta: "Cade sul tavolo." },
+        {
+          domanda: "Che cosa fanno prima i bambini?",
+          risposta: "Preparano una torta.",
+        },
+        {
+          domanda: "Che cosa succede alla torta?",
+          risposta: "Cade sul tavolo.",
+        },
         { domanda: "Chi sono i personaggi?", risposta: "Due bambini." },
-        { domanda: "Come finisce la storia?", risposta: "Puliscono e preparano una nuova torta." },
+        {
+          domanda: "Come finisce la storia?",
+          risposta: "Puliscono e preparano una nuova torta.",
+        },
       ],
     });
 
-    expect(validateSheet(sheet, "narrazione_sequenze", { numeroScene: 4 })).toBe(
-      true
-    );
-    expect(validateSheet(sheet, "narrazione_sequenze", { numeroScene: 5 })).toBe(
-      false
-    );
+    expect(
+      validateSheet(sheet, "narrazione_sequenze", { numeroScene: 4 })
+    ).toBe(true);
+    expect(
+      validateSheet(sheet, "narrazione_sequenze", { numeroScene: 5 })
+    ).toBe(false);
   });
 
   it("validates pragmatic worksheets with a social scene", () => {
@@ -405,10 +413,22 @@ describe("validateSheet unified schema", () => {
         },
       ],
       domande: [
-        { domanda: "Che cosa vuole fare Anna?", risposta: "Vuole usare lo scivolo." },
-        { domanda: "Come può sentirsi Anna?", risposta: "Può sentirsi impaziente." },
-        { domanda: "Perché Leo resta in alto?", risposta: "Forse ha paura o vuole ancora giocare." },
-        { domanda: "Che cosa può dire Anna?", risposta: "Posso fare un turno anch'io?" },
+        {
+          domanda: "Che cosa vuole fare Anna?",
+          risposta: "Vuole usare lo scivolo.",
+        },
+        {
+          domanda: "Come può sentirsi Anna?",
+          risposta: "Può sentirsi impaziente.",
+        },
+        {
+          domanda: "Perché Leo resta in alto?",
+          risposta: "Forse ha paura o vuole ancora giocare.",
+        },
+        {
+          domanda: "Che cosa può dire Anna?",
+          risposta: "Posso fare un turno anch'io?",
+        },
       ],
     });
 
@@ -542,9 +562,7 @@ describe("validateSheet unified schema", () => {
     expect(normalized.immagini[0]?.livello).toBe("principale");
     expect(normalized.immagini[1]?.ruolo).toBe("distrattore");
     expect(normalized.immagini[1]?.livello).toBe("difficile");
-    expect(
-      validateSheet(normalized, "discriminazione_visiva", 2)
-    ).toBe(true);
+    expect(validateSheet(normalized, "discriminazione_visiva", 2)).toBe(true);
   });
 
   it("rejects non-visual sheets with non-illustration roles or weak image prompts", () => {
@@ -606,12 +624,14 @@ describe("validateSheet unified schema", () => {
             {
               ruolo: "illustrazione",
               livello: "principale",
-              prompt: "Realistic child-friendly image of a green frog, no text.",
+              prompt:
+                "Realistic child-friendly image of a green frog, no text.",
             },
             {
               ruolo: "illustrazione",
               livello: "principale",
-              prompt: "Realistic child-friendly image of a green frog, no text.",
+              prompt:
+                "Realistic child-friendly image of a green frog, no text.",
             },
           ],
           domande: [],

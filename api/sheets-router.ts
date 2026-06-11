@@ -22,6 +22,10 @@ import {
   sanitizeGenerationParams,
   type TipoOutput,
 } from "./ai-router";
+import {
+  assertActiveSubscription,
+  reserveImageGenerationQuota,
+} from "./lib/subscription";
 
 function requireSupabaseUserId(unionId: string) {
   const id = getSupabaseUserIdFromUnionId(unionId);
@@ -89,8 +93,9 @@ function getVisualOptionCount(words: string[] | null) {
 }
 
 function getNarrativeSceneCount(words: string[] | null) {
-  const count = (words ?? []).filter(word => /^scena\s+\d+/i.test(word.trim()))
-    .length;
+  const count = (words ?? []).filter(word =>
+    /^scena\s+\d+/i.test(word.trim())
+  ).length;
   return Math.min(Math.max(count || 4, 3), 5);
 }
 
@@ -114,7 +119,29 @@ function getRegenerationAgeRange(difficulty: string | null | undefined) {
   return "6-8 anni";
 }
 
-async function resolveSheetImageAssets(sheet: ReturnType<typeof mapSheet>) {
+type ImageQuotaContext = {
+  userId: string;
+  accessToken?: string;
+};
+
+async function reserveImageQuotaForCurrentUser(quota: ImageQuotaContext) {
+  const account = await getAccountContext(quota.userId, quota.accessToken);
+  const subscription = await assertActiveSubscription({
+    ownerUserId: account.ownerUserId,
+    accessToken: quota.accessToken,
+  });
+
+  return reserveImageGenerationQuota({
+    userId: quota.userId,
+    plan: subscription.plan ?? "trial",
+    accessToken: quota.accessToken,
+  });
+}
+
+async function resolveSheetImageAssets(
+  sheet: ReturnType<typeof mapSheet>,
+  quota: ImageQuotaContext
+) {
   const imageRequests = buildImageRequests({
     tipoOutput: sheet.tipoOutput,
     interesse: sheet.interesse,
@@ -131,7 +158,10 @@ async function resolveSheetImageAssets(sheet: ReturnType<typeof mapSheet>) {
     imageRequests.map(async request => {
       const illustration = await resolveImageRequestWithCache(
         request,
-        imageCacheDb
+        imageCacheDb,
+        {
+          onGenerateStart: () => reserveImageQuotaForCurrentUser(quota),
+        }
       );
       return {
         role: request.role,
@@ -244,7 +274,10 @@ export const sheetsRouter = createRouter({
         ctx.supabaseAccessToken
       );
       const sheet = mapSheet(data);
-      const imageAssets = await resolveSheetImageAssets(sheet);
+      const imageAssets = await resolveSheetImageAssets(sheet, {
+        userId: supabaseUserId,
+        accessToken: ctx.supabaseAccessToken,
+      });
       return { ...sheet, imageAssets };
     }),
   regenerateImage: authedQuery
@@ -262,7 +295,6 @@ export const sheetsRouter = createRouter({
         data.user_id,
         ctx.supabaseAccessToken
       );
-
       const sheet = mapSheet(data);
       const imageRequests = buildImageRequests({
         tipoOutput: sheet.tipoOutput,
@@ -283,7 +315,14 @@ export const sheetsRouter = createRouter({
       const illustration = await resolveImageRequestWithCache(
         request,
         imageCacheDb,
-        { force: true }
+        {
+          force: true,
+          onGenerateStart: async () =>
+            reserveImageQuotaForCurrentUser({
+              userId: supabaseUserId,
+              accessToken: ctx.supabaseAccessToken,
+            }),
+        }
       );
 
       return {
@@ -312,7 +351,6 @@ export const sheetsRouter = createRouter({
         data.user_id,
         ctx.supabaseAccessToken
       );
-
       const sheet = mapSheet(data);
       const sanitizedInput = sanitizeGenerationParams({
         eta: getRegenerationAgeRange(sheet.difficolta),
@@ -330,9 +368,8 @@ export const sheetsRouter = createRouter({
             ? getNarrativeSceneCount(sheet.listaParole)
             : undefined,
       });
-      const generatedSheet = await generateUnifiedSheetFromParams(
-        sanitizedInput
-      );
+      const generatedSheet =
+        await generateUnifiedSheetFromParams(sanitizedInput);
       const { data: updated, error: updateError } = await appDb(
         ctx.supabaseAccessToken
       )
@@ -355,7 +392,10 @@ export const sheetsRouter = createRouter({
       }
 
       const updatedSheet = mapSheet(updated);
-      const imageAssets = await resolveSheetImageAssets(updatedSheet);
+      const imageAssets = await resolveSheetImageAssets(updatedSheet, {
+        userId: supabaseUserId,
+        accessToken: ctx.supabaseAccessToken,
+      });
       return { ...updatedSheet, imageAssets };
     }),
   generatePdf: authedQuery

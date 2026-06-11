@@ -1,5 +1,5 @@
 // Logical app schema (stored in Postgres schema: app)
-export type Plan = "trial" | "base" | "dev";
+export type Plan = "trial" | "starter" | "pro" | "max";
 export type SubscriptionStatus = "trial" | "attivo" | "cancellato";
 export type AccountRole = "manager" | "staff" | "single";
 export type SheetOutputType =
@@ -26,6 +26,8 @@ export interface Profile {
   seats: number;
   trialSchedeUsate: number;
   schedeMese: number;
+  trialImmaginiUsate: number;
+  immaginiMese: number;
   lastSignInAt: string | null;
   createdAt: string;
   updatedAt: string;

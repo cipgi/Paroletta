@@ -9,23 +9,12 @@ import {
   userFacingError,
 } from "./lib/errors";
 import { getAccountContext, requireManager } from "./lib/organization";
+import { getUsageSummary } from "./lib/subscription";
 
 function requireSupabaseUserId(unionId: string) {
   const id = getSupabaseUserIdFromUnionId(unionId);
   if (!id) throw invalidSessionError();
   return id;
-}
-
-async function getPlanLimit(plan: string, accessToken?: string) {
-  const { data, error } = await appDb(accessToken)
-    .from("subscription_plans")
-    .select("sheet_limit")
-    .eq("code", plan)
-    .eq("active", true)
-    .maybeSingle();
-  if (error)
-    throw databaseOperationError("caricare il limite del piano", error);
-  return data?.sheet_limit ?? 5;
 }
 
 async function getSeatCapacity(ownerUserId: string) {
@@ -116,7 +105,9 @@ export const organizationRouter = createRouter({
 
     const { data: dbOwnerProfile, error: ownerError } = await db
       .from("profiles")
-      .select("id,email,name,piano,seats,trial_schede_usate,schede_mese")
+      .select(
+        "id,email,name,piano,seats,trial_schede_usate,schede_mese,trial_immagini_usate,immagini_mese"
+      )
       .eq("id", account.ownerUserId)
       .maybeSingle();
     if (ownerError) {
@@ -137,6 +128,8 @@ export const organizationRouter = createRouter({
             seats: ctx.user.seats ?? 1,
             trial_schede_usate: ctx.user.trialSchedeUsate ?? 0,
             schede_mese: ctx.user.schedeMese ?? 0,
+            trial_immagini_usate: ctx.user.trialImmaginiUsate ?? 0,
+            immagini_mese: ctx.user.immaginiMese ?? 0,
           }
         : null);
 
@@ -156,11 +149,11 @@ export const organizationRouter = createRouter({
       );
 
     const plan = subscription?.plan ?? ownerProfile.piano ?? "trial";
-    const limit = await getPlanLimit(plan, ctx.supabaseAccessToken);
-    const used =
-      plan === "trial"
-        ? (ownerProfile.trial_schede_usate ?? 0)
-        : (ownerProfile.schede_mese ?? 0);
+    const usage = await getUsageSummary({
+      ownerUserId: account.ownerUserId,
+      plan,
+      accessToken: ctx.supabaseAccessToken,
+    });
 
     const { data: memberRows, error: memberError } = await db
       .from("seat_assignments")
@@ -293,9 +286,11 @@ export const organizationRouter = createRouter({
         : null,
       usage: {
         plan,
-        limit,
-        used,
-        remaining: Math.max(limit - used, 0),
+        limit: usage.sheets.limit,
+        used: usage.sheets.used,
+        remaining: usage.sheets.remaining,
+        sheets: usage.sheets,
+        images: usage.images,
         teamSheetsCount: teamSheetsCount ?? 0,
       },
       seats: {
