@@ -12,6 +12,8 @@ import { getUserFacingSheetContent } from "@contracts/sheet-content";
 import { sanitizeProfileNameOrFallback } from "./lib/sanitize";
 import { getAccountContext } from "./lib/organization";
 import { createSupabaseImageCacheDb } from "./lib/illustration-cache-db";
+import { createSupabaseImageObjectStorage } from "./lib/image-storage";
+import { supabaseAdmin } from "./lib/supabase";
 import {
   buildSemanticCacheKey,
   buildImageRequests,
@@ -152,7 +154,10 @@ async function resolveSheetImageAssets(
         ? getVisualOptionCount(sheet.listaParole)
         : undefined,
   });
-  const imageCacheDb = createSupabaseImageCacheDb(adminAppDb());
+  const imageStorage = createSupabaseImageObjectStorage(supabaseAdmin);
+  const imageCacheDb = createSupabaseImageCacheDb(adminAppDb(), {
+    imageStorage,
+  });
 
   return Promise.all(
     imageRequests.map(async request => {
@@ -160,6 +165,7 @@ async function resolveSheetImageAssets(
         request,
         imageCacheDb,
         {
+          imageStorage,
           onGenerateStart: () => reserveImageQuotaForCurrentUser(quota),
         }
       );
@@ -170,6 +176,8 @@ async function resolveSheetImageAssets(
         cacheKey: illustration.cacheKey,
         filePath: illustration.filePath,
         source: illustration.source,
+        storageBucket: illustration.storageBucket ?? null,
+        storagePath: illustration.storagePath ?? null,
         fallbackReason: illustration.fallbackReason ?? null,
         cacheHit: illustration.cacheHit,
       };
@@ -311,12 +319,16 @@ export const sheetsRouter = createRouter({
       );
       if (!request) throw missingResourceError("Immagine");
 
-      const imageCacheDb = createSupabaseImageCacheDb(adminAppDb());
+      const imageStorage = createSupabaseImageObjectStorage(supabaseAdmin);
+      const imageCacheDb = createSupabaseImageCacheDb(adminAppDb(), {
+        imageStorage,
+      });
       const illustration = await resolveImageRequestWithCache(
         request,
         imageCacheDb,
         {
           force: true,
+          imageStorage,
           onGenerateStart: async () =>
             reserveImageQuotaForCurrentUser({
               userId: supabaseUserId,
@@ -332,6 +344,8 @@ export const sheetsRouter = createRouter({
         cacheKey: illustration.cacheKey,
         filePath: illustration.filePath,
         source: illustration.source,
+        storageBucket: illustration.storageBucket ?? null,
+        storagePath: illustration.storagePath ?? null,
         fallbackReason: illustration.fallbackReason ?? null,
         cacheHit: illustration.cacheHit,
       };
