@@ -304,27 +304,79 @@ function getSheetWords(
     : splitWordsFromListText(sheet.testo).slice(0, 8);
 }
 
+function isPlaceholderVisualPrompt(value: string) {
+  return /^\s*(?:target|distrattore|distractor|illustrazione|illustration|image|immagine)(?:\s+\d+)?(?:\s+image)?(?:,\s*no\s+text\.?)?\s*$/iu.test(
+    value
+  );
+}
+
+function normalizeVisualPrompt(prompt: string | undefined, fallback: string) {
+  const cleanedPrompt = prompt?.trim() ?? "";
+  const cleanedFallback = fallback.trim() || "scena visiva concreta";
+  return !cleanedPrompt || isPlaceholderVisualPrompt(cleanedPrompt)
+    ? cleanedFallback
+    : cleanedPrompt;
+}
+
+function getVisualTargetText(params: GenerationParams) {
+  return (
+    params.scenarioSmart?.trim() ||
+    params.aspettoSpecifico?.trim() ||
+    params.descrizioneScena?.trim() ||
+    "scena target"
+  );
+}
+
 export function normalizeVisualDiscriminationSheet(
   sheet: UnifiedSheet,
-  numeroOpzioni: number
+  numeroOpzioni: number,
+  targetText?: string
 ): UnifiedSheet {
   if (sheet.tipo !== "discriminazione_visiva") return sheet;
 
   const optionCount = Math.min(Math.max(numeroOpzioni, 2), 4);
+  const resolvedTargetText = (targetText ?? sheet.testo).trim() || sheet.testo;
   const target =
     sheet.immagini.find(image => image.ruolo === "target") ?? sheet.immagini[0];
   const distractors = sheet.immagini.filter(image => image !== target);
-  const normalizedImages = [target, ...distractors]
-    .filter((image): image is UnifiedSheet["immagini"][number] =>
-      Boolean(image)
-    )
+  const fallbackDistractorPrompts = [
+    `${resolvedTargetText}; cambia solo un dettaglio spaziale o relazionale.`,
+    `${resolvedTargetText}; cambia l'oggetto principale mantenendo lo stesso contesto.`,
+    `${resolvedTargetText}; cambia la scena in modo semplice ed evidente.`,
+  ];
+  const imagePlan = [
+    target ?? {
+      ruolo: "target" as const,
+      livello: "principale" as const,
+      prompt: resolvedTargetText,
+    },
+    ...Array.from({ length: optionCount - 1 }, (_, index) => {
+      return (
+        distractors[index] ?? {
+          ruolo: "distrattore" as const,
+          livello: "difficile" as const,
+          prompt: fallbackDistractorPrompts[index] ?? resolvedTargetText,
+        }
+      );
+    }),
+  ];
+
+  const normalizedImages = imagePlan
     .slice(0, optionCount)
     .map((image, index) => {
+      const prompt = normalizeVisualPrompt(
+        image.prompt,
+        index === 0
+          ? resolvedTargetText
+          : (fallbackDistractorPrompts[index - 1] ?? resolvedTargetText)
+      );
+
       if (index === 0) {
         return {
           ...image,
           ruolo: "target" as const,
           livello: "principale" as const,
+          prompt,
         };
       }
 
@@ -333,14 +385,37 @@ export function normalizeVisualDiscriminationSheet(
         ...image,
         ruolo: "distrattore" as const,
         livello: levels[index - 1] ?? "facile",
+        prompt,
       };
     });
 
   return {
     ...sheet,
+    consegna: resolvedTargetText
+      ? `Indica l'immagine che rappresenta: ${resolvedTargetText}`
+      : sheet.consegna,
+    testo: resolvedTargetText || sheet.testo,
     immagini: normalizedImages,
     domande: [],
   };
+}
+
+function buildVisualDiscriminationFallbackSheet(
+  params: GenerationParams
+): UnifiedSheet {
+  const targetText = getVisualTargetText(params);
+  return normalizeVisualDiscriminationSheet(
+    {
+      tipo: "discriminazione_visiva",
+      titolo: "Indica l'immagine corretta",
+      consegna: `Indica l'immagine che rappresenta: ${targetText}`,
+      testo: targetText,
+      immagini: [],
+      domande: [],
+    },
+    params.numeroOpzioni ?? 4,
+    targetText
+  );
 }
 
 function buildTypeSpecificSection(params: GenerationParams): string {
@@ -521,6 +596,16 @@ export async function generateUnifiedSheetFromParams(params: GenerationParams) {
 
   const parsed = unifiedSheetSchema.safeParse(raw);
   if (!parsed.success) {
+    if (params.tipoOutput === "discriminazione_visiva") {
+      const data = buildVisualDiscriminationFallbackSheet(params);
+      return {
+        data,
+        serializedSheet: serializeUnifiedSheet(data),
+        tagImmagine: getSheetTag(data),
+        words: getSheetWords(data, params),
+      };
+    }
+
     throw userFacingError(
       "SERVICE_UNAVAILABLE",
       "La generazione non ha restituito una scheda valida. Riprova modificando leggermente i parametri."
@@ -531,13 +616,26 @@ export async function generateUnifiedSheetFromParams(params: GenerationParams) {
     parsed.data.tipo === "discriminazione_visiva"
       ? normalizeVisualDiscriminationSheet(
           parsed.data,
-          params.numeroOpzioni ?? 4
+          params.numeroOpzioni ?? 4,
+          params.scenarioSmart
         )
       : parsed.data;
-  const data =
+  let data =
     params.includeImages || !canOmitSheetImages(normalizedVisualSheet.tipo)
       ? normalizedVisualSheet
       : { ...normalizedVisualSheet, immagini: [] };
+  if (
+    !validateSheet(data, params.tipoOutput, {
+      numeroOpzioni: params.numeroOpzioni ?? 4,
+      numeroScene: params.numeroScene ?? 4,
+      includeImages: params.includeImages,
+    })
+  ) {
+    if (params.tipoOutput === "discriminazione_visiva") {
+      data = buildVisualDiscriminationFallbackSheet(params);
+    }
+  }
+
   if (
     !validateSheet(data, params.tipoOutput, {
       numeroOpzioni: params.numeroOpzioni ?? 4,
