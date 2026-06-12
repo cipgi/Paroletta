@@ -393,7 +393,7 @@ export default function Management() {
                   {managedSheets?.length ?? 0} schede totali visibili
                 </Badge>
               </div>
-              <div className="divide-y divide-slate-100">
+              <div className="max-h-[min(60vh,720px)] overflow-y-auto divide-y divide-slate-100">
                 {isManagedSheetsLoading ? (
                   <p className="p-4 text-sm text-slate-500">
                     Caricamento schede...
