@@ -243,7 +243,11 @@ export default function SheetDetail() {
   const { user } = useAuth();
   const sheetCardRef = useRef<HTMLDivElement | null>(null);
 
-  const { data: sheet, isLoading } = trpc.sheets.detail.useQuery(
+  const {
+    data: sheet,
+    isLoading,
+    error: sheetError,
+  } = trpc.sheets.detail.useQuery(
     { id: sheetId },
     { enabled: Boolean(sheetId) }
   );
@@ -321,6 +325,27 @@ export default function SheetDetail() {
             <div className="h-72 animate-pulse rounded-3xl bg-slate-100" />
           </CardContent>
         </Card>
+      </div>
+    );
+  }
+
+  if (sheetError && sheetError.data?.code !== "NOT_FOUND") {
+    return (
+      <div className="max-w-3xl mx-auto text-center py-20">
+        <FileText className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+        <p className="text-slate-700 font-medium">
+          Non è stato possibile caricare la scheda.
+        </p>
+        <p className="mt-2 text-sm text-slate-500">
+          {sheetError.message}
+        </p>
+        <Button
+          variant="outline"
+          className="mt-4"
+          onClick={() => void utils.sheets.detail.invalidate({ id: sheetId })}
+        >
+          Riprova
+        </Button>
       </div>
     );
   }

@@ -8,6 +8,7 @@ import {
   sanitizeImagePrompt,
   type ImageCacheDb,
 } from "./image-generation";
+import type { ImageObjectStorage } from "./image-storage";
 
 describe("image generation semantic cache", () => {
   it("normalizes semantic tags into a deterministic exact-match cache key", () => {
@@ -209,13 +210,40 @@ Distrattore 1: singola immagine con un falco al centro nel cielo azzurro.`,
 
     try {
       let saved = 0;
+      let uploaded = 0;
+      const imageStorage: ImageObjectStorage = {
+        async uploadGeneratedImage(input) {
+          uploaded += 1;
+          expect(input.bytes).toBe(Buffer.from("fake image").toString("base64"));
+          expect(input.mimeType).toBe("image/png");
+          expect(input.cacheKey).toBe("ruolo:base|soggetto:cane");
+          return {
+            filePath: "https://storage.example/signed-generated-image",
+            storageBucket: "generated-images",
+            storagePath: "generated/test.png",
+            byteSize: Buffer.byteLength("fake image"),
+          };
+        },
+        async getDisplayUrl() {
+          return "https://storage.example/signed-generated-image";
+        },
+      };
       const db: ImageCacheDb = {
         async findByCacheKey() {
           return null;
         },
         async save(illustration) {
           saved += 1;
-          return illustration;
+          expect(illustration.filePath).toBe(
+            "storage://generated-images/generated/test.png"
+          );
+          expect(illustration.storageBucket).toBe("generated-images");
+          expect(illustration.storagePath).toBe("generated/test.png");
+          expect(illustration.byteSize).toBe(Buffer.byteLength("fake image"));
+          return {
+            ...illustration,
+            filePath: "https://storage.example/signed-generated-image",
+          };
         },
       };
 
@@ -226,13 +254,15 @@ Distrattore 1: singola immagine con un falco al centro nel cielo azzurro.`,
           prompt: "cane che mangia mela",
           semanticTags: ["ruolo:base", "soggetto:cane"],
         },
-        db
+        db,
+        { imageStorage }
       );
 
       expect(result.source).toBe("generated");
       expect(saved).toBe(1);
+      expect(uploaded).toBe(1);
       expect(result.filePath).toBe(
-        `data:image/png;base64,${Buffer.from("fake image").toString("base64")}`
+        "https://storage.example/signed-generated-image"
       );
       expect(result.generationModel).toBe("gpt-image-2");
       expect(fetchSpy).toHaveBeenCalledWith(
@@ -270,6 +300,14 @@ Distrattore 1: singola immagine con un falco al centro nel cielo azzurro.`,
 
     try {
       let saved = 0;
+      const imageStorage: ImageObjectStorage = {
+        async uploadGeneratedImage() {
+          throw new Error("storage should not be called");
+        },
+        async getDisplayUrl() {
+          return null;
+        },
+      };
       const db: ImageCacheDb = {
         async findByCacheKey() {
           return null;
@@ -288,7 +326,8 @@ Distrattore 1: singola immagine con un falco al centro nel cielo azzurro.`,
             prompt: "cane che mangia mela",
             semanticTags: ["ruolo:target", "soggetto:cane"],
           },
-          db
+          db,
+          { imageStorage }
         )
       ).rejects.toThrow("Chiave API OpenAI mancante");
 
@@ -351,6 +390,22 @@ Distrattore 1: singola immagine con un falco al centro nel cielo azzurro.`,
 
     try {
       let saved = 0;
+      let uploaded = 0;
+      const imageStorage: ImageObjectStorage = {
+        async uploadGeneratedImage(input) {
+          uploaded += 1;
+          expect(input.bytes).toBe(Buffer.from("new image").toString("base64"));
+          return {
+            filePath: "https://storage.example/signed-new-image",
+            storageBucket: "generated-images",
+            storagePath: "generated/new.png",
+            byteSize: Buffer.byteLength("new image"),
+          };
+        },
+        async getDisplayUrl() {
+          return "https://storage.example/signed-new-image";
+        },
+      };
       const db: ImageCacheDb = {
         async findByCacheKey(cacheKey) {
           return {
@@ -363,7 +418,13 @@ Distrattore 1: singola immagine con un falco al centro nel cielo azzurro.`,
         },
         async save(illustration) {
           saved += 1;
-          return illustration;
+          expect(illustration.filePath).toBe(
+            "storage://generated-images/generated/new.png"
+          );
+          return {
+            ...illustration,
+            filePath: "https://storage.example/signed-new-image",
+          };
         },
       };
 
@@ -374,13 +435,15 @@ Distrattore 1: singola immagine con un falco al centro nel cielo azzurro.`,
           prompt: "cane che mangia mela",
           semanticTags: ["ruolo:target", "soggetto:cane"],
         },
-        db
+        db,
+        { imageStorage }
       );
 
       expect(result.cacheHit).toBe(false);
       expect(saved).toBe(1);
+      expect(uploaded).toBe(1);
       expect(result.filePath).toBe(
-        `data:image/png;base64,${Buffer.from("new image").toString("base64")}`
+        "https://storage.example/signed-new-image"
       );
     } finally {
       fetchSpy.mockRestore();

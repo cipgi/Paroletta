@@ -12,9 +12,12 @@ import { getUserFacingSheetContent } from "@contracts/sheet-content";
 import { sanitizeProfileNameOrFallback } from "./lib/sanitize";
 import { getAccountContext } from "./lib/organization";
 import { createSupabaseImageCacheDb } from "./lib/illustration-cache-db";
+import { createSupabaseImageObjectStorage } from "./lib/image-storage";
+import { supabaseAdmin } from "./lib/supabase";
 import {
   buildSemanticCacheKey,
   buildImageRequests,
+  normalizeSemanticTag,
   resolveImageRequestWithCache,
 } from "./lib/image-generation";
 import {
@@ -152,27 +155,65 @@ async function resolveSheetImageAssets(
         ? getVisualOptionCount(sheet.listaParole)
         : undefined,
   });
-  const imageCacheDb = createSupabaseImageCacheDb(adminAppDb());
+  const imageStorage = createSupabaseImageObjectStorage(supabaseAdmin);
+  const imageCacheDb = createSupabaseImageCacheDb(adminAppDb(), {
+    imageStorage,
+  });
 
   return Promise.all(
     imageRequests.map(async request => {
-      const illustration = await resolveImageRequestWithCache(
-        request,
-        imageCacheDb,
-        {
-          onGenerateStart: () => reserveImageQuotaForCurrentUser(quota),
-        }
+      const semanticTags = Array.from(
+        new Set(request.semanticTags.map(normalizeSemanticTag).filter(Boolean))
       );
-      return {
-        role: request.role,
-        label: request.label,
-        semanticTags: illustration.semanticTags,
-        cacheKey: illustration.cacheKey,
-        filePath: illustration.filePath,
-        source: illustration.source,
-        fallbackReason: illustration.fallbackReason ?? null,
-        cacheHit: illustration.cacheHit,
-      };
+      const cacheKey = buildSemanticCacheKey(semanticTags);
+
+      try {
+        const illustration = await resolveImageRequestWithCache(
+          request,
+          imageCacheDb,
+          {
+            imageStorage,
+            onGenerateStart: () => reserveImageQuotaForCurrentUser(quota),
+          }
+        );
+        return {
+          role: request.role,
+          label: request.label,
+          semanticTags: illustration.semanticTags,
+          cacheKey: illustration.cacheKey,
+          filePath: illustration.filePath,
+          source: illustration.source,
+          storageBucket: illustration.storageBucket ?? null,
+          storagePath: illustration.storagePath ?? null,
+          fallbackReason: illustration.fallbackReason ?? null,
+          cacheHit: illustration.cacheHit,
+        };
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message.replace(/\s+/g, " ").trim()
+            : "Errore durante la generazione dell'immagine.";
+        console.error("[sheets] image asset resolution failed", {
+          sheetId: sheet.id,
+          cacheKey,
+          error,
+        });
+
+        return {
+          role: request.role,
+          label: request.label,
+          semanticTags,
+          cacheKey,
+          filePath: "",
+          source: "mock" as const,
+          storageBucket: null,
+          storagePath: null,
+          fallbackReason:
+            message ||
+            "Immagine non disponibile: riprova con Rigenera immagine.",
+          cacheHit: false,
+        };
+      }
     })
   );
 }
@@ -311,12 +352,16 @@ export const sheetsRouter = createRouter({
       );
       if (!request) throw missingResourceError("Immagine");
 
-      const imageCacheDb = createSupabaseImageCacheDb(adminAppDb());
+      const imageStorage = createSupabaseImageObjectStorage(supabaseAdmin);
+      const imageCacheDb = createSupabaseImageCacheDb(adminAppDb(), {
+        imageStorage,
+      });
       const illustration = await resolveImageRequestWithCache(
         request,
         imageCacheDb,
         {
           force: true,
+          imageStorage,
           onGenerateStart: async () =>
             reserveImageQuotaForCurrentUser({
               userId: supabaseUserId,
@@ -332,6 +377,8 @@ export const sheetsRouter = createRouter({
         cacheKey: illustration.cacheKey,
         filePath: illustration.filePath,
         source: illustration.source,
+        storageBucket: illustration.storageBucket ?? null,
+        storagePath: illustration.storagePath ?? null,
         fallbackReason: illustration.fallbackReason ?? null,
         cacheHit: illustration.cacheHit,
       };

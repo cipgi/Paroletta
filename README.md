@@ -32,6 +32,19 @@ Per la generazione immagini server-side configura anche `OPENAI_API_KEY`. Il
 provider immagini usa OpenAI con modello predefinito `gpt-image-2`, qualità
 `low`, formato quadrato 1:1 e risoluzione `1024x1024`; `OPENAI_IMAGE_MODEL` e
 `OPENAI_IMAGE_API_URL` sono disponibili solo per override server-side.
+Le immagini generate vengono caricate nel bucket Supabase Storage privato
+`generated-images`; il database salva solo il riferimento `storage://...` e il
+backend restituisce al frontend una signed URL temporanea. Puoi cambiare il nome
+bucket con `SUPABASE_GENERATED_IMAGES_BUCKET` e la durata delle signed URL con
+`SUPABASE_IMAGE_SIGNED_URL_SECONDS`; se cambi bucket, crea anche il bucket
+corrispondente o adatta la migrazione SQL.
+
+Per migrare immagini già salvate in `app.illustrations.file_path` come
+`data:image/...;base64,...`, applica prima le migrazioni SQL e poi lancia:
+
+```bash
+npm run migrate:images:storage
+```
 
 ### Perché servono tutte e tre
 
