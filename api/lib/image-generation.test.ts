@@ -4,6 +4,7 @@ import {
   buildImageRequests,
   buildSemanticCacheKey,
   normalizeSemanticTag,
+  resolveCachedImageRequest,
   resolveImageRequestWithCache,
   sanitizeImagePrompt,
   type ImageCacheDb,
@@ -409,6 +410,64 @@ Distrattore 1: singola immagine con un falco al centro nel cielo azzurro.`,
 
     expect(result.cacheHit).toBe(true);
     expect(result.filePath).toBe("cache://target");
+    expect(saved).toBe(0);
+  });
+
+  it("reads image cache without generating missing images", async () => {
+    let saved = 0;
+    const db: ImageCacheDb = {
+      async findByCacheKey() {
+        return null;
+      },
+      async save(illustration) {
+        saved += 1;
+        return illustration;
+      },
+    };
+
+    const result = await resolveCachedImageRequest(
+      {
+        role: "target",
+        label: "Target",
+        prompt: "cane che mangia mela",
+        semanticTags: ["ruolo:target", "soggetto:cane"],
+      },
+      db
+    );
+
+    expect(result).toBeNull();
+    expect(saved).toBe(0);
+  });
+
+  it("does not regenerate stale local generated files during cache-only reads", async () => {
+    let saved = 0;
+    const db: ImageCacheDb = {
+      async findByCacheKey(cacheKey) {
+        return {
+          tag: "Target",
+          semanticTags: ["ruolo:target"],
+          cacheKey,
+          filePath: "/generated-images/stale.png",
+          source: "generated",
+        };
+      },
+      async save(illustration) {
+        saved += 1;
+        return illustration;
+      },
+    };
+
+    const result = await resolveCachedImageRequest(
+      {
+        role: "target",
+        label: "Target",
+        prompt: "cane che mangia mela",
+        semanticTags: ["ruolo:target", "soggetto:cane"],
+      },
+      db
+    );
+
+    expect(result).toBeNull();
     expect(saved).toBe(0);
   });
 

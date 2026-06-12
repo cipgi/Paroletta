@@ -281,6 +281,9 @@ export default function SheetDetail() {
   const isPragmatic = sheet.tipoOutput === "pragmatica";
   const imageAssets = sheet.imageAssets ?? [];
   const hasImageAssets = imageAssets.length > 0;
+  const hasDisplayableImageAssets = imageAssets.some(asset =>
+    isDisplayableImagePath(asset.filePath)
+  );
   const visualImageAssets = imageAssets.filter(asset =>
     ["target", "distrattore"].includes(asset.role)
   );
@@ -383,7 +386,9 @@ export default function SheetDetail() {
                 </p>
                 <p>
                   {hasImageAssets
-                    ? "Verifica coerenza tema-immagini e accuratezza della risposta; usa “Rigenera” per correggere contenuto o immagini."
+                    ? hasDisplayableImageAssets
+                      ? "Verifica coerenza tema-immagini e accuratezza della risposta; usa “Rigenera” per correggere contenuto o immagini."
+                      : "Le immagini non sono ancora disponibili; il contenuto testuale della scheda resta invariato."
                     : "Verifica accuratezza della consegna, del testo e delle risposte prima dell'uso clinico."}
                 </p>
               </div>
@@ -407,7 +412,7 @@ export default function SheetDetail() {
                         <div className="flex h-56 items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-slate-50 sm:h-64 md:h-72">
                           {isDisplayableImagePath(asset?.filePath) ? (
                             <img
-                              src={asset.filePath}
+                              src={asset.filePath ?? undefined}
                               alt={label}
                               className="h-full w-full object-contain"
                               loading="lazy"
@@ -441,7 +446,7 @@ export default function SheetDetail() {
                   <div className="mx-auto flex h-72 max-w-2xl items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-slate-50 sm:h-80 md:h-[26rem]">
                     {isDisplayableImagePath(primaryImageAsset?.filePath) ? (
                       <img
-                        src={primaryImageAsset.filePath}
+                        src={primaryImageAsset.filePath ?? undefined}
                         alt={primaryImageAsset.label}
                         className="h-full w-full object-contain"
                         loading="lazy"
@@ -469,7 +474,7 @@ export default function SheetDetail() {
                       <div className="flex h-52 items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-slate-50 sm:h-60">
                         {isDisplayableImagePath(asset.filePath) ? (
                           <img
-                            src={asset.filePath}
+                            src={asset.filePath ?? undefined}
                             alt={asset.label}
                             className="h-full w-full object-contain"
                             loading="lazy"
@@ -499,7 +504,7 @@ export default function SheetDetail() {
                   <div className="mx-auto flex h-72 max-w-2xl items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-slate-50 sm:h-80 md:h-[26rem]">
                     {isDisplayableImagePath(primaryImageAsset?.filePath) ? (
                       <img
-                        src={primaryImageAsset.filePath}
+                        src={primaryImageAsset.filePath ?? undefined}
                         alt={primaryImageAsset.label}
                         className="h-full w-full object-contain"
                         loading="lazy"
@@ -523,7 +528,7 @@ export default function SheetDetail() {
                     <div className="mx-auto flex h-72 max-w-2xl items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-lg shadow-slate-900/5 ring-4 ring-white/80 sm:h-80 md:h-96">
                       {isDisplayableImagePath(primaryImageAsset?.filePath) ? (
                         <img
-                          src={primaryImageAsset.filePath}
+                          src={primaryImageAsset.filePath ?? undefined}
                           alt={primaryImageAsset.label}
                           className="h-full w-full object-contain"
                           loading="lazy"
@@ -564,6 +569,7 @@ export default function SheetDetail() {
                   const isRegenerating =
                     regenerateImage.isPending &&
                     regenerateImage.variables?.cacheKey === asset.cacheKey;
+                  const hasImage = isDisplayableImagePath(asset.filePath);
 
                   return (
                     <Button
@@ -584,7 +590,7 @@ export default function SheetDetail() {
                       ) : (
                         <RefreshCcw className="h-4 w-4" />
                       )}
-                      Rigenera immagine {index + 1}
+                      {hasImage ? "Rigenera" : "Genera"} immagine {index + 1}
                     </Button>
                   );
                 })}
