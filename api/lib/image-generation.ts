@@ -65,8 +65,8 @@ export type ResolvedImageAsset = {
   label: string;
   semanticTags: string[];
   cacheKey: string;
-  filePath: string;
-  source: CachedIllustration["source"];
+  filePath: string | null;
+  source: CachedIllustration["source"] | null;
   storageBucket?: string | null;
   storagePath?: string | null;
   fallbackReason?: string | null;
@@ -109,6 +109,37 @@ export function buildSemanticCacheKey(tags: string[]): string {
   }
 
   return normalizedTags.join("|");
+}
+
+export function getImageRequestCacheMetadata(request: ImageRequest) {
+  const semanticTags = Array.from(
+    new Set(request.semanticTags.map(normalizeSemanticTag).filter(Boolean))
+  );
+
+  return {
+    semanticTags,
+    cacheKey: buildSemanticCacheKey(semanticTags),
+  };
+}
+
+function canReuseCachedIllustration(cached: CachedIllustration) {
+  return (
+    cached.source !== "mock" &&
+    !(
+      cached.source === "generated" &&
+      isEphemeralGeneratedImagePath(cached.filePath)
+    )
+  );
+}
+
+export async function resolveCachedImageRequest(
+  request: ImageRequest,
+  db: ImageCacheDb
+): Promise<(CachedIllustration & { cacheHit: true }) | null> {
+  const { cacheKey } = getImageRequestCacheMetadata(request);
+  const cached = await db.findByCacheKey(cacheKey);
+  if (!cached || !canReuseCachedIllustration(cached)) return null;
+  return { ...cached, cacheHit: true };
 }
 
 function splitPromptImageLines(text: string): string[] {
@@ -529,21 +560,10 @@ export async function resolveImageRequestWithCache(
     onGenerateStart?: () => Promise<(() => Promise<void>) | void>;
   } = {}
 ): Promise<CachedIllustration & { cacheHit: boolean }> {
-  const semanticTags = Array.from(
-    new Set(request.semanticTags.map(normalizeSemanticTag).filter(Boolean))
-  );
-  const cacheKey = buildSemanticCacheKey(semanticTags);
-  const cached = await db.findByCacheKey(cacheKey);
-  if (
-    !options.force &&
-    cached &&
-    cached.source !== "mock" &&
-    !(
-      cached.source === "generated" &&
-      isEphemeralGeneratedImagePath(cached.filePath)
-    )
-  ) {
-    return { ...cached, cacheHit: true };
+  const { semanticTags, cacheKey } = getImageRequestCacheMetadata(request);
+  if (!options.force) {
+    const cached = await resolveCachedImageRequest(request, db);
+    if (cached) return cached;
   }
 
   const prompt = sanitizeImagePrompt(request.prompt);

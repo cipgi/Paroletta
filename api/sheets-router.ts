@@ -21,6 +21,8 @@ import { supabaseAdmin } from "./lib/supabase";
 import {
   buildSemanticCacheKey,
   buildImageRequests,
+  getImageRequestCacheMetadata,
+  resolveCachedImageRequest,
   resolveImageRequestWithCache,
 } from "./lib/image-generation";
 import {
@@ -144,10 +146,7 @@ async function reserveImageQuotaForCurrentUser(quota: ImageQuotaContext) {
   });
 }
 
-async function resolveSheetImageAssets(
-  sheet: ReturnType<typeof mapSheet>,
-  quota: ImageQuotaContext
-) {
+async function resolveSheetImageAssets(sheet: ReturnType<typeof mapSheet>) {
   const imageRequests = buildImageRequests({
     tipoOutput: sheet.tipoOutput,
     interesse: sheet.interesse,
@@ -165,25 +164,23 @@ async function resolveSheetImageAssets(
 
   return Promise.all(
     imageRequests.map(async request => {
-      const illustration = await resolveImageRequestWithCache(
+      const illustration = await resolveCachedImageRequest(
         request,
-        imageCacheDb,
-        {
-          imageStorage,
-          onGenerateStart: () => reserveImageQuotaForCurrentUser(quota),
-        }
+        imageCacheDb
       );
+      const metadata = getImageRequestCacheMetadata(request);
+
       return {
         role: request.role,
         label: request.label,
-        semanticTags: illustration.semanticTags,
-        cacheKey: illustration.cacheKey,
-        filePath: illustration.filePath,
-        source: illustration.source,
-        storageBucket: illustration.storageBucket ?? null,
-        storagePath: illustration.storagePath ?? null,
-        fallbackReason: illustration.fallbackReason ?? null,
-        cacheHit: illustration.cacheHit,
+        semanticTags: illustration?.semanticTags ?? metadata.semanticTags,
+        cacheKey: illustration?.cacheKey ?? metadata.cacheKey,
+        filePath: illustration?.filePath ?? null,
+        source: illustration?.source ?? null,
+        storageBucket: illustration?.storageBucket ?? null,
+        storagePath: illustration?.storagePath ?? null,
+        fallbackReason: illustration?.fallbackReason ?? null,
+        cacheHit: illustration?.cacheHit ?? false,
       };
     })
   );
@@ -286,10 +283,7 @@ export const sheetsRouter = createRouter({
         ctx.supabaseAccessToken
       );
       const sheet = mapSheet(data);
-      const imageAssets = await resolveSheetImageAssets(sheet, {
-        userId: supabaseUserId,
-        accessToken: ctx.supabaseAccessToken,
-      });
+      const imageAssets = await resolveSheetImageAssets(sheet);
       return { ...sheet, imageAssets };
     }),
   regenerateImage: authedQuery
@@ -416,10 +410,7 @@ export const sheetsRouter = createRouter({
       }
 
       const updatedSheet = mapSheet(updated);
-      const imageAssets = await resolveSheetImageAssets(updatedSheet, {
-        userId: supabaseUserId,
-        accessToken: ctx.supabaseAccessToken,
-      });
+      const imageAssets = await resolveSheetImageAssets(updatedSheet);
       return { ...updatedSheet, imageAssets };
     }),
   generatePdf: authedQuery
