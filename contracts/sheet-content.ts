@@ -296,13 +296,64 @@ export function parseUnifiedSheetContent(
   value: string
 ): UnifiedSheet | undefined {
   const text = decodeEscapedNewlines(value).trim();
-  if (!text.startsWith("{")) return undefined;
+  const candidates = text.startsWith("{")
+    ? [text]
+    : extractJsonObjectCandidates(text);
 
-  try {
-    return unifiedSheetSchema.parse(JSON.parse(text));
-  } catch {
-    return undefined;
+  for (const candidate of candidates) {
+    try {
+      return unifiedSheetSchema.parse(JSON.parse(candidate));
+    } catch {
+      // Try the next balanced object; legacy wrappers may contain prose first.
+    }
   }
+
+  return undefined;
+}
+
+function extractJsonObjectCandidates(value: string) {
+  const candidates: string[] = [];
+
+  for (
+    let start = value.indexOf("{");
+    start >= 0;
+    start = value.indexOf("{", start + 1)
+  ) {
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let index = start; index < value.length; index += 1) {
+      const character = value[index];
+
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+
+      if (character === "\\") {
+        escaped = true;
+        continue;
+      }
+
+      if (character === '"') {
+        inString = !inString;
+        continue;
+      }
+
+      if (inString) continue;
+
+      if (character === "{") depth += 1;
+      if (character === "}") depth -= 1;
+
+      if (depth === 0) {
+        candidates.push(value.slice(start, index + 1));
+        break;
+      }
+    }
+  }
+
+  return candidates;
 }
 
 function normalizeSentence(value: string) {
