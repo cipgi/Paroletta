@@ -94,6 +94,7 @@ export const subscriptionsRouter = createRouter({
       )
       .eq("active", true)
       .eq("is_trial", false)
+      .in("code", ["starter", "pro", "max"])
       .order("sheet_limit", { ascending: true })
       .order("image_limit", { ascending: true });
     if (error)

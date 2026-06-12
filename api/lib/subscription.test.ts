@@ -51,6 +51,36 @@ describe("resolveSubscriptionAccess", () => {
     expect(access.derivedFromProfile).toBe(true);
   });
 
+  it("allows the development plan during the pre-production phase", () => {
+    const access = resolveSubscriptionAccess({
+      nowMs,
+      profile: {
+        piano: "sviluppo",
+        created_at: "2026-05-01T10:00:00.000Z",
+      },
+      subscription: null,
+    });
+
+    expect(access.accessActive).toBe(true);
+    expect(access.plan).toBe("sviluppo");
+    expect(access.status).toBe("attivo");
+  });
+
+  it("blocks the no-subscription plan", () => {
+    const access = resolveSubscriptionAccess({
+      nowMs,
+      profile: {
+        piano: "nessun_abbonamento",
+        created_at: "2026-05-01T10:00:00.000Z",
+      },
+      subscription: null,
+    });
+
+    expect(access.accessActive).toBe(false);
+    expect(access.plan).toBe("nessun_abbonamento");
+    expect(access.status).toBe("cancellato");
+  });
+
   it("allows a current trial profile when no subscription row exists", () => {
     const access = resolveSubscriptionAccess({
       nowMs,
@@ -77,5 +107,16 @@ describe("resolveSubscriptionAccess", () => {
 
     expect(access.accessActive).toBe(false);
     expect(access.status).toBe("cancellato");
+  });
+
+  it("does not grant implicit trial access without a profile or subscription", () => {
+    const access = resolveSubscriptionAccess({
+      nowMs,
+      profile: null,
+      subscription: null,
+    });
+
+    expect(access.accessActive).toBe(false);
+    expect(access.plan).toBe("nessun_abbonamento");
   });
 });

@@ -35,6 +35,7 @@ import { SUPABASE_ACCESS_COOKIE } from "./lib/session-cookies";
 // credentials-based registration or login.
 
 type AppDbClient = ReturnType<typeof appDbForAccessToken>;
+const DEVELOPMENT_INITIAL_PLAN = "sviluppo";
 
 async function ensureUserProfile(
   db: AppDbClient,
@@ -78,7 +79,7 @@ const credentialsSchema = z.object({
     .transform(value => sanitizeProfileNameOrFallback(value, "Utente"))
     .pipe(z.string().min(2).max(MAX_PROFILE_NAME_LENGTH))
     .optional(),
-  initialPlan: z.literal("trial").optional(),
+  initialPlan: z.literal(DEVELOPMENT_INITIAL_PLAN).optional(),
 });
 
 const loginCredentialsSchema = credentialsSchema
@@ -126,7 +127,7 @@ export const authRouter = createRouter({
         lastSignInAt: new Date(),
         role: "user",
       });
-      const requestedPlan = "trial";
+      const requestedPlan = DEVELOPMENT_INITIAL_PLAN;
       const { data: selectedPlan, error: selectedPlanError } = await appDatabase
         .from("subscription_plans")
         .select("code,duration_days,is_trial,active")
@@ -139,11 +140,6 @@ export const authRouter = createRouter({
           selectedPlanError
         );
       if (!selectedPlan) throw missingResourceError("Piano iniziale");
-      if (!selectedPlan.is_trial)
-        throw userFacingError(
-          "BAD_REQUEST",
-          "Il piano iniziale deve essere un piano trial."
-        );
 
       const initialPlan = selectedPlan.code;
       await ensureUserProfile(

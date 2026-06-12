@@ -76,16 +76,18 @@ export default function Dashboard() {
 
   const planLabels: Record<string, string> = {
     trial: "Prova Gratuita",
+    sviluppo: "Sviluppo",
+    nessun_abbonamento: "Nessun abbonamento",
     starter: "Starter",
     pro: "Pro",
     max: "Max",
   };
-  const currentPlan = subscription?.plan ?? user?.piano ?? "trial";
+  const currentPlan = subscription?.plan ?? user?.piano ?? "sviluppo";
   const currentPlanLabel = planLabels[currentPlan] ?? currentPlan;
   const currentFallbackLimits =
     SubscriptionPlanLimits[
       currentPlan as keyof typeof SubscriptionPlanLimits
-    ] ?? SubscriptionPlanLimits.trial;
+    ] ?? SubscriptionPlanLimits.sviluppo;
   const fallbackSheetUsage =
     user?.piano === "trial"
       ? (user?.trialSchedeUsate ?? 0)

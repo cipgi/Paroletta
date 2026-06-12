@@ -25,7 +25,7 @@ export type SubscriptionAccessState = ActiveSubscription & {
 };
 
 const TRIAL_DURATION_MS = 15 * 24 * 60 * 60 * 1000;
-const MANUAL_PAID_PLANS = new Set(["starter", "pro", "max"]);
+const MANUAL_ACCESS_PLANS = new Set(["starter", "pro", "max", "sviluppo"]);
 
 function addTrialDurationIso(startMs: number) {
   return new Date(startMs + TRIAL_DURATION_MS).toISOString();
@@ -36,7 +36,7 @@ export function resolveSubscriptionAccess(
 ): SubscriptionAccessState {
   const nowMs = input.nowMs ?? Date.now();
   const subscription = input.subscription ?? null;
-  const profilePlan = input.profile?.piano ?? "trial";
+  const profilePlan = input.profile?.piano ?? "nessun_abbonamento";
   const profileStartedAt = input.profile?.created_at
     ? new Date(input.profile.created_at).getTime()
     : nowMs;
@@ -52,7 +52,7 @@ export function resolveSubscriptionAccess(
     (subscription.current_period_end
       ? new Date(subscription.current_period_end).getTime() >= nowMs
       : true);
-  const hasManualPlanAccess = MANUAL_PAID_PLANS.has(profilePlan);
+  const hasManualPlanAccess = MANUAL_ACCESS_PLANS.has(profilePlan);
   const hasProfileTrialAccess =
     profilePlan === "trial" &&
     !subscription &&

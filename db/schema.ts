@@ -1,5 +1,11 @@
 // Logical app schema (stored in Postgres schema: app)
-export type Plan = "trial" | "starter" | "pro" | "max";
+export type Plan =
+  | "trial"
+  | "sviluppo"
+  | "nessun_abbonamento"
+  | "starter"
+  | "pro"
+  | "max";
 export type SubscriptionStatus = "trial" | "attivo" | "cancellato";
 export type AccountRole = "manager" | "staff" | "single";
 export type SheetOutputType =

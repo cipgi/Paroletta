@@ -56,6 +56,22 @@ function forbiddenLimitError(kind: "schede" | "immagini", limit: number) {
   });
 }
 
+const PLAN_LIMIT_FALLBACKS: Record<string, PlanLimits> = {
+  trial: { sheetLimit: 15, imageLimit: 15, durationDays: 15, isTrial: true },
+  sviluppo: {
+    sheetLimit: 1000,
+    imageLimit: 1000,
+    durationDays: 365,
+    isTrial: false,
+  },
+  nessun_abbonamento: {
+    sheetLimit: 0,
+    imageLimit: 0,
+    durationDays: 365,
+    isTrial: false,
+  },
+};
+
 export async function getPlanLimits(
   plan: string,
   accessToken?: string
@@ -72,10 +88,16 @@ export async function getPlanLimits(
   }
 
   return {
-    sheetLimit: data?.sheet_limit ?? 5,
-    imageLimit: data?.image_limit ?? data?.sheet_limit ?? 5,
-    durationDays: data?.duration_days ?? 30,
-    isTrial: data?.is_trial ?? plan === "trial",
+    sheetLimit:
+      data?.sheet_limit ?? PLAN_LIMIT_FALLBACKS[plan]?.sheetLimit ?? 5,
+    imageLimit:
+      data?.image_limit ??
+      data?.sheet_limit ??
+      PLAN_LIMIT_FALLBACKS[plan]?.imageLimit ??
+      5,
+    durationDays:
+      data?.duration_days ?? PLAN_LIMIT_FALLBACKS[plan]?.durationDays ?? 30,
+    isTrial: data?.is_trial ?? PLAN_LIMIT_FALLBACKS[plan]?.isTrial ?? false,
   };
 }
 

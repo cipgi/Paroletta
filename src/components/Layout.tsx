@@ -127,7 +127,7 @@ export default function Layout({ children }: { children: ReactNode }) {
     const limits =
       SubscriptionPlanLimits[
         user.piano as keyof typeof SubscriptionPlanLimits
-      ] ?? SubscriptionPlanLimits.trial;
+      ] ?? SubscriptionPlanLimits.sviluppo;
     if (user.piano === "trial") {
       return `Rimangono: ${Math.max(limits.sheetLimit - (user.trialSchedeUsate ?? 0), 0)} schede, ${Math.max(limits.imageLimit - (user.trialImmaginiUsate ?? 0), 0)} immagini`;
     }

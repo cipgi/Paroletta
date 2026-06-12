@@ -306,7 +306,7 @@ export default function Management() {
             </div>
             <div>
               <p className="text-sm font-semibold text-slate-800">
-                {overview.subscription?.plan ?? "trial"}
+                {overview.subscription?.plan ?? "sviluppo"}
               </p>
               <p className="text-sm text-slate-500">
                 Piano gestito dal Manager
