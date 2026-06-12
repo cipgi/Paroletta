@@ -57,6 +57,41 @@ describe("unified sheet content", () => {
     expect(result).not.toContain("prompt");
   });
 
+  it("unwraps unified JSON accidentally stored inside legacy display text", () => {
+    const wrappedContent = [
+      "Titolo: Filastrocca con fonema",
+      "Consegna: Leggi il contenuto della scheda e svolgi l'esercizio.",
+      `Testo: ${JSON.stringify(
+        {
+          ...unifiedSheet,
+          tipo: "filastrocca",
+          titolo: "Il dinosauro che fa la spesa",
+          consegna:
+            "Ascolta la filastrocca e rispondi alle domande sui dinosauri e la spesa.",
+          testo: "C'era una volta un dinosauro, che andava a far la spesa.",
+        },
+        null,
+        2
+      )}`,
+    ].join("\n\n");
+
+    const result = getUserFacingSheetContent({
+      tipoOutput: "filastrocca",
+      testoGenerato: wrappedContent,
+    });
+
+    expect(result).toContain("Titolo: Il dinosauro che fa la spesa");
+    expect(result).toContain(
+      "Consegna: Ascolta la filastrocca e rispondi alle domande sui dinosauri e la spesa."
+    );
+    expect(result).toContain(
+      "Testo: C'era una volta un dinosauro, che andava a far la spesa."
+    );
+    expect(result).not.toContain("Titolo: Filastrocca con fonema");
+    expect(result).not.toContain('"immagini"');
+    expect(result).not.toContain("prompt");
+  });
+
   it("renders visual discrimination content without repeated delivery or image metadata", () => {
     const result = getUserFacingSheetContent({
       tipoOutput: "discriminazione_visiva",
