@@ -75,6 +75,9 @@ export interface Illustration {
   filePath: string;
   mimeType: string | null;
   source: "generated" | "uploaded" | "mock";
+  storageBucket: string | null;
+  storagePath: string | null;
+  byteSize: number | null;
   generationModel: string | null;
   generatedCostUsd: number;
   createdAt: string;

@@ -61,6 +61,9 @@ export type Illustration = {
   filePath: string;
   mimeType?: string | null;
   source: "generated" | "uploaded" | "mock";
+  storageBucket?: string | null;
+  storagePath?: string | null;
+  byteSize?: number | null;
   fallbackReason?: string | null;
   generationModel?: string | null;
   generatedCostUsd?: number | null;
