@@ -8,7 +8,11 @@ import {
   invalidSessionError,
   missingResourceError,
 } from "./lib/errors";
-import { getUserFacingSheetContent } from "@contracts/sheet-content";
+import {
+  canOmitSheetImages,
+  getUserFacingSheetContent,
+  parseUnifiedSheetContent,
+} from "@contracts/sheet-content";
 import { sanitizeProfileNameOrFallback } from "./lib/sanitize";
 import { getAccountContext } from "./lib/organization";
 import { createSupabaseImageCacheDb } from "./lib/illustration-cache-db";
@@ -366,6 +370,11 @@ export const sheetsRouter = createRouter({
         ctx.supabaseAccessToken
       );
       const sheet = mapSheet(data);
+      const parsedSheetContent = parseUnifiedSheetContent(sheet.testoGenerato);
+      const includeImages =
+        !parsedSheetContent ||
+        !canOmitSheetImages(parsedSheetContent.tipo) ||
+        parsedSheetContent.immagini.length > 0;
       const sanitizedInput = sanitizeGenerationParams({
         eta: getRegenerationAgeRange(sheet.difficolta),
         fonema: sheet.fonema,
@@ -381,6 +390,7 @@ export const sheetsRouter = createRouter({
           sheet.tipoOutput === "narrazione_sequenze"
             ? getNarrativeSceneCount(sheet.listaParole)
             : undefined,
+        includeImages,
       });
       const generatedSheet =
         await generateUnifiedSheetFromParams(sanitizedInput);
@@ -440,6 +450,9 @@ export const sheetsRouter = createRouter({
           ctx.user.name,
         "Nome Utente"
       );
+      const parsedSheetContent = parseUnifiedSheetContent(sheet.testoGenerato);
+      const includeImageSections =
+        !parsedSheetContent || parsedSheetContent.immagini.length > 0;
       const bytes = createDidacticPdf({
         title: "Paroletta",
         subtitle: "Scheda didattica personalizzata",
@@ -454,6 +467,7 @@ export const sheetsRouter = createRouter({
         illustrationLabel,
         watermarkDoctor: doctorName,
         tipoOutput: sheet.tipoOutput,
+        includeImageSections,
       });
       return {
         fileName: `scheda-${sheet.id}.pdf`,

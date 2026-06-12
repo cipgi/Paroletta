@@ -46,6 +46,7 @@ export function createDidacticPdf(params: {
   illustrationLabel: string;
   watermarkDoctor: string;
   tipoOutput?: string;
+  includeImageSections?: boolean;
 }): Uint8Array {
   const lines: string[] = [];
   lines.push("BT");
@@ -85,6 +86,8 @@ export function createDidacticPdf(params: {
     if (y < 140) break;
   }
 
+  const includeImageSections = params.includeImageSections ?? true;
+
   if (params.tipoOutput === "discriminazione_visiva") {
     const optionCount = Math.min(Math.max(params.words.length || 4, 2), 4);
     const positions = [
@@ -109,7 +112,10 @@ export function createDidacticPdf(params: {
       );
     }
     y = 105;
-  } else if (params.tipoOutput === "morfosintassi_complessa") {
+  } else if (
+    params.tipoOutput === "morfosintassi_complessa" &&
+    includeImageSections
+  ) {
     lines.push("0.92 g");
     lines.push("80 135 435 155 re f");
     lines.push("0 g");
@@ -145,11 +151,13 @@ export function createDidacticPdf(params: {
       );
     }
     y = 95;
-  } else if (params.tipoOutput === "pragmatica") {
+  } else if (params.tipoOutput === "pragmatica" && includeImageSections) {
     lines.push("0.92 g");
     lines.push("80 135 435 155 re f");
     lines.push("0 g");
-    lines.push("BT /F1 13 Tf 105 225 Td (Scenario pragmatico illustrato) Tj ET");
+    lines.push(
+      "BT /F1 13 Tf 105 225 Td (Scenario pragmatico illustrato) Tj ET"
+    );
     lines.push(
       `BT /F1 10 Tf 105 205 Td (${escapePdfText(`Etichetta immagine: ${params.illustrationLabel}`)}) Tj ET`
     );
@@ -165,7 +173,8 @@ export function createDidacticPdf(params: {
     params.tipoOutput !== "discriminazione_visiva" &&
     params.tipoOutput !== "morfosintassi_complessa" &&
     params.tipoOutput !== "narrazione_sequenze" &&
-    params.tipoOutput !== "pragmatica"
+    params.tipoOutput !== "pragmatica" &&
+    includeImageSections
   ) {
     lines.push(
       `BT /F1 11 Tf 50 ${Math.max(y - 6, 120)} Td (${escapePdfText(`Illustrazione associata: ${params.illustrationLabel}`)}) Tj ET`

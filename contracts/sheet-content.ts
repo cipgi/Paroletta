@@ -54,11 +54,20 @@ export type SheetContentType =
   | "morfosintassi_complessa"
   | (string & {});
 
+const OPTIONAL_IMAGE_SHEET_TYPES: UnifiedSheetType[] = [
+  "morfosintassi",
+  "pragmatica",
+  "storia",
+  "filastrocca",
+  "lista_parole",
+];
+
 type ValidateSheetOptions =
   | number
   | {
       numeroOpzioni?: number;
       numeroScene?: number;
+      includeImages?: boolean;
     };
 
 const GENERIC_INSTRUCTION_PATTERNS = [
@@ -214,7 +223,11 @@ function validateQuestions(
 
 function normalizeValidateSheetOptions(options: ValidateSheetOptions) {
   if (typeof options === "number") {
-    return { numeroOpzioni: options, numeroScene: undefined };
+    return {
+      numeroOpzioni: options,
+      numeroScene: undefined,
+      includeImages: undefined,
+    };
   }
 
   return options;
@@ -246,6 +259,10 @@ export function normalizeUnifiedSheetType(
   return "storia";
 }
 
+export function canOmitSheetImages(tipo: SheetContentType) {
+  return OPTIONAL_IMAGE_SHEET_TYPES.includes(normalizeUnifiedSheetType(tipo));
+}
+
 export function validateSheet(
   json: unknown,
   tipo: SheetContentType,
@@ -264,6 +281,10 @@ export function validateSheet(
   if (!isNonEmptyString(sheet.testo)) return false;
 
   if (!validateQuestions(sheet, expectedType)) return false;
+
+  if (validationOptions.includeImages === false) {
+    return canOmitSheetImages(expectedType) && sheet.immagini.length === 0;
+  }
 
   if (expectedType === "discriminazione_visiva") {
     if (
@@ -480,8 +501,7 @@ export function orderNarrativeSequenceForDisplay<T extends StableDisplayItem>(
   if (!keptOriginalOrder) return shuffled;
 
   const offset =
-    (getStableHash(`${seedValue}:narrative-rotation`) %
-      (options.length - 1)) +
+    (getStableHash(`${seedValue}:narrative-rotation`) % (options.length - 1)) +
     1;
   return [...shuffled.slice(offset), ...shuffled.slice(0, offset)];
 }
