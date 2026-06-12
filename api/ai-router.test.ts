@@ -18,6 +18,7 @@ vi.mock("./middleware", () => ({
 import { validateSheet, type UnifiedSheet } from "../contracts/sheet-content";
 import {
   buildPromptMessages,
+  generateUnifiedSheetFromParams,
   normalizeVisualDiscriminationSheet,
   sanitizeGenerationParams,
   sanitizePromptVariable,
@@ -624,6 +625,101 @@ describe("validateSheet unified schema", () => {
     expect(normalized.immagini[1]?.ruolo).toBe("distrattore");
     expect(normalized.immagini[1]?.livello).toBe("difficile");
     expect(validateSheet(normalized, "discriminazione_visiva", 2)).toBe(true);
+  });
+
+  it("keeps the user's visual target phrase and fills missing options", () => {
+    const normalized = normalizeVisualDiscriminationSheet(
+      validSheet({
+        tipo: "discriminazione_visiva",
+        titolo: "Penna sopra il tavolo",
+        consegna: "Indica l'immagine corretta.",
+        testo: "La penna è sopra il tavolo.",
+        immagini: [
+          {
+            ruolo: "target",
+            livello: "principale",
+            prompt: "Target image, no text.",
+          },
+        ],
+        domande: [
+          {
+            domanda: "Quale immagine mostra la penna?",
+            risposta: "Il target.",
+          },
+        ],
+      }),
+      4,
+      "una penna sopra il tavolo"
+    );
+
+    expect(normalized.testo).toBe("una penna sopra il tavolo");
+    expect(normalized.consegna).toContain("una penna sopra il tavolo");
+    expect(normalized.domande).toEqual([]);
+    expect(normalized.immagini).toHaveLength(4);
+    expect(normalized.immagini.map(image => image.ruolo)).toEqual([
+      "target",
+      "distrattore",
+      "distrattore",
+      "distrattore",
+    ]);
+    expect(normalized.immagini.map(image => image.livello)).toEqual([
+      "principale",
+      "difficile",
+      "intermedio",
+      "facile",
+    ]);
+    expect(normalized.immagini[0]?.prompt).toBe(
+      "una penna sopra il tavolo"
+    );
+    expect(
+      validateSheet(normalized, "discriminazione_visiva", {
+        numeroOpzioni: 4,
+      })
+    ).toBe(true);
+  });
+
+  it("falls back to the user's visual target when AI output is not usable", async () => {
+    const previousApiKey = process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = "test-openai-key";
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({ testo: "output incompleto" }),
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+
+    try {
+      const result = await generateUnifiedSheetFromParams({
+        eta: "9-11 anni",
+        fonema: "r",
+        interesse: "nessuno",
+        tipoOutput: "discriminazione_visiva",
+        scenarioSmart: "una penna sopra il tavolo",
+        numeroOpzioni: 4,
+        numeroScene: 4,
+        includeImages: true,
+      });
+
+      expect(result.data.testo).toBe("una penna sopra il tavolo");
+      expect(result.data.immagini).toHaveLength(4);
+      expect(
+        validateSheet(result.data, "discriminazione_visiva", {
+          numeroOpzioni: 4,
+        })
+      ).toBe(true);
+    } finally {
+      fetchSpy.mockRestore();
+      if (previousApiKey === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = previousApiKey;
+    }
   });
 
   it("rejects non-visual sheets with non-illustration roles or weak image prompts", () => {

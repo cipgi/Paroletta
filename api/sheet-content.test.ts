@@ -137,6 +137,45 @@ describe("unified sheet content", () => {
     ).toBe(false);
   });
 
+  it("accepts simple concrete visual discrimination targets", () => {
+    expect(
+      validateSheet(
+        {
+          tipo: "discriminazione_visiva",
+          titolo: "Penna sopra il tavolo",
+          consegna:
+            "Indica l'immagine in cui una penna è sopra il tavolo.",
+          testo: "Una penna è sopra il tavolo.",
+          immagini: [
+            {
+              ruolo: "target",
+              livello: "principale",
+              prompt: "A pen on a table.",
+            },
+            {
+              ruolo: "distrattore",
+              livello: "difficile",
+              prompt: "A pen under a table.",
+            },
+            {
+              ruolo: "distrattore",
+              livello: "intermedio",
+              prompt: "A pencil on a table.",
+            },
+            {
+              ruolo: "distrattore",
+              livello: "facile",
+              prompt: "A cup on a table.",
+            },
+          ],
+          domande: [],
+        },
+        "discriminazione_visiva",
+        { numeroOpzioni: 4 }
+      )
+    ).toBe(true);
+  });
+
   it("keeps a simple legacy fallback for old saved sheets", () => {
     const result = getUserFacingSheetContent({
       tipoOutput: "morfosintassi_complessa",

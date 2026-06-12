@@ -81,6 +81,7 @@ const VISUAL_LEVEL_ORDER: UnifiedSheetImage["livello"][] = [
   "intermedio",
   "facile",
 ];
+const VISUAL_IMAGE_PROMPT_MIN_WORDS = 1;
 const TOO_GENERIC_IMAGE_PROMPT_PATTERNS = [
   /^\s*(?:target|distrattore|illustrazione|immagine)\s*(?:\d+)?\s*$/iu,
   /^\s*(?:realistic\s+)?(?:child-friendly\s+)?(?:target|distractor|image|illustration)(?:\s+image)?(?:,\s*no\s+text\.?)?\s*$/iu,
@@ -134,14 +135,15 @@ function validateVisualDiscriminationImages(
   if (target?.ruolo !== "target" || target.livello !== "principale") {
     return false;
   }
-  if (isGenericImagePrompt(target.prompt)) return false;
+  if (isGenericImagePrompt(target.prompt, VISUAL_IMAGE_PROMPT_MIN_WORDS))
+    return false;
 
   return distractors.every((image, index) => {
     const expectedLevel = VISUAL_LEVEL_ORDER[index];
     return (
       image.ruolo === "distrattore" &&
       image.livello === expectedLevel &&
-      !isGenericImagePrompt(image.prompt)
+      !isGenericImagePrompt(image.prompt, VISUAL_IMAGE_PROMPT_MIN_WORDS)
     );
   });
 }
