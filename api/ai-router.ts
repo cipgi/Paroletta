@@ -2,6 +2,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 
 import {
+  canOmitSheetImages,
   normalizeUnifiedSheetType,
   unifiedSheetSchema,
   validateSheet,
@@ -78,6 +79,7 @@ export type GenerationParams = {
   descrizioneScena?: string;
   numeroOpzioni?: number;
   numeroScene?: number;
+  includeImages: boolean;
 };
 
 type PromptMessage = {
@@ -163,6 +165,7 @@ export function sanitizeGenerationParams(input: {
   descrizioneScena?: string;
   numeroOpzioni?: number;
   numeroScene?: number;
+  includeImages?: boolean;
 }): GenerationParams {
   const eta = sanitizePromptVariable(input.eta, MAX_ETA_LENGTH) || "6 anni";
   const aspettoSpecifico = input.aspettoSpecifico
@@ -221,6 +224,8 @@ export function sanitizeGenerationParams(input: {
     descrizioneScena: descrizioneScena || undefined,
     numeroOpzioni: Math.min(Math.max(input.numeroOpzioni ?? 4, 2), 4),
     numeroScene: Math.min(Math.max(input.numeroScene ?? 4, 3), 5),
+    includeImages:
+      input.includeImages !== false || !canOmitSheetImages(input.tipoOutput),
   };
 }
 
@@ -340,6 +345,7 @@ export function normalizeVisualDiscriminationSheet(
 
 function buildTypeSpecificSection(params: GenerationParams): string {
   const tipo = normalizeUnifiedSheetType(params.tipoOutput);
+  const includeImages = params.includeImages || !canOmitSheetImages(tipo);
   const questionRule =
     "Le domande, quando richieste, devono essere oggetti con domanda e risposta, specifiche al testo generato e non formule riutilizzabili.";
 
@@ -357,7 +363,10 @@ Controllo qualità obbligatorio: il target deve rendere vera la consegna; ogni d
   }
 
   if (tipo === "morfosintassi") {
-    return `morfosintassi: crea una scheda unica di "Morfologia e morfosintassi". Può lavorare su morfologia di base (articoli, genere/numero, plurali, accordi nome-aggettivo, tempi verbali semplici) oppure su strutture più complesse (pronomi clitici, relative, subordinate), in base a elementoGrammaticale, livelloComplessita e descrizioneScena. testo = frase target o breve micro-scenario concreto; la struttura target deve comparire in modo esplicito, corretto e ripetibile, senza frasi ambigue. immagini = 1-2 illustrazioni con ruolo "illustrazione" e livello "principale"; il prompt immagine deve rappresentare una scena concreta coerente con la frase, non il concetto grammaticale astratto. domande = 3-8 domande specifiche con risposta: per livello base includi esercizi brevi di scelta/completamento/produzione guidata, per livello intermedio o avanzato includi domande di comprensione e trasformazione mirate alla struttura. ${questionRule}`;
+    const imageRule = includeImages
+      ? 'immagini = 1-2 illustrazioni con ruolo "illustrazione" e livello "principale"; il prompt immagine deve rappresentare una scena concreta coerente con la frase, non il concetto grammaticale astratto.'
+      : "immagini = []; non inserire prompt immagine o metadati visivi.";
+    return `morfosintassi: crea una scheda unica di "Morfologia e morfosintassi". Può lavorare su morfologia di base (articoli, genere/numero, plurali, accordi nome-aggettivo, tempi verbali semplici) oppure su strutture più complesse (pronomi clitici, relative, subordinate), in base a elementoGrammaticale, livelloComplessita e descrizioneScena. testo = frase target o breve micro-scenario concreto; la struttura target deve comparire in modo esplicito, corretto e ripetibile, senza frasi ambigue. ${imageRule} domande = 3-8 domande specifiche con risposta: per livello base includi esercizi brevi di scelta/completamento/produzione guidata, per livello intermedio o avanzato includi domande di comprensione e trasformazione mirate alla struttura. ${questionRule}`;
   }
 
   if (tipo === "narrazione_sequenze") {
@@ -365,18 +374,30 @@ Controllo qualità obbligatorio: il target deve rendere vera la consegna; ogni d
   }
 
   if (tipo === "pragmatica") {
-    return `pragmatica: crea una scheda per abilità comunicativo-pragmatiche, senza diagnosi e senza scenari sensibili. testo = uno scenario sociale concreto e quotidiano basato su scenarioSmart/aspettoSpecifico, con 2-4 frasi e un punto comunicativo chiaro. immagini = 1 illustrazione con ruolo "illustrazione" e livello "principale" che rappresenti la scena sociale, le espressioni e il contesto senza testo scritto. domande = 4-6 domande specifiche con risposta modello che lavorino su turni conversazionali, inferenze semplici, emozioni, intenzioni comunicative e formulazioni tipo "cosa potresti dire se...". Le risposte devono essere esempi accettabili, non un'unica formula rigida quando sono possibili più risposte pragmatiche corrette. ${questionRule}`;
+    const imageRule = includeImages
+      ? 'immagini = 1 illustrazione con ruolo "illustrazione" e livello "principale" che rappresenti la scena sociale, le espressioni e il contesto senza testo scritto.'
+      : "immagini = []; non inserire prompt immagine o metadati visivi.";
+    return `pragmatica: crea una scheda per abilità comunicativo-pragmatiche, senza diagnosi e senza scenari sensibili. testo = uno scenario sociale concreto e quotidiano basato su scenarioSmart/aspettoSpecifico, con 2-4 frasi e un punto comunicativo chiaro. ${imageRule} domande = 4-6 domande specifiche con risposta modello che lavorino su turni conversazionali, inferenze semplici, emozioni, intenzioni comunicative e formulazioni tipo "cosa potresti dire se...". Le risposte devono essere esempi accettabili, non un'unica formula rigida quando sono possibili più risposte pragmatiche corrette. ${questionRule}`;
   }
 
   if (tipo === "storia") {
-    return `storia: testo = narrazione completa, semplice e coerente con 4-7 frasi brevi. Il fonema target deve comparire in più parole naturali, senza forzature. immagini = 1-3 illustrazioni con ruolo "illustrazione" e livello "principale". domande = 3-5 domande di comprensione specifiche sul testo con risposta esatta. ${questionRule}`;
+    const imageRule = includeImages
+      ? 'immagini = 1-3 illustrazioni con ruolo "illustrazione" e livello "principale".'
+      : "immagini = []; non inserire prompt immagine o metadati visivi.";
+    return `storia: testo = narrazione completa, semplice e coerente con 4-7 frasi brevi. Il fonema target deve comparire in più parole naturali, senza forzature. ${imageRule} domande = 3-5 domande di comprensione specifiche sul testo con risposta esatta. ${questionRule}`;
   }
 
   if (tipo === "filastrocca") {
-    return `filastrocca: testo = testo in rima, semplice e child-friendly con lessico adatto all'età. Il fonema target deve comparire in parole naturali e pronunciabili. immagini = 1-2 illustrazioni con ruolo "illustrazione" e livello "principale". domande = 3-5 domande specifiche sul contenuto con risposta. ${questionRule}`;
+    const imageRule = includeImages
+      ? 'immagini = 1-2 illustrazioni con ruolo "illustrazione" e livello "principale".'
+      : "immagini = []; non inserire prompt immagine o metadati visivi.";
+    return `filastrocca: testo = testo in rima, semplice e child-friendly con lessico adatto all'età. Il fonema target deve comparire in parole naturali e pronunciabili. ${imageRule} domande = 3-5 domande specifiche sul contenuto con risposta. ${questionRule}`;
   }
 
-  return `lista_parole: testo = lista di parole target con il fonema indicato, adatta all'età, concreta, pronunciabile e vicina all'interesse. Evita parole astratte o troppo simili se confondono il bambino. immagini = 1 immagine per parola, ciascuna con ruolo "illustrazione" e livello "principale", prompt in inglese con singolo oggetto/azione chiaramente rappresentabile. domande = [].`;
+  const imageRule = includeImages
+    ? 'immagini = 1 immagine per parola, ciascuna con ruolo "illustrazione" e livello "principale", prompt in inglese con singolo oggetto/azione chiaramente rappresentabile.'
+    : "immagini = []; non inserire prompt immagine o metadati visivi.";
+  return `lista_parole: testo = lista di parole target con il fonema indicato, adatta all'età, concreta, pronunciabile e vicina all'interesse. Evita parole astratte o troppo simili se confondono il bambino. ${imageRule} domande = [].`;
 }
 
 export function buildPromptMessages(params: GenerationParams): PromptMessage[] {
@@ -392,6 +413,7 @@ export function buildPromptMessages(params: GenerationParams): PromptMessage[] {
     descrizioneScena: params.descrizioneScena ?? null,
     numeroOpzioni: params.numeroOpzioni ?? null,
     numeroScene: params.numeroScene ?? null,
+    includeImages: params.includeImages,
     interessiDisponibili:
       params.interesse === FREE_INTEREST_VALUE
         ? AVAILABLE_SPECIFIC_INTERESTS
@@ -416,7 +438,7 @@ REGOLE CLINICHE GENERALI:
 - Se il campo "interesse" vale "libero", scegli un interesse tra quelli disponibili nel messaggio utente.
 - Se il campo "interesse" vale "nessuno", non scegliere temi o interessi predefiniti: usa solo argomento, frase target, scenario o descrizione forniti nei valori utente.
 - Rispetta il fonema target nelle schede con parole, storie e filastrocche.
-- Ogni prompt in immagini deve essere in inglese, descrivere una sola scena generabile, essere child-friendly, semanticamente fedele e senza testo nell'immagine.
+- Ogni prompt in immagini deve essere in inglese, descrivere una sola scena generabile, essere child-friendly, semanticamente fedele e senza testo nell'immagine. Se includeImages è false e la sezione type-specific richiede immagini = [], non creare prompt immagine.
 - Non creare esercizi risolvibili per differenze irrilevanti come stile, luminosità, distanza, quantità di dettagli o qualità dell'immagine.
 - Non creare esercizi impossibili: deve esistere una sola risposta corretta e ogni distrattore deve essere plausibile ma falso rispetto alla consegna.
 
@@ -444,6 +466,7 @@ ${buildTypeSpecificSection(params)}
 REGOLE RIGIDE PER IL JSON:
 - Non includere mai markdown, commenti o testo fuori dall'oggetto JSON.
 - Compila sempre tutti i campi dello schema, anche quando domande è [].
+- Compila sempre il campo immagini; se includeImages è false per questo tipo di scheda, immagini deve essere [].
 - Il campo "tipo" deve essere esattamente "${normalizeUnifiedSheetType(params.tipoOutput)}".
 - Non usare consegne generiche come "Trova l'intruso tra le immagini".
 - Non usare prompt immagine generici, duplicati o basati su "same image"; descrivi sempre la scena completa.
@@ -504,17 +527,22 @@ export async function generateUnifiedSheetFromParams(params: GenerationParams) {
     );
   }
 
-  const data =
+  const normalizedVisualSheet =
     parsed.data.tipo === "discriminazione_visiva"
       ? normalizeVisualDiscriminationSheet(
           parsed.data,
           params.numeroOpzioni ?? 4
         )
       : parsed.data;
+  const data =
+    params.includeImages || !canOmitSheetImages(normalizedVisualSheet.tipo)
+      ? normalizedVisualSheet
+      : { ...normalizedVisualSheet, immagini: [] };
   if (
     !validateSheet(data, params.tipoOutput, {
       numeroOpzioni: params.numeroOpzioni ?? 4,
       numeroScene: params.numeroScene ?? 4,
+      includeImages: params.includeImages,
     })
   ) {
     throw userFacingError(
@@ -567,6 +595,7 @@ export const aiRouter = createRouter({
           .optional(),
         numeroOpzioni: z.number().int().min(2).max(4).optional(),
         numeroScene: z.number().int().min(3).max(5).optional(),
+        includeImages: z.boolean().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {

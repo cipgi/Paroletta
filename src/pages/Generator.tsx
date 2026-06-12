@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Toggle } from "@/components/ui/toggle";
 import {
   Select,
   SelectContent,
@@ -130,6 +131,15 @@ const tipoSchedaConfig: Record<
 const isTipoTestoConFonema = (tipo: TipoScheda): tipo is TipoTestoConFonema =>
   tipiTestoConFonema.includes(tipo as TipoTestoConFonema);
 
+const canDisableImagesForType = (tipo: TipoScheda) =>
+  [
+    "morfosintassi_complessa",
+    "pragmatica",
+    "storia",
+    "filastrocca",
+    "lista",
+  ].includes(tipo);
+
 export default function Generator() {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
@@ -149,6 +159,7 @@ export default function Generator() {
         descrizioneScena?: string;
         numeroOpzioni?: number;
         numeroScene?: number;
+        includeImages?: boolean;
       };
       return {
         eta: parsed.eta ?? "6-8 anni",
@@ -167,6 +178,7 @@ export default function Generator() {
         descrizioneScena: parsed.descrizioneScena ?? "",
         numeroOpzioni: parsed.numeroOpzioni ?? 4,
         numeroScene: parsed.numeroScene ?? 4,
+        includeImages: parsed.includeImages ?? true,
       };
     } catch {
       return null;
@@ -203,6 +215,9 @@ export default function Generator() {
   const [numeroScene, setNumeroScene] = useState(
     savedPreferences?.numeroScene ?? 4
   );
+  const [includeImages, setIncludeImages] = useState(
+    savedPreferences?.includeImages ?? true
+  );
 
   useEffect(() => {
     localStorage.setItem(
@@ -219,6 +234,7 @@ export default function Generator() {
         descrizioneScena,
         numeroOpzioni,
         numeroScene,
+        includeImages,
       })
     );
   }, [
@@ -233,6 +249,7 @@ export default function Generator() {
     descrizioneScena,
     numeroOpzioni,
     numeroScene,
+    includeImages,
   ]);
 
   const generate = trpc.ai.generate.useMutation({
@@ -274,7 +291,37 @@ export default function Generator() {
       descrizioneScena: descrizioneScena.trim() || undefined,
       numeroOpzioni,
       numeroScene,
+      includeImages: canDisableImagesForType(tipoOutput) ? includeImages : true,
     });
+  };
+
+  const renderImageToggle = () => {
+    if (!canDisableImagesForType(tipoOutput)) return null;
+
+    return (
+      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <Label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <Images className="h-4 w-4 text-teal-600" />
+            Immagine nella scheda
+          </Label>
+          <p className="mt-1 text-xs text-slate-500">
+            {includeImages
+              ? "La scheda includerà una o più immagini generate."
+              : "La scheda sarà solo testuale, senza generare immagini."}
+          </p>
+        </div>
+        <Toggle
+          pressed={includeImages}
+          onPressedChange={setIncludeImages}
+          variant="outline"
+          className="w-full justify-center sm:w-32"
+          aria-label="Attiva o disattiva immagini nella scheda"
+        >
+          {includeImages ? "On" : "Off"}
+        </Toggle>
+      </div>
+    );
   };
 
   const renderClinicalInputs = () => {
@@ -705,6 +752,8 @@ export default function Generator() {
               </Select>
             </div>
           </div>
+
+          {renderImageToggle()}
 
           {renderClinicalInputs()}
 

@@ -280,6 +280,7 @@ export default function SheetDetail() {
   const isNarrativeSequence = sheet.tipoOutput === "narrazione_sequenze";
   const isPragmatic = sheet.tipoOutput === "pragmatica";
   const imageAssets = sheet.imageAssets ?? [];
+  const hasImageAssets = imageAssets.length > 0;
   const visualImageAssets = imageAssets.filter(asset =>
     ["target", "distrattore"].includes(asset.role)
   );
@@ -307,10 +308,6 @@ export default function SheetDetail() {
         ? narrativeDisplayAssets
         : imageAssets
   ).slice(0, 4);
-  const imageRegenerationSlots = Array.from(
-    { length: 4 },
-    (_, index) => imageActionAssets[index]
-  );
 
   const doctorName =
     [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
@@ -367,7 +364,9 @@ export default function SheetDetail() {
 
             {/* Content */}
             <div className="space-y-4">
-              <h2 className="text-xl font-bold text-slate-800">{displayTitle}</h2>
+              <h2 className="text-xl font-bold text-slate-800">
+                {displayTitle}
+              </h2>
 
               <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -383,8 +382,9 @@ export default function SheetDetail() {
                   Note professionista
                 </p>
                 <p>
-                  Verifica coerenza tema-immagini e accuratezza della risposta; usa
-                  “Rigenera” per correggere contenuto o immagini.
+                  {hasImageAssets
+                    ? "Verifica coerenza tema-immagini e accuratezza della risposta; usa “Rigenera” per correggere contenuto o immagini."
+                    : "Verifica accuratezza della consegna, del testo e delle risposte prima dell'uso clinico."}
                 </p>
               </div>
             </div>
@@ -429,7 +429,7 @@ export default function SheetDetail() {
                   })}
                 </div>
               </div>
-            ) : isComplexMorphosyntax ? (
+            ) : isComplexMorphosyntax && hasImageAssets ? (
               <div className="mt-8 rounded-[1.5rem] border border-indigo-100 bg-gradient-to-br from-indigo-50 to-violet-50 p-5 shadow-inner sm:p-6">
                 <div className="mb-4 flex items-center gap-2 text-indigo-800">
                   <Brain className="h-5 w-5" />
@@ -487,11 +487,13 @@ export default function SheetDetail() {
                   ))}
                 </div>
               </div>
-            ) : isPragmatic ? (
+            ) : isPragmatic && hasImageAssets ? (
               <div className="mt-8 rounded-[1.5rem] border border-rose-100 bg-gradient-to-br from-rose-50 to-pink-50 p-5 shadow-inner sm:p-6">
                 <div className="mb-4 flex items-center gap-2 text-rose-800">
                   <MessageCircle className="h-5 w-5" />
-                  <p className="font-semibold">Scenario pragmatico illustrato</p>
+                  <p className="font-semibold">
+                    Scenario pragmatico illustrato
+                  </p>
                 </div>
                 <div className="rounded-[1.35rem] border border-rose-100 bg-white p-4 text-center shadow-lg shadow-rose-900/5 ring-4 ring-white/80 sm:p-5">
                   <div className="mx-auto flex h-72 max-w-2xl items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-slate-50 sm:h-80 md:h-[26rem]">
@@ -510,29 +512,36 @@ export default function SheetDetail() {
                   </div>
                 </div>
               </div>
-            ) : (
+            ) : hasImageAssets ||
+              (sheet.tipoOutput === "lista" && words.length > 0) ? (
               <div className="mt-8 rounded-[1.5rem] border border-slate-200 bg-gradient-to-br from-slate-50 to-teal-50/70 p-5 text-center shadow-inner sm:p-6">
-                <p className="mb-4 text-base font-semibold text-slate-600">
-                  Illustrazione
-                </p>
-                <div className="mx-auto flex h-72 max-w-2xl items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-lg shadow-slate-900/5 ring-4 ring-white/80 sm:h-80 md:h-96">
-                  {isDisplayableImagePath(primaryImageAsset?.filePath) ? (
-                    <img
-                      src={primaryImageAsset.filePath}
-                      alt={primaryImageAsset.label}
-                      className="h-full w-full object-contain"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <span className="px-4 text-sm font-medium text-slate-500">
-                      Immagine non disponibile
-                    </span>
-                  )}
-                </div>
+                {hasImageAssets ? (
+                  <>
+                    <p className="mb-4 text-base font-semibold text-slate-600">
+                      Illustrazione
+                    </p>
+                    <div className="mx-auto flex h-72 max-w-2xl items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-lg shadow-slate-900/5 ring-4 ring-white/80 sm:h-80 md:h-96">
+                      {isDisplayableImagePath(primaryImageAsset?.filePath) ? (
+                        <img
+                          src={primaryImageAsset.filePath}
+                          alt={primaryImageAsset.label}
+                          className="h-full w-full object-contain"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <span className="px-4 text-sm font-medium text-slate-500">
+                          Immagine non disponibile
+                        </span>
+                      )}
+                    </div>
+                  </>
+                ) : null}
                 {sheet.tipoOutput === "lista" && words.length > 0 ? (
-                  <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 text-left">
+                  <div
+                    className={`${hasImageAssets ? "mt-6" : ""} rounded-2xl border border-slate-200 bg-white p-4 text-left`}
+                  >
                     <p className="mb-3 text-sm font-semibold text-slate-700">
-                      Vocabolario visuale (immagine consigliata per ogni parola)
+                      Vocabolario
                     </p>
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                       {words.slice(0, 20).map((word, index) => (
@@ -547,45 +556,46 @@ export default function SheetDetail() {
                   </div>
                 ) : null}
               </div>
-            )}
+            ) : null}
 
-            <div className="mt-4 flex flex-wrap gap-2">
-              {imageRegenerationSlots.map((asset, index) => {
-                const isRegenerating =
-                  regenerateImage.isPending &&
-                  regenerateImage.variables?.cacheKey === asset?.cacheKey;
+            {imageActionAssets.length > 0 ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {imageActionAssets.map((asset, index) => {
+                  const isRegenerating =
+                    regenerateImage.isPending &&
+                    regenerateImage.variables?.cacheKey === asset.cacheKey;
 
-                return (
-                  <Button
-                    key={asset?.cacheKey ?? `image-slot-${index}`}
-                    variant="outline"
-                    size="sm"
-                    className="gap-1"
-                    disabled={!asset || regenerateImage.isPending}
-                    onClick={() => {
-                      if (!asset) return;
-                      regenerateImage.mutate({
-                        id: sheet.id,
-                        cacheKey: asset.cacheKey,
-                      });
-                    }}
-                  >
-                    {isRegenerating ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <RefreshCcw className="h-4 w-4" />
-                    )}
-                    Rigenera immagine {index + 1}
-                  </Button>
-                );
-              })}
-              {regenerateImage.isError ? (
-                <p className="basis-full text-sm text-red-600">
-                  {regenerateImage.error?.message ??
-                    "Errore durante la rigenerazione dell'immagine."}
-                </p>
-              ) : null}
-            </div>
+                  return (
+                    <Button
+                      key={asset.cacheKey}
+                      variant="outline"
+                      size="sm"
+                      className="gap-1"
+                      disabled={regenerateImage.isPending}
+                      onClick={() => {
+                        regenerateImage.mutate({
+                          id: sheet.id,
+                          cacheKey: asset.cacheKey,
+                        });
+                      }}
+                    >
+                      {isRegenerating ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RefreshCcw className="h-4 w-4" />
+                      )}
+                      Rigenera immagine {index + 1}
+                    </Button>
+                  );
+                })}
+                {regenerateImage.isError ? (
+                  <p className="basis-full text-sm text-red-600">
+                    {regenerateImage.error?.message ??
+                      "Errore durante la rigenerazione dell'immagine."}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
 
             {/* Watermark footer */}
             <div className="mt-8 pt-4 border-t border-slate-200 text-center">

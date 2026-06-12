@@ -189,6 +189,32 @@ describe("AI prompt security", () => {
     expect(morphology[1].content).toContain('"tipoOutput":"morfosintassi"');
   });
 
+  it("supports disabling images for optional worksheet types only", () => {
+    const pragmatic = sanitizeGenerationParams({
+      eta: "8 anni",
+      fonema: "r",
+      interesse: "calcio",
+      tipoOutput: "pragmatica",
+      scenarioSmart: "due bambini vogliono lo stesso pallone",
+      includeImages: false,
+    });
+    const visual = sanitizeGenerationParams({
+      eta: "8 anni",
+      fonema: "r",
+      interesse: "calcio",
+      tipoOutput: "discriminazione_visiva",
+      scenarioSmart: "il bambino calcia la palla rossa",
+      includeImages: false,
+    });
+    const messages = buildPromptMessages(pragmatic);
+
+    expect(pragmatic.includeImages).toBe(false);
+    expect(visual.includeImages).toBe(true);
+    expect(messages[0].content).toContain("immagini = []");
+    expect(messages[0].content).toContain("includeImages è false");
+    expect(messages[1].content).toContain('"includeImages":false');
+  });
+
   it("keeps sanitized user values as data separate from the fixed server template", () => {
     const params = sanitizeGenerationParams({
       eta: "6 anni",
@@ -433,6 +459,41 @@ describe("validateSheet unified schema", () => {
     });
 
     expect(validateSheet(sheet, "pragmatica", 4)).toBe(true);
+  });
+
+  it("allows optional worksheet types without images when requested", () => {
+    const sheet = validSheet({
+      tipo: "pragmatica",
+      titolo: "Aspettare il turno",
+      consegna:
+        "Leggi lo scenario e rispondi alle domande su cosa possono dire i bambini.",
+      testo:
+        "Anna aspetta lo scivolo mentre Leo resta seduto in alto e non scende.",
+      immagini: [],
+      domande: [
+        {
+          domanda: "Che cosa vuole fare Anna?",
+          risposta: "Vuole usare lo scivolo.",
+        },
+        {
+          domanda: "Come può sentirsi Anna?",
+          risposta: "Può sentirsi impaziente.",
+        },
+        {
+          domanda: "Perché Leo resta in alto?",
+          risposta: "Forse ha paura o vuole ancora giocare.",
+        },
+        {
+          domanda: "Che cosa può dire Anna?",
+          risposta: "Posso fare un turno anch'io?",
+        },
+      ],
+    });
+
+    expect(validateSheet(sheet, "pragmatica", { includeImages: false })).toBe(
+      true
+    );
+    expect(validateSheet(sheet, "pragmatica", 4)).toBe(false);
   });
 
   it("rejects generic deliveries and wrong visual option counts", () => {

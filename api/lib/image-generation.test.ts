@@ -190,6 +190,42 @@ Distrattore 1: singola immagine con un falco al centro nel cielo azzurro.`,
     expect(requests[3].prompt).toContain("tavolo al posto della porta");
   });
 
+  it("does not build image requests when a unified optional sheet has no images", () => {
+    const requests = buildImageRequests({
+      tipoOutput: "pragmatica",
+      interesse: "calcio",
+      testoGenerato: JSON.stringify({
+        tipo: "pragmatica",
+        titolo: "Aspettare il turno",
+        consegna:
+          "Leggi lo scenario e rispondi alle domande su cosa possono dire i bambini.",
+        testo:
+          "Due bambini vogliono tirare lo stesso rigore e devono decidere i turni.",
+        immagini: [],
+        domande: [
+          {
+            domanda: "Che cosa vogliono fare i bambini?",
+            risposta: "Vogliono tirare il rigore.",
+          },
+          {
+            domanda: "Che cosa possono decidere?",
+            risposta: "Possono decidere i turni.",
+          },
+          {
+            domanda: "Come può sentirsi chi aspetta?",
+            risposta: "Può sentirsi impaziente.",
+          },
+          {
+            domanda: "Che frase gentile può usare?",
+            risposta: "Posso tirare dopo di te?",
+          },
+        ],
+      }),
+    });
+
+    expect(requests).toEqual([]);
+  });
+
   it("calls OpenAI with the requested GPT Image generation settings", async () => {
     const previousKeys = {
       OPENAI_API_KEY: process.env.OPENAI_API_KEY,
@@ -214,7 +250,9 @@ Distrattore 1: singola immagine con un falco al centro nel cielo azzurro.`,
       const imageStorage: ImageObjectStorage = {
         async uploadGeneratedImage(input) {
           uploaded += 1;
-          expect(input.bytes).toBe(Buffer.from("fake image").toString("base64"));
+          expect(input.bytes).toBe(
+            Buffer.from("fake image").toString("base64")
+          );
           expect(input.mimeType).toBe("image/png");
           expect(input.cacheKey).toBe("ruolo:base|soggetto:cane");
           return {
@@ -442,9 +480,7 @@ Distrattore 1: singola immagine con un falco al centro nel cielo azzurro.`,
       expect(result.cacheHit).toBe(false);
       expect(saved).toBe(1);
       expect(uploaded).toBe(1);
-      expect(result.filePath).toBe(
-        "https://storage.example/signed-new-image"
-      );
+      expect(result.filePath).toBe("https://storage.example/signed-new-image");
     } finally {
       fetchSpy.mockRestore();
       for (const [key, value] of Object.entries(previousKeys)) {
