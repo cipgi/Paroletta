@@ -98,7 +98,7 @@ export default function Login() {
 
       registerMutation.mutate({
         ...parsedRegistration.data,
-        initialPlan: "trial",
+        initialPlan: "sviluppo",
       });
       return;
     }

@@ -1,7 +1,13 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-export type Plan = "trial" | "starter" | "pro" | "max";
+export type Plan =
+  | "trial"
+  | "sviluppo"
+  | "nessun_abbonamento"
+  | "starter"
+  | "pro"
+  | "max";
 
 export type User = {
   id: number;

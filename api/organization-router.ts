@@ -124,7 +124,7 @@ export const organizationRouter = createRouter({
             id: supabaseUserId,
             email: ctx.user.email,
             name: ctx.user.name,
-            piano: ctx.user.piano ?? "trial",
+            piano: ctx.user.piano ?? "sviluppo",
             seats: ctx.user.seats ?? 1,
             trial_schede_usate: ctx.user.trialSchedeUsate ?? 0,
             schede_mese: ctx.user.schedeMese ?? 0,
@@ -148,7 +148,7 @@ export const organizationRouter = createRouter({
         subscriptionError
       );
 
-    const plan = subscription?.plan ?? ownerProfile.piano ?? "trial";
+    const plan = subscription?.plan ?? ownerProfile.piano ?? "sviluppo";
     const usage = await getUsageSummary({
       ownerUserId: account.ownerUserId,
       plan,

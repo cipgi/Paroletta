@@ -1,14 +1,8 @@
 import { createRouter, authedQuery } from "./middleware";
-import { z } from "zod";
-import { TeamLimits } from "@contracts/constants";
 import { appDb, getSupabaseUserIdFromUnionId } from "./lib/db";
-import {
-  databaseOperationError,
-  invalidSessionError,
-  missingResourceError,
-  userFacingError,
-} from "./lib/errors";
-import { getAccountContext, requireAccountOwner } from "./lib/organization";
+import { databaseOperationError, invalidSessionError } from "./lib/errors";
+import { getAccountContext } from "./lib/organization";
+import { resolveSubscriptionAccess } from "./lib/subscription-access";
 import type { Plan } from "./store";
 
 function requireSupabaseUserId(unionId: string) {
@@ -17,37 +11,29 @@ function requireSupabaseUserId(unionId: string) {
   return id;
 }
 
+async function getOwnerProfile(ownerUserId: string, accessToken?: string) {
+  const { data, error } = await appDb(accessToken)
+    .from("profiles")
+    .select("piano,seats,created_at,updated_at")
+    .eq("id", ownerUserId)
+    .single();
+
+  if (error || !data) {
+    throw databaseOperationError("caricare il profilo dell’abbonamento", error);
+  }
+
+  return data;
+}
+
 export const subscriptionsRouter = createRouter({
-  cancel: authedQuery.mutation(async ({ ctx }) => {
-    const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
-    await requireAccountOwner(supabaseUserId, ctx.supabaseAccessToken);
-    const { data: currentSub } = await appDb(ctx.supabaseAccessToken)
-      .from("subscriptions")
-      .select("plan,current_period_end")
-      .eq("user_id", supabaseUserId)
-      .maybeSingle();
-    const { error: subError } = await appDb(ctx.supabaseAccessToken)
-      .from("subscriptions")
-      .upsert(
-        {
-          user_id: supabaseUserId,
-          status: "cancellato",
-          plan: currentSub?.plan ?? "starter",
-          seats_count: 1,
-          cancel_at_period_end: true,
-          current_period_end:
-            currentSub?.current_period_end ?? new Date().toISOString(),
-        },
-        { onConflict: "user_id" }
-      );
-    if (subError)
-      throw databaseOperationError("annullare l’abbonamento", subError);
-    return { success: true };
-  }),
   mySubscription: authedQuery.query(async ({ ctx }) => {
     const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
     const account = await getAccountContext(
       supabaseUserId,
+      ctx.supabaseAccessToken
+    );
+    const ownerProfile = await getOwnerProfile(
+      account.ownerUserId,
       ctx.supabaseAccessToken
     );
     const { data, error } = await appDb(ctx.supabaseAccessToken)
@@ -58,53 +44,46 @@ export const subscriptionsRouter = createRouter({
       .eq("user_id", account.ownerUserId)
       .maybeSingle();
     if (error) throw databaseOperationError("caricare l’abbonamento", error);
-    if (!data) {
-      const { data: ownerProfile, error: profileError } = await appDb(
-        ctx.supabaseAccessToken
-      )
-        .from("profiles")
-        .select("piano,seats,created_at,updated_at")
-        .eq("id", account.ownerUserId)
-        .single();
-      if (profileError || !ownerProfile) {
-        throw databaseOperationError(
-          "caricare il profilo dell’abbonamento",
-          profileError
-        );
-      }
+    const access = resolveSubscriptionAccess({
+      subscription: data,
+      profile: ownerProfile,
+    });
 
-      const plan = (ownerProfile.piano ?? "trial") as Plan;
-      const status = plan === "trial" ? "trial" : "attivo";
-
+    if (access.derivedFromProfile) {
       return {
         accountRole: account.role,
         ownerUserId: account.ownerUserId,
-        id: null,
+        id: data?.id ?? null,
         userId: account.ownerUserId,
-        status,
-        plan,
-        seatsCount: ownerProfile.seats ?? 1,
-        currentPeriodStart: ownerProfile.created_at,
-        currentPeriodEnd: status === "attivo" ? null : ownerProfile.updated_at,
+        status: access.status,
+        plan: access.plan as Plan,
+        seatsCount: data?.seats_count ?? ownerProfile.seats ?? 1,
+        currentPeriodStart:
+          data?.current_period_start ?? ownerProfile.created_at,
+        currentPeriodEnd: access.current_period_end,
         cancelAtPeriodEnd: false,
-        createdAt: ownerProfile.created_at,
+        createdAt: data?.created_at ?? ownerProfile.created_at,
         updatedAt: ownerProfile.updated_at,
+        accessActive: access.accessActive,
         derivedFromProfile: true,
       };
     }
+
     return {
       accountRole: account.role,
       ownerUserId: account.ownerUserId,
-      id: data.id,
-      userId: data.user_id,
-      status: data.status,
-      plan: data.plan,
-      seatsCount: data.seats_count,
-      currentPeriodStart: data.current_period_start,
-      currentPeriodEnd: data.current_period_end,
-      cancelAtPeriodEnd: data.cancel_at_period_end,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
+      id: data?.id ?? null,
+      userId: data?.user_id ?? account.ownerUserId,
+      status: access.status,
+      plan: access.plan as Plan,
+      seatsCount: data?.seats_count ?? ownerProfile.seats ?? 1,
+      currentPeriodStart: data?.current_period_start ?? ownerProfile.created_at,
+      currentPeriodEnd: access.current_period_end,
+      cancelAtPeriodEnd: data?.cancel_at_period_end ?? false,
+      createdAt: data?.created_at ?? ownerProfile.created_at,
+      updatedAt: data?.updated_at ?? ownerProfile.updated_at,
+      accessActive: access.accessActive,
+      derivedFromProfile: false,
     };
   }),
   plans: authedQuery.query(async ({ ctx }) => {
@@ -115,6 +94,7 @@ export const subscriptionsRouter = createRouter({
       )
       .eq("active", true)
       .eq("is_trial", false)
+      .in("code", ["starter", "pro", "max"])
       .order("sheet_limit", { ascending: true })
       .order("image_limit", { ascending: true });
     if (error)
@@ -130,88 +110,4 @@ export const subscriptionsRouter = createRouter({
       active: plan.active,
     }));
   }),
-  updatePlan: authedQuery
-    .input(
-      z.object({
-        piano: z.enum(["trial", "starter", "pro", "max"]),
-        seatsCount: z.number().min(1).max(TeamLimits.maxSeats).optional(),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
-      await requireAccountOwner(supabaseUserId, ctx.supabaseAccessToken);
-      const seatsCount = input.seatsCount ?? 1;
-      const { data: selectedPlan, error: selectedPlanError } = await appDb(
-        ctx.supabaseAccessToken
-      )
-        .from("subscription_plans")
-        .select("code,sheet_limit,image_limit,duration_days,is_trial,active")
-        .eq("code", input.piano)
-        .eq("active", true)
-        .maybeSingle();
-      if (selectedPlanError)
-        throw databaseOperationError(
-          "verificare il piano selezionato",
-          selectedPlanError
-        );
-      if (!selectedPlan) throw missingResourceError("Piano selezionato");
-
-      const { data: existingSub, error: existingSubError } = await appDb(
-        ctx.supabaseAccessToken
-      )
-        .from("subscriptions")
-        .select("status,plan,created_at,current_period_start")
-        .eq("user_id", supabaseUserId)
-        .maybeSingle();
-      if (existingSubError)
-        throw databaseOperationError(
-          "verificare il tuo abbonamento attuale",
-          existingSubError
-        );
-      if (selectedPlan.is_trial && existingSub) {
-        throw userFacingError(
-          "BAD_REQUEST",
-          "Il trial può essere attivato una sola volta per account."
-        );
-      }
-
-      const plan = input.piano satisfies Plan;
-      const { error: profileError } = await appDb(ctx.supabaseAccessToken)
-        .from("profiles")
-        .update({ piano: plan })
-        .eq("id", supabaseUserId);
-      if (profileError)
-        throw databaseOperationError(
-          "aggiornare il profilo con il nuovo piano",
-          profileError
-        );
-      const status = selectedPlan.is_trial ? "trial" : "attivo";
-      const now = new Date().toISOString();
-      const periodEnd = new Date(
-        Date.now() + selectedPlan.duration_days * 24 * 60 * 60 * 1000
-      ).toISOString();
-      const { error: subError } = await appDb(ctx.supabaseAccessToken)
-        .from("subscriptions")
-        .upsert(
-          {
-            user_id: supabaseUserId,
-            status,
-            plan,
-            seats_count: seatsCount,
-            current_period_start: existingSub?.current_period_start ?? now,
-            current_period_end: periodEnd,
-            cancel_at_period_end: false,
-          },
-          { onConflict: "user_id" }
-        );
-      if (subError)
-        throw databaseOperationError("salvare il nuovo abbonamento", subError);
-      ctx.user.piano = plan;
-      ctx.user.seats = seatsCount;
-      return {
-        piano: plan,
-        sheetLimit: selectedPlan.sheet_limit,
-        imageLimit: selectedPlan.image_limit,
-      };
-    }),
 });

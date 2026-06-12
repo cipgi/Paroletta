@@ -133,7 +133,7 @@ async function reserveImageQuotaForCurrentUser(quota: ImageQuotaContext) {
 
   return reserveImageGenerationQuota({
     userId: quota.userId,
-    plan: subscription.plan ?? "trial",
+    plan: subscription.plan ?? "sviluppo",
     accessToken: quota.accessToken,
   });
 }
