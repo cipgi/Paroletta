@@ -1,5 +1,5 @@
 import { useParams, Link } from "react-router";
-import { useRef, type ReactNode } from "react";
+import { useRef } from "react";
 import { trpc } from "@/providers/trpc";
 import {
   getNeutralVisualOptionLabel,
@@ -20,7 +20,6 @@ import {
   Brain,
   ListOrdered,
   MessageCircle,
-  Clock3,
   RefreshCcw,
   Loader2,
 } from "lucide-react";
@@ -38,73 +37,9 @@ function getSheetTypeLabel(tipoOutput: string) {
   return labels[tipoOutput] ?? tipoOutput;
 }
 
-function getDifficultyLabel(difficulty: string) {
-  const labels: Record<string, string> = {
-    facile: "3-5 anni",
-    media: "6-8 anni",
-    difficile: "9+ anni",
-  };
-  return labels[difficulty.toLowerCase()] ?? difficulty;
-}
-
-function getClinicalGoalLabel(tipoOutput: string) {
-  if (tipoOutput === "morfosintassi_complessa")
-    return "Obiettivo: morfologia/morfosintassi";
-  if (tipoOutput === "discriminazione_visiva")
-    return "Obiettivo: discriminazione visiva";
-  if (tipoOutput === "narrazione_sequenze")
-    return "Obiettivo: narrazione e sequenze";
-  if (tipoOutput === "pragmatica") return "Obiettivo: pragmatica";
-  return "Obiettivo: fonologia/articolazione";
-}
-
-function isTextWithPhonemeSheet(tipoOutput: string) {
-  return ["storia", "filastrocca", "lista"].includes(tipoOutput);
-}
-
-function getPhonemePositionHints(fonema: string) {
-  const normalized = fonema.trim().toLocaleLowerCase("it-IT");
-  if (!normalized) return "Posizione: iniziale, mediana, finale";
-  return `Posizione /${normalized}/: iniziale · mediana · finale`;
-}
-
-function getPhoneticTranscriptionHint(fonema: string) {
-  const normalized = fonema.trim().toLocaleLowerCase("it-IT");
-  if (!normalized) return "IPA: n/d";
-  return `Trascrizione IPA: /${normalized}/`;
-}
-
 function getVisualSheetTitle(interesse: string) {
   if (!interesse.trim()) return "Trova l'intruso";
   return `Trova l'intruso — tema ${interesse}`;
-}
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function renderHighlightedPhonemeText(
-  text: string,
-  fonema: string
-): ReactNode[] {
-  const target = fonema.trim();
-  if (!target) return [text];
-
-  const regex = new RegExp(`(${escapeRegExp(target)})`, "giu");
-  return text.split(regex).map((part, index) => {
-    if (part.toLocaleLowerCase("it-IT") !== target.toLocaleLowerCase("it-IT")) {
-      return part;
-    }
-
-    return (
-      <mark
-        key={`${part}-${index}`}
-        className="rounded bg-amber-100 px-0.5 font-bold text-teal-700"
-      >
-        {part}
-      </mark>
-    );
-  });
 }
 
 function getVisualOptionCount(words: string[]) {
@@ -344,7 +279,6 @@ export default function SheetDetail() {
   const isComplexMorphosyntax = sheet.tipoOutput === "morfosintassi_complessa";
   const isNarrativeSequence = sheet.tipoOutput === "narrazione_sequenze";
   const isPragmatic = sheet.tipoOutput === "pragmatica";
-  const hasPhonemeFocus = isTextWithPhonemeSheet(sheet.tipoOutput);
   const imageAssets = sheet.imageAssets ?? [];
   const visualImageAssets = imageAssets.filter(asset =>
     ["target", "distrattore"].includes(asset.role)
@@ -434,42 +368,13 @@ export default function SheetDetail() {
             {/* Content */}
             <div className="space-y-4">
               <h2 className="text-xl font-bold text-slate-800">{displayTitle}</h2>
-              <div className="flex flex-wrap gap-2">
-                <Badge variant="secondary">
-                  Età target: {getDifficultyLabel(sheet.difficolta)}
-                </Badge>
-                <Badge variant="secondary">
-                  Livello: {sheet.difficolta.toLowerCase()}
-                </Badge>
-                {hasPhonemeFocus ? (
-                  <>
-                    <Badge variant="secondary">/{sheet.fonema}/</Badge>
-                    <Badge variant="outline">
-                      {getPhoneticTranscriptionHint(sheet.fonema)}
-                    </Badge>
-                    <Badge variant="outline">
-                      {getPhonemePositionHints(sheet.fonema)}
-                    </Badge>
-                  </>
-                ) : null}
-                <Badge variant="secondary">{getClinicalGoalLabel(sheet.tipoOutput)}</Badge>
-                <Badge variant="outline" className="inline-flex items-center gap-1">
-                  <Clock3 className="h-3.5 w-3.5" />
-                  Durata: 10-15 min
-                </Badge>
-              </div>
 
               <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Consegna bambino
                 </p>
                 <div className="text-slate-800 leading-relaxed whitespace-pre-line text-lg">
-                  {hasPhonemeFocus
-                    ? renderHighlightedPhonemeText(
-                        userFacingContent,
-                        sheet.fonema
-                      )
-                    : userFacingContent}
+                  {userFacingContent}
                 </div>
               </div>
 
@@ -635,7 +540,7 @@ export default function SheetDetail() {
                           key={`${word}-${index}`}
                           className="rounded-lg border border-slate-100 bg-slate-50 px-2 py-1.5 text-sm"
                         >
-                          {renderHighlightedPhonemeText(word, sheet.fonema)}
+                          {word}
                         </div>
                       ))}
                     </div>
