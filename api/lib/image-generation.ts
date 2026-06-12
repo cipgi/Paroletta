@@ -1,4 +1,6 @@
 import { parseUnifiedSheetContent } from "../../contracts/sheet-content";
+import type { ImageObjectStorage } from "./image-storage";
+import { buildStorageFilePath } from "./image-storage";
 export const IMAGE_GENERATION_MODEL =
   process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-2";
 export const IMAGE_GENERATION_MODEL_CODE_NAME = "GPT Image 2";
@@ -49,6 +51,9 @@ export type CachedIllustration = {
   filePath: string;
   mimeType?: string | null;
   source: "generated" | "uploaded" | "mock";
+  storageBucket?: string | null;
+  storagePath?: string | null;
+  byteSize?: number | null;
   fallbackReason?: string | null;
   generationModel?: string | null;
   generatedCostUsd?: number | null;
@@ -62,6 +67,8 @@ export type ResolvedImageAsset = {
   cacheKey: string;
   filePath: string;
   source: CachedIllustration["source"];
+  storageBucket?: string | null;
+  storagePath?: string | null;
   fallbackReason?: string | null;
   cacheHit: boolean;
 };
@@ -518,6 +525,7 @@ export async function resolveImageRequestWithCache(
   db: ImageCacheDb,
   options: {
     force?: boolean;
+    imageStorage?: ImageObjectStorage;
     onGenerateStart?: () => Promise<(() => Promise<void>) | void>;
   } = {}
 ): Promise<CachedIllustration & { cacheHit: boolean }> {
@@ -540,13 +548,28 @@ export async function resolveImageRequestWithCache(
 
   const prompt = sanitizeImagePrompt(request.prompt);
   let filePath: string;
+  let storageBucket: string | null = null;
+  let storagePath: string | null = null;
+  let byteSize: number | null = null;
   let mimeType = "image/png";
   const rollbackGenerationQuota = await options.onGenerateStart?.();
 
   try {
     const generated = await callOpenAIImageApi(prompt);
-    filePath = buildImageDataUrl(generated.bytes, generated.mimeType);
     mimeType = generated.mimeType;
+    if (options.imageStorage) {
+      const stored = await options.imageStorage.uploadGeneratedImage({
+        cacheKey,
+        bytes: generated.bytes,
+        mimeType,
+      });
+      filePath = stored.filePath;
+      storageBucket = stored.storageBucket;
+      storagePath = stored.storagePath;
+      byteSize = stored.byteSize;
+    } else {
+      filePath = buildImageDataUrl(generated.bytes, mimeType);
+    }
   } catch (error) {
     await rollbackGenerationQuota?.();
     console.error("[image-generation] OpenAI image generation failed", {
@@ -562,9 +585,15 @@ export async function resolveImageRequestWithCache(
     tag: request.label,
     semanticTags,
     cacheKey,
-    filePath,
+    filePath:
+      storageBucket && storagePath
+        ? buildStorageFilePath(storageBucket, storagePath)
+        : filePath,
     mimeType,
     source: "generated" as const,
+    storageBucket,
+    storagePath,
+    byteSize,
     fallbackReason: null,
     generationModel: IMAGE_GENERATION_MODEL,
     generatedCostUsd: IMAGE_GENERATION_COST_USD,

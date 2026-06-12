@@ -11,6 +11,7 @@
     "start": "exec env NODE_ENV=production node dist/boot.js",
     "check": "tsc -b",
     "format": "prettier --write .",
+    "migrate:images:storage": "node scripts/migrate-illustration-data-urls-to-storage.mjs",
     "test": "vitest run"
   },
   "dependencies": {

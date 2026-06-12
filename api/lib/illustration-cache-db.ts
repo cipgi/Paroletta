@@ -1,4 +1,6 @@
 import type { CachedIllustration, ImageCacheDb } from "./image-generation";
+import type { ImageObjectStorage } from "./image-storage";
+import { parseStorageFilePath } from "./image-storage";
 import { illustrations } from "../store";
 
 type DbIllustration = {
@@ -9,6 +11,9 @@ type DbIllustration = {
   file_path: string;
   mime_type: string | null;
   source: "generated" | "uploaded" | "mock" | null;
+  storage_bucket: string | null;
+  storage_path: string | null;
+  byte_size: number | null;
   generation_model: string | null;
   generated_cost_usd: number | null;
   created_at: string;
@@ -22,15 +27,30 @@ function toPublicFilePath(filePath: string) {
   return filePath;
 }
 
-function mapDbIllustration(row: DbIllustration): CachedIllustration {
+async function mapDbIllustration(
+  row: DbIllustration,
+  imageStorage?: ImageObjectStorage
+): Promise<CachedIllustration> {
+  const parsedStoragePath = parseStorageFilePath(row.file_path);
+  const storageBucket =
+    row.storage_bucket ?? parsedStoragePath?.storageBucket ?? null;
+  const storagePath = row.storage_path ?? parsedStoragePath?.storagePath ?? null;
+  const signedFilePath =
+    imageStorage && storageBucket && storagePath
+      ? await imageStorage.getDisplayUrl({ storageBucket, storagePath })
+      : null;
+
   return {
     id: row.id,
     tag: row.tag,
     semanticTags: row.semantic_tags ?? [row.tag],
     cacheKey: row.cache_key ?? row.tag,
-    filePath: toPublicFilePath(row.file_path),
+    filePath: signedFilePath ?? toPublicFilePath(row.file_path),
     mimeType: row.mime_type,
     source: row.source ?? "uploaded",
+    storageBucket,
+    storagePath,
+    byteSize: row.byte_size,
     generationModel: row.generation_model,
     generatedCostUsd: row.generated_cost_usd,
     createdAt: row.created_at,
@@ -55,7 +75,8 @@ type PostgrestMutation = {
 };
 
 export function createSupabaseImageCacheDb(
-  db: PostgrestLikeClient
+  db: PostgrestLikeClient,
+  options: { imageStorage?: ImageObjectStorage } = {}
 ): ImageCacheDb {
   return {
     async findByCacheKey(cacheKey) {
@@ -65,7 +86,9 @@ export function createSupabaseImageCacheDb(
         .maybeSingle();
 
       if (error) return null;
-      return data ? mapDbIllustration(data as DbIllustration) : null;
+      return data
+        ? mapDbIllustration(data as DbIllustration, options.imageStorage)
+        : null;
     },
     async save(illustration) {
       const { data, error } = await (
@@ -77,6 +100,9 @@ export function createSupabaseImageCacheDb(
             file_path: illustration.filePath,
             mime_type: illustration.mimeType,
             source: illustration.source,
+            storage_bucket: illustration.storageBucket ?? null,
+            storage_path: illustration.storagePath ?? null,
+            byte_size: illustration.byteSize ?? null,
             generation_model: illustration.generationModel,
             generated_cost_usd: illustration.generatedCostUsd ?? 0,
           },
@@ -100,6 +126,9 @@ export function createSupabaseImageCacheDb(
           filePath: fallback.filePath,
           mimeType: fallback.mimeType ?? null,
           source: fallback.source,
+          storageBucket: fallback.storageBucket ?? null,
+          storagePath: fallback.storagePath ?? null,
+          byteSize: fallback.byteSize ?? null,
           fallbackReason: fallback.fallbackReason ?? null,
           generationModel: fallback.generationModel ?? null,
           generatedCostUsd: fallback.generatedCostUsd ?? 0,
@@ -107,7 +136,7 @@ export function createSupabaseImageCacheDb(
         return fallback;
       }
 
-      return mapDbIllustration(data as DbIllustration);
+      return mapDbIllustration(data as DbIllustration, options.imageStorage);
     },
   };
 }
@@ -124,6 +153,9 @@ export function createMemoryImageCacheDb(): ImageCacheDb {
             filePath: found.filePath,
             mimeType: found.mimeType,
             source: found.source,
+            storageBucket: found.storageBucket ?? null,
+            storagePath: found.storagePath ?? null,
+            byteSize: found.byteSize ?? null,
             fallbackReason: found.fallbackReason ?? null,
             generationModel: found.generationModel,
             generatedCostUsd: found.generatedCostUsd,
