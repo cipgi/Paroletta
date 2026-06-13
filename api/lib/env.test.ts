@@ -7,7 +7,8 @@ describe("getMissingProductionEnvVars", () => {
       getMissingProductionEnvVars({
         isProduction: true,
         securityCspMode: "off",
-        sessionSecret: "secret",
+        sessionSecret: "a-production-session-secret-32-chars",
+        loginTrustProxyHeaders: false,
         supabaseUrl: "https://example.supabase.co",
         supabasePublishableKey: "publishable-key",
         supabaseServiceRoleKey: "",
@@ -15,12 +16,27 @@ describe("getMissingProductionEnvVars", () => {
     ).toEqual(["SUPABASE_SERVICE_ROLE_KEY"]);
   });
 
+  it("requires a production session secret that is not the development fallback", () => {
+    expect(
+      getMissingProductionEnvVars({
+        isProduction: true,
+        securityCspMode: "off",
+        sessionSecret: "dev-session-secret",
+        loginTrustProxyHeaders: false,
+        supabaseUrl: "https://example.supabase.co",
+        supabasePublishableKey: "publishable-key",
+        supabaseServiceRoleKey: "service-role-key",
+      })
+    ).toEqual(["SESSION_SECRET (at least 32 characters)"]);
+  });
+
   it("accepts either SUPABASE_PUBLISHABLE_KEY or the legacy anon key value once resolved", () => {
     expect(
       getMissingProductionEnvVars({
         isProduction: true,
         securityCspMode: "off",
-        sessionSecret: "secret",
+        sessionSecret: "a-production-session-secret-32-chars",
+        loginTrustProxyHeaders: false,
         supabaseUrl: "https://example.supabase.co",
         supabasePublishableKey: "anon-or-publishable-key",
         supabaseServiceRoleKey: "service-role-key",

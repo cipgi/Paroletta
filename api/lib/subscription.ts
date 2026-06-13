@@ -58,12 +58,6 @@ function forbiddenLimitError(kind: "schede" | "immagini", limit: number) {
 
 const PLAN_LIMIT_FALLBACKS: Record<string, PlanLimits> = {
   trial: { sheetLimit: 15, imageLimit: 15, durationDays: 15, isTrial: true },
-  sviluppo: {
-    sheetLimit: 1000,
-    imageLimit: 1000,
-    durationDays: 365,
-    isTrial: false,
-  },
   nessun_abbonamento: {
     sheetLimit: 0,
     imageLimit: 0,
@@ -145,6 +139,41 @@ export function assertSheetLimitAvailable(summary: UsageSummary) {
   if (summary.sheets.used >= summary.sheets.limit) {
     throw forbiddenLimitError("schede", summary.sheets.limit);
   }
+}
+
+export async function reserveSheetGenerationQuota(params: {
+  userId: string;
+  plan?: string;
+  accessToken?: string;
+}): Promise<() => Promise<void>> {
+  const rpc = adminAppDb() as unknown as RpcClient;
+  const { error } = await rpc.rpc("consume_sheet_usage", {
+    target_user_id: params.userId,
+    sheet_count: 1,
+  });
+
+  if (error) {
+    if (isDatabaseSignal(error, "sheet_limit_reached")) {
+      const limit = params.plan
+        ? (await getPlanLimits(params.plan, params.accessToken)).sheetLimit
+        : 0;
+      throw forbiddenLimitError("schede", limit);
+    }
+    throw databaseOperationError("aggiornare il conteggio schede", error);
+  }
+
+  return async () => {
+    const { error: rollbackError } = await rpc.rpc("release_sheet_usage", {
+      target_user_id: params.userId,
+      sheet_count: 1,
+    });
+    if (rollbackError) {
+      console.error("[subscription] sheet quota rollback failed", {
+        userId: params.userId,
+        error: rollbackError,
+      });
+    }
+  };
 }
 
 export async function reserveImageGenerationQuota(params: {

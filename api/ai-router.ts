@@ -9,7 +9,7 @@ import {
   type UnifiedSheet,
 } from "../contracts/sheet-content";
 import { createRouter, authedQuery } from "./middleware";
-import { appDb, getSupabaseUserIdFromUnionId } from "./lib/db";
+import { adminAppDb, getSupabaseUserIdFromUnionId } from "./lib/db";
 import {
   databaseOperationError,
   invalidSessionError,
@@ -20,6 +20,7 @@ import {
   assertActiveSubscription,
   assertSheetLimitAvailable,
   getUsageSummary,
+  reserveSheetGenerationQuota,
 } from "./lib/subscription";
 import { sanitizePlainText } from "./lib/sanitize";
 
@@ -724,9 +725,22 @@ export const aiRouter = createRouter({
         );
       }
 
-      const generatedSheet =
-        await generateUnifiedSheetFromParams(sanitizedInput);
-      const { data: inserted, error } = await appDb(ctx.supabaseAccessToken)
+      const rollbackSheetQuota = await reserveSheetGenerationQuota({
+        userId: supabaseUserId,
+        plan: piano,
+        accessToken: ctx.supabaseAccessToken,
+      });
+      let generatedSheet: Awaited<
+        ReturnType<typeof generateUnifiedSheetFromParams>
+      >;
+      try {
+        generatedSheet = await generateUnifiedSheetFromParams(sanitizedInput);
+      } catch (error) {
+        await rollbackSheetQuota();
+        throw error;
+      }
+
+      const { data: inserted, error } = await adminAppDb()
         .from("sheets")
         .insert({
           user_id: supabaseUserId,
@@ -738,11 +752,13 @@ export const aiRouter = createRouter({
           lista_parole: generatedSheet.words,
           difficolta: "media",
           pdf_url: null,
+          usage_counted: true,
         })
         .select("*")
         .single();
 
       if (error || !inserted) {
+        await rollbackSheetQuota();
         if (error?.message?.includes("sheet_limit_reached")) {
           throw new TRPCError({
             code: "FORBIDDEN",

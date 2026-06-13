@@ -16,7 +16,6 @@ import { supabase, supabaseAdmin } from "./lib/supabase";
 import { supabaseConfigured } from "./lib/env";
 import {
   adminAppDb,
-  appDbForAccessToken,
   getSupabaseUserIdFromUnionId,
 } from "./lib/db";
 import {
@@ -37,8 +36,8 @@ import {
 // handlers are intentionally separate so removing Google OAuth does not affect
 // credentials-based registration or login.
 
-type AppDbClient = ReturnType<typeof appDbForAccessToken>;
-const DEVELOPMENT_INITIAL_PLAN = "sviluppo";
+type AppDbClient = ReturnType<typeof adminAppDb>;
+const PUBLIC_INITIAL_PLAN = "trial";
 
 async function ensureUserProfile(
   db: AppDbClient,
@@ -64,10 +63,6 @@ async function ensureUserProfile(
   }
 }
 
-function getAppDbForSession(accessToken?: string) {
-  return accessToken ? appDbForAccessToken(accessToken) : adminAppDb();
-}
-
 const credentialsSchema = z.object({
   email: z.email().transform(value => value.trim().toLowerCase()),
   password: z
@@ -82,7 +77,6 @@ const credentialsSchema = z.object({
     .transform(value => sanitizeProfileNameOrFallback(value, "Utente"))
     .pipe(z.string().min(2).max(MAX_PROFILE_NAME_LENGTH))
     .optional(),
-  initialPlan: z.literal(DEVELOPMENT_INITIAL_PLAN).optional(),
 });
 
 const loginCredentialsSchema = credentialsSchema
@@ -121,7 +115,7 @@ export const authRouter = createRouter({
           error
         );
 
-      const appDatabase = getAppDbForSession(data.session?.access_token);
+      const appDatabase = adminAppDb();
       const unionId = `supabase:${data.user.id}`;
       await upsertUser({
         unionId,
@@ -129,8 +123,9 @@ export const authRouter = createRouter({
         name: profileName,
         lastSignInAt: new Date(),
         role: "user",
+        piano: PUBLIC_INITIAL_PLAN,
       });
-      const requestedPlan = DEVELOPMENT_INITIAL_PLAN;
+      const requestedPlan = PUBLIC_INITIAL_PLAN;
       const { data: selectedPlan, error: selectedPlanError } = await appDatabase
         .from("subscription_plans")
         .select("code,duration_days,is_trial,active")

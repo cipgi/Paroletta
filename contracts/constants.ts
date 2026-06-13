@@ -27,7 +27,7 @@ export const TeamLimits = {
 
 export const SubscriptionPlanLimits = {
   trial: { sheetLimit: 15, imageLimit: 15 },
-  sviluppo: { sheetLimit: 1000, imageLimit: 1000 },
+  sviluppo: { sheetLimit: 0, imageLimit: 0 },
   nessun_abbonamento: { sheetLimit: 0, imageLimit: 0 },
   starter: { sheetLimit: 25, imageLimit: 25 },
   pro: { sheetLimit: 100, imageLimit: 100 },

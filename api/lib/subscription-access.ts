@@ -25,7 +25,7 @@ export type SubscriptionAccessState = ActiveSubscription & {
 };
 
 const TRIAL_DURATION_MS = 15 * 24 * 60 * 60 * 1000;
-const MANUAL_ACCESS_PLANS = new Set(["starter", "pro", "max", "sviluppo"]);
+const MANUAL_ACCESS_PLANS = new Set(["starter", "pro", "max"]);
 
 function addTrialDurationIso(startMs: number) {
   return new Date(startMs + TRIAL_DURATION_MS).toISOString();

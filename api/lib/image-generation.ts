@@ -60,6 +60,11 @@ export type CachedIllustration = {
   createdAt?: string;
 };
 
+export type ImageCacheScope = {
+  ownerUserId: string;
+  sheetId: string;
+};
+
 export type ResolvedImageAsset = {
   role: ImageRole;
   label: string;
@@ -74,9 +79,13 @@ export type ResolvedImageAsset = {
 };
 
 export type ImageCacheDb = {
-  findByCacheKey(cacheKey: string): Promise<CachedIllustration | null>;
+  findByCacheKey(
+    cacheKey: string,
+    scope?: ImageCacheScope
+  ): Promise<CachedIllustration | null>;
   save(
-    illustration: Omit<CachedIllustration, "id" | "createdAt">
+    illustration: Omit<CachedIllustration, "id" | "createdAt">,
+    scope?: ImageCacheScope
   ): Promise<CachedIllustration>;
 };
 
@@ -134,10 +143,11 @@ function canReuseCachedIllustration(cached: CachedIllustration) {
 
 export async function resolveCachedImageRequest(
   request: ImageRequest,
-  db: ImageCacheDb
+  db: ImageCacheDb,
+  scope?: ImageCacheScope
 ): Promise<(CachedIllustration & { cacheHit: true }) | null> {
   const { cacheKey } = getImageRequestCacheMetadata(request);
-  const cached = await db.findByCacheKey(cacheKey);
+  const cached = await db.findByCacheKey(cacheKey, scope);
   if (!cached || !canReuseCachedIllustration(cached)) return null;
   return { ...cached, cacheHit: true };
 }
@@ -557,12 +567,17 @@ export async function resolveImageRequestWithCache(
   options: {
     force?: boolean;
     imageStorage?: ImageObjectStorage;
+    cacheScope?: ImageCacheScope;
     onGenerateStart?: () => Promise<(() => Promise<void>) | void>;
   } = {}
 ): Promise<CachedIllustration & { cacheHit: boolean }> {
   const { semanticTags, cacheKey } = getImageRequestCacheMetadata(request);
   if (!options.force) {
-    const cached = await resolveCachedImageRequest(request, db);
+    const cached = await resolveCachedImageRequest(
+      request,
+      db,
+      options.cacheScope
+    );
     if (cached) return cached;
   }
 
@@ -619,7 +634,7 @@ export async function resolveImageRequestWithCache(
     generatedCostUsd: IMAGE_GENERATION_COST_USD,
   };
 
-  const saved = await db.save(illustration);
+  const saved = await db.save(illustration, options.cacheScope);
 
   return {
     ...saved,
