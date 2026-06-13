@@ -1,4 +1,5 @@
--- Temporarily give every account development access while Paroletta is not in production.
+-- Register internal development/no-subscription plans without making the
+-- development plan a public default.
 
 alter table app.subscription_plans
 drop constraint if exists subscription_plans_image_limit_check;
@@ -33,7 +34,7 @@ values
     1000,
     365,
     false,
-    true
+    false
   ),
   (
     'nessun_abbonamento',
@@ -57,42 +58,10 @@ set
   updated_at = now();
 
 alter table app.profiles
-alter column piano set default 'sviluppo';
+alter column piano set default 'trial';
 
 alter table app.subscriptions
-alter column plan set default 'sviluppo';
+alter column plan set default 'trial';
 
 alter table app.subscriptions
-alter column status set default 'attivo';
-
-update app.profiles
-set piano = 'sviluppo'
-where piano <> 'sviluppo';
-
-insert into app.subscriptions (
-  user_id,
-  status,
-  plan,
-  seats_count,
-  current_period_start,
-  current_period_end,
-  cancel_at_period_end
-)
-select
-  p.id,
-  'attivo',
-  'sviluppo',
-  coalesce(p.seats, 1),
-  now(),
-  null,
-  false
-from app.profiles p
-on conflict (user_id) do update
-set
-  status = 'attivo',
-  plan = 'sviluppo',
-  seats_count = greatest(coalesce(app.subscriptions.seats_count, excluded.seats_count), 1),
-  current_period_start = now(),
-  current_period_end = null,
-  cancel_at_period_end = false,
-  updated_at = now();
+alter column status set default 'trial';

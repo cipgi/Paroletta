@@ -1,4 +1,6 @@
+import { isIP } from "node:net";
 import { TRPCError } from "@trpc/server";
+import { env } from "./env";
 
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const MAX_LOGIN_ATTEMPTS_PER_IP = 10;
@@ -33,15 +35,42 @@ function pruneCaptchaChallenges(timestamp: number) {
   }
 }
 
-export function extractClientIp(headers: Headers): string {
-  const forwardedFor = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  if (forwardedFor) return forwardedFor;
+type ClientIpExtractionOptions = {
+  trustProxyHeaders?: boolean;
+};
 
-  const realIp = headers.get("x-real-ip")?.trim();
-  if (realIp) return realIp;
+function isValidIpAddress(value: string | undefined): value is string {
+  return Boolean(value && isIP(value) !== 0);
+}
+
+function extractRightmostForwardedIp(value: string | null) {
+  const ips =
+    value
+      ?.split(",")
+      .map(part => part.trim())
+      .filter(isValidIpAddress) ?? [];
+  return ips.at(-1);
+}
+
+export function extractClientIp(
+  headers: Headers,
+  options: ClientIpExtractionOptions = {}
+): string {
+  const trustProxyHeaders =
+    options.trustProxyHeaders ?? env.loginTrustProxyHeaders;
+
+  if (!trustProxyHeaders) return "unknown";
 
   const cfConnectingIp = headers.get("cf-connecting-ip")?.trim();
-  if (cfConnectingIp) return cfConnectingIp;
+  if (isValidIpAddress(cfConnectingIp)) return cfConnectingIp;
+
+  const realIp = headers.get("x-real-ip")?.trim();
+  if (isValidIpAddress(realIp)) return realIp;
+
+  const forwardedFor = extractRightmostForwardedIp(
+    headers.get("x-forwarded-for")
+  );
+  if (forwardedFor) return forwardedFor;
 
   return "unknown";
 }

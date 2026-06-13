@@ -17,80 +17,96 @@ function requireSupabaseUserId(unionId: string) {
   return id;
 }
 
-async function getSeatCapacity(ownerUserId: string) {
-  const { data: subscription, error: subscriptionError } = await adminAppDb()
-    .from("subscriptions")
-    .select("seats_count")
-    .eq("user_id", ownerUserId)
-    .maybeSingle();
-  if (subscriptionError)
-    throw databaseOperationError(
-      "verificare i posti disponibili del team",
-      subscriptionError
-    );
+type RpcClient = {
+  rpc(
+    functionName: string,
+    args: Record<string, unknown>
+  ): Promise<{ data: unknown; error: unknown }>;
+};
 
-  if (subscription?.seats_count) {
-    return Math.min(subscription.seats_count, TeamLimits.maxSeats);
-  }
-
-  const { data: profile, error: profileError } = await adminAppDb()
-    .from("profiles")
-    .select("seats")
-    .eq("id", ownerUserId)
-    .single();
-  if (profileError || !profile) {
-    throw databaseOperationError(
-      "verificare i posti disponibili del profilo",
-      profileError
-    );
-  }
-
-  return profile.seats ?? 1;
+function getDatabaseErrorText(error: unknown) {
+  if (!error || typeof error !== "object") return "";
+  const fields = ["message", "details", "hint", "code"] as const;
+  return fields
+    .map(field => {
+      const value = error[field as keyof typeof error];
+      return typeof value === "string" ? value : "";
+    })
+    .join(" ");
 }
 
-async function getTeamOccupancy(ownerUserId: string) {
-  const { count: membersCount, error: membersError } = await adminAppDb()
-    .from("seat_assignments")
-    .select("id", { count: "exact", head: true })
-    .eq("owner_user_id", ownerUserId);
-  if (membersError)
-    throw databaseOperationError("contare i membri del team", membersError);
+function isDatabaseSignal(error: unknown, signal: string) {
+  return getDatabaseErrorText(error).includes(signal);
+}
 
-  const { count: pendingInvitationsCount, error: invitationsError } =
-    await adminAppDb()
-      .from("organization_invitations")
-      .select("id", { count: "exact", head: true })
-      .eq("owner_user_id", ownerUserId)
-      .eq("status", "pending");
-  if (invitationsError)
-    throw databaseOperationError(
-      "contare gli inviti pendenti del team",
-      invitationsError
-    );
+function teamSeatLimitError() {
+  return userFacingError(
+    "FORBIDDEN",
+    `Non ci sono posti disponibili nel team. Ogni team può includere al massimo ${TeamLimits.maxStaffAccounts} account staff oltre al Manager.`
+  );
+}
 
-  return {
-    membersCount: membersCount ?? 0,
-    pendingInvitationsCount: pendingInvitationsCount ?? 0,
+async function createInvitationAtomically(params: {
+  ownerUserId: string;
+  email: string;
+}) {
+  const rpc = adminAppDb() as unknown as RpcClient;
+  const { data, error } = await rpc.rpc("create_organization_invitation", {
+    owner_id: params.ownerUserId,
+    invited_email: params.email,
+    invited_by_id: params.ownerUserId,
+  });
+  if (error) {
+    if (isDatabaseSignal(error, "team_seat_limit_reached")) {
+      throw teamSeatLimitError();
+    }
+    throw databaseOperationError("creare l’invito", error);
+  }
+
+  const invitation = Array.isArray(data) ? data[0] : data;
+  if (!invitation || typeof invitation !== "object") {
+    throw databaseOperationError("creare l’invito");
+  }
+  return invitation as {
+    id: string;
+    email: string;
+    status: string;
+    token: string;
+    created_at: string;
   };
 }
 
-async function assertTeamHasSeat(
-  ownerUserId: string,
-  options: { includePendingInvitations: boolean }
-) {
-  const seatsCount = await getSeatCapacity(ownerUserId);
-  const { membersCount, pendingInvitationsCount } =
-    await getTeamOccupancy(ownerUserId);
-  const occupiedSeats =
-    1 +
-    membersCount +
-    (options.includePendingInvitations ? pendingInvitationsCount : 0);
-
-  if (occupiedSeats >= seatsCount) {
-    throw userFacingError(
-      "FORBIDDEN",
-      `Non ci sono posti disponibili nel team (${occupiedSeats}/${seatsCount}). Ogni team può includere al massimo ${TeamLimits.maxStaffAccounts} account staff oltre al Manager.`
-    );
+async function acceptInvitationAtomically(params: {
+  token: string;
+  userId: string;
+  email: string;
+}) {
+  const rpc = adminAppDb() as unknown as RpcClient;
+  const { error } = await rpc.rpc("accept_organization_invitation", {
+    invitation_token: params.token,
+    recipient_user_id: params.userId,
+    recipient_email: params.email,
+  });
+  if (error) {
+    if (
+      isDatabaseSignal(error, "invalid_invitation") ||
+      isDatabaseSignal(error, "invitation_email_mismatch")
+    ) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "Invito non valido o non più disponibile.",
+      });
+    }
+    if (isDatabaseSignal(error, "team_seat_limit_reached")) {
+      throw teamSeatLimitError();
+    }
+    if (isDatabaseSignal(error, "account_already_in_team")) {
+      throw userFacingError(
+        "BAD_REQUEST",
+        "Questo account appartiene già a un team."
+      );
+    }
+    throw databaseOperationError("accettare l’invito", error);
   }
 }
 
@@ -124,7 +140,7 @@ export const organizationRouter = createRouter({
             id: supabaseUserId,
             email: ctx.user.email,
             name: ctx.user.name,
-            piano: ctx.user.piano ?? "sviluppo",
+            piano: ctx.user.piano ?? "trial",
             seats: ctx.user.seats ?? 1,
             trial_schede_usate: ctx.user.trialSchedeUsate ?? 0,
             schede_mese: ctx.user.schedeMese ?? 0,
@@ -148,7 +164,7 @@ export const organizationRouter = createRouter({
         subscriptionError
       );
 
-    const plan = subscription?.plan ?? ownerProfile.piano ?? "sviluppo";
+    const plan = subscription?.plan ?? ownerProfile.piano ?? "trial";
     const usage = await getUsageSummary({
       ownerUserId: account.ownerUserId,
       plan,
@@ -405,28 +421,10 @@ export const organizationRouter = createRouter({
         );
       }
 
-      await assertTeamHasSeat(supabaseUserId, {
-        includePendingInvitations: true,
+      const data = await createInvitationAtomically({
+        ownerUserId: supabaseUserId,
+        email: input.email,
       });
-
-      const { data, error } = await adminAppDb()
-        .from("organization_invitations")
-        .upsert(
-          {
-            owner_user_id: supabaseUserId,
-            email: input.email,
-            status: "pending",
-            invited_by_user_id: supabaseUserId,
-            accepted_by_user_id: null,
-            accepted_at: null,
-            revoked_at: null,
-          },
-          { onConflict: "owner_user_id,email" }
-        )
-        .select("id,email,status,token,created_at")
-        .single();
-      if (error || !data)
-        throw databaseOperationError("creare l’invito", error);
       return {
         id: data.id,
         email: data.email,
@@ -445,7 +443,8 @@ export const organizationRouter = createRouter({
         .from("organization_invitations")
         .update({ status: "revoked", revoked_at: new Date().toISOString() })
         .eq("id", input.id)
-        .eq("owner_user_id", supabaseUserId);
+        .eq("owner_user_id", supabaseUserId)
+        .eq("status", "pending");
       if (error) throw databaseOperationError("revocare l’invito", error);
       return { success: true };
     }),
@@ -465,54 +464,11 @@ export const organizationRouter = createRouter({
         );
       }
 
-      const { data: invitation, error: invitationError } = await adminAppDb()
-        .from("organization_invitations")
-        .select("id,owner_user_id,email,status")
-        .eq("token", input.token)
-        .eq("status", "pending")
-        .maybeSingle();
-      if (invitationError)
-        throw databaseOperationError(
-          "caricare gli inviti del team",
-          invitationError
-        );
-      if (!invitation || invitation.email !== ctx.user.email.toLowerCase()) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Invito non valido o non più disponibile.",
-        });
-      }
-
-      await assertTeamHasSeat(invitation.owner_user_id, {
-        includePendingInvitations: false,
+      await acceptInvitationAtomically({
+        token: input.token,
+        userId: supabaseUserId,
+        email: ctx.user.email.toLowerCase(),
       });
-
-      const { error: seatError } = await adminAppDb()
-        .from("seat_assignments")
-        .insert({
-          owner_user_id: invitation.owner_user_id,
-          member_user_id: supabaseUserId,
-        });
-      if (seatError)
-        throw databaseOperationError(
-          "collegare l’account al Manager",
-          seatError
-        );
-
-      const now = new Date().toISOString();
-      const { error: updateError } = await adminAppDb()
-        .from("organization_invitations")
-        .update({
-          status: "accepted",
-          accepted_by_user_id: supabaseUserId,
-          accepted_at: now,
-        })
-        .eq("id", invitation.id);
-      if (updateError)
-        throw databaseOperationError(
-          "aggiornare lo stato dell’invito",
-          updateError
-        );
       return { success: true };
     }),
 

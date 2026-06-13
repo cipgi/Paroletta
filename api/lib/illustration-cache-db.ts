@@ -1,4 +1,8 @@
-import type { CachedIllustration, ImageCacheDb } from "./image-generation";
+import type {
+  CachedIllustration,
+  ImageCacheDb,
+  ImageCacheScope,
+} from "./image-generation";
 import type { ImageObjectStorage } from "./image-storage";
 import { parseStorageFilePath } from "./image-storage";
 import { illustrations } from "../store";
@@ -16,6 +20,8 @@ type DbIllustration = {
   byte_size: number | null;
   generation_model: string | null;
   generated_cost_usd: number | null;
+  owner_user_id: string | null;
+  sheet_id: string | null;
   created_at: string;
 };
 
@@ -76,27 +82,36 @@ type PostgrestMutation = {
 
 export function createSupabaseImageCacheDb(
   db: PostgrestLikeClient,
-  options: { imageStorage?: ImageObjectStorage } = {}
+  options: { imageStorage?: ImageObjectStorage; cacheScope?: ImageCacheScope } =
+    {}
 ): ImageCacheDb {
   return {
-    async findByCacheKey(cacheKey) {
-      const query = db.from("illustrations").select("*") as PostgrestQuery;
-      const { data, error } = await query
-        .eq("cache_key", cacheKey)
-        .maybeSingle();
+    async findByCacheKey(cacheKey, methodScope) {
+      const scope = methodScope ?? options.cacheScope;
+      let query = db.from("illustrations").select("*") as PostgrestQuery;
+      query = query.eq("cache_key", cacheKey);
+      if (scope) {
+        query = query
+          .eq("owner_user_id", scope.ownerUserId)
+          .eq("sheet_id", scope.sheetId);
+      }
+      const { data, error } = await query.maybeSingle();
 
       if (error) return null;
       return data
         ? mapDbIllustration(data as DbIllustration, options.imageStorage)
         : null;
     },
-    async save(illustration) {
+    async save(illustration, methodScope) {
+      const scope = methodScope ?? options.cacheScope;
       const { data, error } = await (
         db.from("illustrations").upsert(
           {
             tag: illustration.tag,
             semantic_tags: illustration.semanticTags,
             cache_key: illustration.cacheKey,
+            owner_user_id: scope?.ownerUserId ?? null,
+            sheet_id: scope?.sheetId ?? null,
             file_path: illustration.filePath,
             mime_type: illustration.mimeType,
             source: illustration.source,
@@ -106,7 +121,11 @@ export function createSupabaseImageCacheDb(
             generation_model: illustration.generationModel,
             generated_cost_usd: illustration.generatedCostUsd ?? 0,
           },
-          { onConflict: "cache_key" }
+          {
+            onConflict: scope
+              ? "owner_user_id,sheet_id,cache_key"
+              : "cache_key",
+          }
         ) as PostgrestMutation
       )
         .select("*")
@@ -119,20 +138,22 @@ export function createSupabaseImageCacheDb(
           generatedCostUsd: illustration.generatedCostUsd ?? 0,
           createdAt: new Date().toISOString(),
         };
-        illustrations.push({
-          tag: fallback.tag,
-          semanticTags: fallback.semanticTags,
-          cacheKey: fallback.cacheKey,
-          filePath: fallback.filePath,
-          mimeType: fallback.mimeType ?? null,
-          source: fallback.source,
-          storageBucket: fallback.storageBucket ?? null,
-          storagePath: fallback.storagePath ?? null,
-          byteSize: fallback.byteSize ?? null,
-          fallbackReason: fallback.fallbackReason ?? null,
-          generationModel: fallback.generationModel ?? null,
-          generatedCostUsd: fallback.generatedCostUsd ?? 0,
-        });
+        if (!scope && fallback.source !== "generated") {
+          illustrations.push({
+            tag: fallback.tag,
+            semanticTags: fallback.semanticTags,
+            cacheKey: fallback.cacheKey,
+            filePath: fallback.filePath,
+            mimeType: fallback.mimeType ?? null,
+            source: fallback.source,
+            storageBucket: fallback.storageBucket ?? null,
+            storagePath: fallback.storagePath ?? null,
+            byteSize: fallback.byteSize ?? null,
+            fallbackReason: fallback.fallbackReason ?? null,
+            generationModel: fallback.generationModel ?? null,
+            generatedCostUsd: fallback.generatedCostUsd ?? 0,
+          });
+        }
         return fallback;
       }
 
@@ -143,7 +164,8 @@ export function createSupabaseImageCacheDb(
 
 export function createMemoryImageCacheDb(): ImageCacheDb {
   return {
-    async findByCacheKey(cacheKey) {
+    async findByCacheKey(cacheKey, scope) {
+      if (scope) return null;
       const found = illustrations.find(item => item.cacheKey === cacheKey);
       return found
         ? {
@@ -162,7 +184,14 @@ export function createMemoryImageCacheDb(): ImageCacheDb {
           }
         : null;
     },
-    async save(illustration) {
+    async save(illustration, scope) {
+      if (scope) {
+        return {
+          ...illustration,
+          id: illustration.cacheKey,
+          createdAt: new Date().toISOString(),
+        };
+      }
       const existingIndex = illustrations.findIndex(
         item => item.cacheKey === illustration.cacheKey
       );

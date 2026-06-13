@@ -51,7 +51,7 @@ describe("resolveSubscriptionAccess", () => {
     expect(access.derivedFromProfile).toBe(true);
   });
 
-  it("allows the development plan during the pre-production phase", () => {
+  it("does not grant access for the inactive development plan", () => {
     const access = resolveSubscriptionAccess({
       nowMs,
       profile: {
@@ -61,9 +61,9 @@ describe("resolveSubscriptionAccess", () => {
       subscription: null,
     });
 
-    expect(access.accessActive).toBe(true);
+    expect(access.accessActive).toBe(false);
     expect(access.plan).toBe("sviluppo");
-    expect(access.status).toBe("attivo");
+    expect(access.status).toBe("cancellato");
   });
 
   it("blocks the no-subscription plan", () => {

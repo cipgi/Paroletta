@@ -24,9 +24,15 @@ In produzione il server richiede le credenziali Supabase prima di avviarsi, cos�
 da evitare deploy apparentemente online ma con query TRPC che falliscono a runtime
 con `Invalid API key`. Configura queste variabili nel provider di hosting:
 
+- `SESSION_SECRET` con almeno 32 caratteri casuali, usato per firmare i JWT di sessione applicativa
 - `SUPABASE_URL`
 - `SUPABASE_PUBLISHABLE_KEY` (oppure `SUPABASE_ANON_KEY` per configurazioni legacy)
 - `SUPABASE_SERVICE_ROLE_KEY`
+
+Gli header IP di proxy (`X-Forwarded-For`, `X-Real-IP`, `CF-Connecting-IP`) sono
+ignorati dal rate limit login per default. Imposta `LOGIN_TRUST_PROXY_HEADERS=true`
+solo se il deployment è dietro un proxy fidato che sovrascrive o normalizza questi
+header prima che arrivino al backend.
 
 Per la generazione immagini server-side configura anche `OPENAI_API_KEY`. Il
 provider immagini usa OpenAI con modello predefinito `gpt-image-2`, qualità

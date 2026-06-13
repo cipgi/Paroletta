@@ -63,6 +63,7 @@ export interface Sheet {
   listaParole: string[] | null;
   difficolta: Difficulty;
   pdfUrl: string | null;
+  usageCounted: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -75,6 +76,8 @@ export interface Illustration {
   filePath: string;
   mimeType: string | null;
   source: "generated" | "uploaded" | "mock";
+  ownerUserId: string | null;
+  sheetId: string | null;
   storageBucket: string | null;
   storagePath: string | null;
   byteSize: number | null;

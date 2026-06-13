@@ -1,36 +1,42 @@
 import { z } from "zod";
 
-import { createRouter, publicQuery } from "./middleware";
+import { createRouter, authedQuery } from "./middleware";
 import { illustrations } from "./store";
 import {
   buildSemanticCacheKey,
   normalizeSemanticTag,
 } from "./lib/image-generation";
 
+const publicIllustrations = () =>
+  illustrations.filter(illustration => illustration.source !== "generated");
+
 export const illustrationsRouter = createRouter({
-  list: publicQuery.query(async () => illustrations),
-  byTag: publicQuery
+  list: authedQuery.query(async () => publicIllustrations()),
+  byTag: authedQuery
     .input(z.object({ tag: z.string() }))
     .query(async ({ input }) => {
       const normalizedTag = normalizeSemanticTag(input.tag);
+      const visibleIllustrations = publicIllustrations();
       return (
-        illustrations.find(i => i.semanticTags.includes(normalizedTag)) ??
-        illustrations.find(i => i.tag === input.tag) ??
-        illustrations.find(i => i.tag.includes(input.tag)) ??
+        visibleIllustrations.find(i =>
+          i.semanticTags.includes(normalizedTag)
+        ) ??
+        visibleIllustrations.find(i => i.tag === input.tag) ??
+        visibleIllustrations.find(i => i.tag.includes(input.tag)) ??
         null
       );
     }),
-  bySemanticTags: publicQuery
+  bySemanticTags: authedQuery
     .input(z.object({ tags: z.array(z.string()).min(1).max(12) }))
     .query(async ({ input }) => {
       const cacheKey = buildSemanticCacheKey(input.tags);
-      return illustrations.find(i => i.cacheKey === cacheKey) ?? null;
+      return publicIllustrations().find(i => i.cacheKey === cacheKey) ?? null;
     }),
-  search: publicQuery
+  search: authedQuery
     .input(z.object({ q: z.string() }))
     .query(async ({ input }) => {
       const normalizedQuery = normalizeSemanticTag(input.q);
-      return illustrations
+      return publicIllustrations()
         .filter(
           i =>
             i.tag.includes(input.q) ||

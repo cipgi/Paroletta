@@ -413,6 +413,42 @@ Distrattore 1: singola immagine con un falco al centro nel cielo azzurro.`,
     expect(saved).toBe(0);
   });
 
+  it("passes owner and sheet scope to cache reads", async () => {
+    const scope = {
+      ownerUserId: "00000000-0000-0000-0000-000000000001",
+      sheetId: "00000000-0000-0000-0000-000000000002",
+    };
+    const db: ImageCacheDb = {
+      async findByCacheKey(cacheKey, receivedScope) {
+        expect(cacheKey).toBe("ruolo:target|soggetto:cane");
+        expect(receivedScope).toEqual(scope);
+        return {
+          tag: "Target",
+          semanticTags: ["ruolo:target"],
+          cacheKey,
+          filePath: "cache://target",
+          source: "uploaded",
+        };
+      },
+      async save(illustration) {
+        return illustration;
+      },
+    };
+
+    const result = await resolveImageRequestWithCache(
+      {
+        role: "target",
+        label: "Target",
+        prompt: "cane che mangia mela",
+        semanticTags: ["ruolo:target", "soggetto:cane"],
+      },
+      db,
+      { cacheScope: scope }
+    );
+
+    expect(result.cacheHit).toBe(true);
+  });
+
   it("reads image cache without generating missing images", async () => {
     let saved = 0;
     const db: ImageCacheDb = {

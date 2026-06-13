@@ -32,7 +32,10 @@ import {
 } from "./ai-router";
 import {
   assertActiveSubscription,
+  assertSheetLimitAvailable,
+  getUsageSummary,
   reserveImageGenerationQuota,
+  reserveSheetGenerationQuota,
 } from "./lib/subscription";
 
 function requireSupabaseUserId(unionId: string) {
@@ -141,12 +144,13 @@ async function reserveImageQuotaForCurrentUser(quota: ImageQuotaContext) {
 
   return reserveImageGenerationQuota({
     userId: quota.userId,
-    plan: subscription.plan ?? "sviluppo",
+    plan: subscription.plan ?? "trial",
     accessToken: quota.accessToken,
   });
 }
 
 async function resolveSheetImageAssets(sheet: ReturnType<typeof mapSheet>) {
+  const cacheScope = { ownerUserId: sheet.userId, sheetId: sheet.id };
   const imageRequests = buildImageRequests({
     tipoOutput: sheet.tipoOutput,
     interesse: sheet.interesse,
@@ -160,13 +164,15 @@ async function resolveSheetImageAssets(sheet: ReturnType<typeof mapSheet>) {
   const imageStorage = createSupabaseImageObjectStorage(supabaseAdmin);
   const imageCacheDb = createSupabaseImageCacheDb(adminAppDb(), {
     imageStorage,
+    cacheScope,
   });
 
   return Promise.all(
     imageRequests.map(async request => {
       const illustration = await resolveCachedImageRequest(
         request,
-        imageCacheDb
+        imageCacheDb,
+        cacheScope
       );
       const metadata = getImageRequestCacheMetadata(request);
 
@@ -318,8 +324,10 @@ export const sheetsRouter = createRouter({
       if (!request) throw missingResourceError("Immagine");
 
       const imageStorage = createSupabaseImageObjectStorage(supabaseAdmin);
+      const cacheScope = { ownerUserId: sheet.userId, sheetId: sheet.id };
       const imageCacheDb = createSupabaseImageCacheDb(adminAppDb(), {
         imageStorage,
+        cacheScope,
       });
       const illustration = await resolveImageRequestWithCache(
         request,
@@ -327,6 +335,7 @@ export const sheetsRouter = createRouter({
         {
           force: true,
           imageStorage,
+          cacheScope,
           onGenerateStart: async () =>
             reserveImageQuotaForCurrentUser({
               userId: supabaseUserId,
@@ -363,6 +372,21 @@ export const sheetsRouter = createRouter({
         data.user_id,
         ctx.supabaseAccessToken
       );
+      const account = await getAccountContext(
+        supabaseUserId,
+        ctx.supabaseAccessToken
+      );
+      const subscription = await assertActiveSubscription({
+        ownerUserId: account.ownerUserId,
+        accessToken: ctx.supabaseAccessToken,
+      });
+      const plan = subscription.plan ?? "trial";
+      const usageBeforeGeneration = await getUsageSummary({
+        ownerUserId: account.ownerUserId,
+        plan,
+        accessToken: ctx.supabaseAccessToken,
+      });
+      assertSheetLimitAvailable(usageBeforeGeneration);
       const sheet = mapSheet(data);
       const parsedSheetContent = parseUnifiedSheetContent(sheet.testoGenerato);
       const includeImages =
@@ -386,8 +410,20 @@ export const sheetsRouter = createRouter({
             : undefined,
         includeImages,
       });
-      const generatedSheet =
-        await generateUnifiedSheetFromParams(sanitizedInput);
+      const rollbackSheetQuota = await reserveSheetGenerationQuota({
+        userId: supabaseUserId,
+        plan,
+        accessToken: ctx.supabaseAccessToken,
+      });
+      let generatedSheet: Awaited<
+        ReturnType<typeof generateUnifiedSheetFromParams>
+      >;
+      try {
+        generatedSheet = await generateUnifiedSheetFromParams(sanitizedInput);
+      } catch (error) {
+        await rollbackSheetQuota();
+        throw error;
+      }
       const { data: updated, error: updateError } = await appDb(
         ctx.supabaseAccessToken
       )
@@ -403,6 +439,7 @@ export const sheetsRouter = createRouter({
         .single();
 
       if (updateError || !updated) {
+        await rollbackSheetQuota();
         throw databaseOperationError(
           "rigenerare il testo della scheda",
           updateError

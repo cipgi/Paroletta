@@ -82,12 +82,12 @@ export default function Dashboard() {
     pro: "Pro",
     max: "Max",
   };
-  const currentPlan = subscription?.plan ?? user?.piano ?? "sviluppo";
+  const currentPlan = subscription?.plan ?? user?.piano ?? "trial";
   const currentPlanLabel = planLabels[currentPlan] ?? currentPlan;
   const currentFallbackLimits =
     SubscriptionPlanLimits[
       currentPlan as keyof typeof SubscriptionPlanLimits
-    ] ?? SubscriptionPlanLimits.sviluppo;
+    ] ?? SubscriptionPlanLimits.trial;
   const fallbackSheetUsage =
     user?.piano === "trial"
       ? (user?.trialSchedeUsate ?? 0)

@@ -15,12 +15,24 @@ describe("login security controls", () => {
     resetLoginSecurityStateForTests();
   });
 
-  it("extracts the original client IP from proxy headers", () => {
+  it("ignores spoofable proxy headers by default", () => {
     const headers = new Headers({
       "x-forwarded-for": "203.0.113.10, 10.0.0.2",
+      "x-real-ip": "203.0.113.11",
+      "cf-connecting-ip": "203.0.113.12",
     });
 
-    expect(extractClientIp(headers)).toBe("203.0.113.10");
+    expect(extractClientIp(headers)).toBe("unknown");
+  });
+
+  it("extracts a client IP from proxy headers only when they are trusted", () => {
+    const headers = new Headers({
+      "x-forwarded-for": "198.51.100.99, 203.0.113.10",
+    });
+
+    expect(extractClientIp(headers, { trustProxyHeaders: true })).toBe(
+      "203.0.113.10"
+    );
   });
 
   it("requires a valid CAPTCHA after repeated failed logins", () => {
