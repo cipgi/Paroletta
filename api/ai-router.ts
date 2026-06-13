@@ -16,11 +16,20 @@ import {
   userFacingError,
 } from "./lib/errors";
 import { getAccountContext } from "./lib/organization";
+import { createSupabaseImageCacheDb } from "./lib/illustration-cache-db";
+import {
+  buildImageRequests,
+  resolveImageRequestWithCache,
+  type ImageRequest,
+} from "./lib/image-generation";
+import { createSupabaseImageObjectStorage } from "./lib/image-storage";
 import {
   assertActiveSubscription,
   assertSheetLimitAvailable,
   getUsageSummary,
+  reserveImageGenerationQuota,
   reserveSheetGenerationQuota,
+  type UsageSummary,
 } from "./lib/subscription";
 import { sanitizePlainText } from "./lib/sanitize";
 
@@ -86,6 +95,20 @@ export type GenerationParams = {
 type PromptMessage = {
   role: "system" | "user";
   content: string;
+};
+
+type GeneratedSheetRow = {
+  id: string;
+  user_id: string;
+  fonema: string;
+  interesse: string;
+  tipo_output: string;
+  testo_generato: string;
+  tag_immagine: string | null;
+  lista_parole: string[] | null;
+  difficolta: string;
+  pdf_url: string | null;
+  created_at: string;
 };
 
 const MAX_ASPETTO_SPECIFICO_LENGTH = 400;
@@ -658,6 +681,82 @@ export async function generateUnifiedSheetFromParams(params: GenerationParams) {
   };
 }
 
+async function rollbackCreatedSheet(sheetId: string) {
+  const { error } = await adminAppDb()
+    .from("sheets")
+    .delete()
+    .eq("id", sheetId);
+
+  if (error) {
+    console.error("[ai-router] generated sheet cleanup failed", {
+      sheetId,
+      error,
+    });
+  }
+}
+
+function assertEnoughImageQuota(summary: UsageSummary, imageCount: number) {
+  if (imageCount <= summary.images.remaining) return;
+
+  throw new TRPCError({
+    code: "FORBIDDEN",
+    message: `Hai raggiunto il limite di ${summary.images.limit} immagini per il tuo piano. Passa a un piano superiore per continuare.`,
+  });
+}
+
+async function generateInitialSheetImages(params: {
+  sheet: GeneratedSheetRow;
+  imageRequests: ImageRequest[];
+  plan: string;
+  accessToken?: string;
+}) {
+  if (params.imageRequests.length === 0) return;
+
+  const { supabaseAdmin } = await import("./lib/supabase");
+  const imageStorage = createSupabaseImageObjectStorage(supabaseAdmin);
+  const cacheScope = {
+    ownerUserId: params.sheet.user_id,
+    sheetId: params.sheet.id,
+  };
+  const imageCacheDb = createSupabaseImageCacheDb(adminAppDb(), {
+    imageStorage,
+    cacheScope,
+  });
+  const imageQuotaRollbacks: Array<() => Promise<void>> = [];
+
+  const reserveTrackedImageQuota = async () => {
+    const rollback = await reserveImageGenerationQuota({
+      userId: params.sheet.user_id,
+      plan: params.plan,
+      accessToken: params.accessToken,
+    });
+    let pending = true;
+    const trackedRollback = async () => {
+      if (!pending) return;
+      pending = false;
+      await rollback();
+    };
+    imageQuotaRollbacks.push(trackedRollback);
+    return trackedRollback;
+  };
+
+  try {
+    for (const request of params.imageRequests) {
+      await resolveImageRequestWithCache(request, imageCacheDb, {
+        force: true,
+        imageStorage,
+        cacheScope,
+        onGenerateStart: reserveTrackedImageQuota,
+      });
+    }
+  } catch (error) {
+    await Promise.allSettled(
+      imageQuotaRollbacks.map(rollback => rollback())
+    );
+    throw error;
+  }
+}
+
 export const aiRouter = createRouter({
   generate: authedQuery
     .input(
@@ -740,6 +839,23 @@ export const aiRouter = createRouter({
         throw error;
       }
 
+      const imageRequests = buildImageRequests({
+        tipoOutput: sanitizedInput.tipoOutput,
+        interesse: sanitizedInput.interesse,
+        tagImmagine: generatedSheet.tagImmagine,
+        testoGenerato: generatedSheet.serializedSheet,
+        numeroOpzioni:
+          sanitizedInput.tipoOutput === "discriminazione_visiva"
+            ? sanitizedInput.numeroOpzioni
+            : undefined,
+      });
+      try {
+        assertEnoughImageQuota(usageBeforeGeneration, imageRequests.length);
+      } catch (error) {
+        await rollbackSheetQuota();
+        throw error;
+      }
+
       const { data: inserted, error } = await adminAppDb()
         .from("sheets")
         .insert({
@@ -766,6 +882,19 @@ export const aiRouter = createRouter({
           });
         }
         throw databaseOperationError("salvare la scheda generata", error);
+      }
+
+      try {
+        await generateInitialSheetImages({
+          sheet: inserted as GeneratedSheetRow,
+          imageRequests,
+          plan: piano,
+          accessToken: ctx.supabaseAccessToken,
+        });
+      } catch (error) {
+        await rollbackCreatedSheet(inserted.id);
+        await rollbackSheetQuota();
+        throw error;
       }
 
       const sheet = {

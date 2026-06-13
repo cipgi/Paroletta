@@ -413,6 +413,83 @@ Distrattore 1: singola immagine con un falco al centro nel cielo azzurro.`,
     expect(saved).toBe(0);
   });
 
+  it("force-generates images without reading from cache", async () => {
+    const previousKeys = {
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    };
+    process.env.OPENAI_API_KEY = "test-openai-key";
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [{ b64_json: Buffer.from("forced image").toString("base64") }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+
+    try {
+      let cacheReads = 0;
+      let saved = 0;
+      let uploaded = 0;
+      const imageStorage: ImageObjectStorage = {
+        async uploadGeneratedImage() {
+          uploaded += 1;
+          return {
+            filePath: "https://storage.example/forced-image",
+            storageBucket: "generated-images",
+            storagePath: "generated/forced.png",
+            byteSize: Buffer.byteLength("forced image"),
+          };
+        },
+        async getDisplayUrl() {
+          return "https://storage.example/forced-image";
+        },
+      };
+      const db: ImageCacheDb = {
+        async findByCacheKey() {
+          cacheReads += 1;
+          return {
+            tag: "Target",
+            semanticTags: ["ruolo:target"],
+            cacheKey: "ruolo:target|soggetto:cane",
+            filePath: "cache://target",
+            source: "uploaded",
+          };
+        },
+        async save(illustration) {
+          saved += 1;
+          return {
+            ...illustration,
+            filePath: "https://storage.example/forced-image",
+          };
+        },
+      };
+
+      const result = await resolveImageRequestWithCache(
+        {
+          role: "target",
+          label: "Target",
+          prompt: "cane che mangia mela",
+          semanticTags: ["ruolo:target", "soggetto:cane"],
+        },
+        db,
+        { force: true, imageStorage }
+      );
+
+      expect(cacheReads).toBe(0);
+      expect(uploaded).toBe(1);
+      expect(saved).toBe(1);
+      expect(result.cacheHit).toBe(false);
+      expect(result.filePath).toBe("https://storage.example/forced-image");
+    } finally {
+      fetchSpy.mockRestore();
+      for (const [key, value] of Object.entries(previousKeys)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
   it("passes owner and sheet scope to cache reads", async () => {
     const scope = {
       ownerUserId: "00000000-0000-0000-0000-000000000001",
