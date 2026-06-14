@@ -39,6 +39,12 @@ In Supabase Auth aggiungi anche `${APP_BASE_URL}/reset-password` tra le Redirect
 URLs consentite e configura un SMTP custom in produzione per evitare i limiti del
 servizio email di default.
 
+Se il link email di recupero porta a `/` o a `localhost:3000` invece che a
+`/reset-password`, Supabase sta usando il Site URL o sta rifiutando il redirect
+richiesto: controlla che `APP_BASE_URL` corrisponda al dominio pubblico e che la
+Redirect URL esatta sia allowlistata. Se compare `otp_expired`, richiedi un nuovo
+link: i link di recovery sono temporanei e monouso.
+
 Gli header IP di proxy (`X-Forwarded-For`, `X-Real-IP`, `CF-Connecting-IP`) sono
 ignorati dal rate limit login per default. Imposta `LOGIN_TRUST_PROXY_HEADERS=true`
 solo se il deployment è dietro un proxy fidato che sovrascrive o normalizza questi
