@@ -1,4 +1,9 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import {
+  getPasswordRecoveryErrorMessageFromUrl,
+  hasPasswordRecoveryCallbackInUrl,
+  readRecoveryParamsFromUrlParts,
+} from "./supabase-password-reset-url";
 
 export type SupabasePublicConfig = {
   supabaseUrl: string;
@@ -18,17 +23,10 @@ export function createPasswordResetSupabaseClient(
 }
 
 function readRecoveryParams() {
-  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-  const search = new URLSearchParams(window.location.search);
-
-  return {
-    accessToken: hash.get("access_token") ?? search.get("access_token"),
-    refreshToken: hash.get("refresh_token") ?? search.get("refresh_token"),
-    type: hash.get("type") ?? search.get("type"),
-    code: search.get("code") ?? hash.get("code"),
-    error: hash.get("error") ?? search.get("error"),
-    errorCode: hash.get("error_code") ?? search.get("error_code"),
-  };
+  return readRecoveryParamsFromUrlParts({
+    hash: window.location.hash,
+    search: window.location.search,
+  });
 }
 
 function clearRecoveryParamsFromUrl() {
@@ -71,26 +69,15 @@ export async function establishPasswordRecoverySession(client: SupabaseClient) {
 }
 
 export function hasPasswordRecoveryCallback() {
-  const params = readRecoveryParams();
-
-  return Boolean(
-    params.accessToken ||
-    params.refreshToken ||
-    params.code ||
-    params.type === "recovery" ||
-    params.error ||
-    params.errorCode
-  );
+  return hasPasswordRecoveryCallbackInUrl({
+    hash: window.location.hash,
+    search: window.location.search,
+  });
 }
 
 export function getPasswordRecoveryErrorMessage() {
-  const params = readRecoveryParams();
-
-  if (!params.error && !params.errorCode) return null;
-
-  if (params.errorCode === "otp_expired") {
-    return "Link non valido o scaduto. Richiedi un nuovo recupero password.";
-  }
-
-  return "Link di recupero non valido. Richiedi un nuovo recupero password.";
+  return getPasswordRecoveryErrorMessageFromUrl({
+    hash: window.location.hash,
+    search: window.location.search,
+  });
 }
