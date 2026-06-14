@@ -94,6 +94,11 @@ export interface SeatAssignment {
 }
 
 export type InvitationStatus = "pending" | "accepted" | "revoked";
+export type PasswordResetRequestStatus =
+  | "sent"
+  | "failed"
+  | "rate_limited"
+  | "suppressed";
 
 export interface OrganizationInvitation {
   id: string;
@@ -106,4 +111,13 @@ export interface OrganizationInvitation {
   createdAt: string;
   acceptedAt: string | null;
   revokedAt: string | null;
+}
+
+export interface PasswordResetRequest {
+  id: string;
+  emailHash: string;
+  clientIpHash: string;
+  status: PasswordResetRequestStatus;
+  failureCode: string | null;
+  createdAt: string;
 }

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  assertCaptchaChallenge,
   assertLoginAllowed,
   buildLoginCaptcha,
   extractClientIp,
@@ -58,6 +59,25 @@ describe("login security controls", () => {
         captchaAnswer: "4",
       })
     ).not.toThrow();
+  });
+
+  it("validates one-time CAPTCHA challenges for public anti-automation flows", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const captcha = buildLoginCaptcha();
+
+    expect(() =>
+      assertCaptchaChallenge({
+        captchaChallengeId: captcha.id,
+        captchaAnswer: "4",
+      })
+    ).not.toThrow();
+
+    expect(() =>
+      assertCaptchaChallenge({
+        captchaChallengeId: captcha.id,
+        captchaAnswer: "4",
+      })
+    ).toThrow("CAPTCHA richiesto o non valido.");
   });
 
   it("rate limits login attempts by IP within the configured window", () => {

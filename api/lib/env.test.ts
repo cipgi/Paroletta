@@ -9,6 +9,7 @@ describe("getMissingProductionEnvVars", () => {
         securityCspMode: "off",
         sessionSecret: "a-production-session-secret-32-chars",
         loginTrustProxyHeaders: false,
+        appBaseUrl: "https://app.example.com",
         supabaseUrl: "https://example.supabase.co",
         supabasePublishableKey: "publishable-key",
         supabaseServiceRoleKey: "",
@@ -23,6 +24,7 @@ describe("getMissingProductionEnvVars", () => {
         securityCspMode: "off",
         sessionSecret: "dev-session-secret",
         loginTrustProxyHeaders: false,
+        appBaseUrl: "https://app.example.com",
         supabaseUrl: "https://example.supabase.co",
         supabasePublishableKey: "publishable-key",
         supabaseServiceRoleKey: "service-role-key",
@@ -37,10 +39,26 @@ describe("getMissingProductionEnvVars", () => {
         securityCspMode: "off",
         sessionSecret: "a-production-session-secret-32-chars",
         loginTrustProxyHeaders: false,
+        appBaseUrl: "https://app.example.com",
         supabaseUrl: "https://example.supabase.co",
         supabasePublishableKey: "anon-or-publishable-key",
         supabaseServiceRoleKey: "service-role-key",
       })
     ).toEqual([]);
+  });
+
+  it("requires an HTTPS app base URL for password reset redirects", () => {
+    expect(
+      getMissingProductionEnvVars({
+        isProduction: true,
+        securityCspMode: "off",
+        sessionSecret: "a-production-session-secret-32-chars",
+        loginTrustProxyHeaders: false,
+        appBaseUrl: "http://app.example.com",
+        supabaseUrl: "https://example.supabase.co",
+        supabasePublishableKey: "publishable-key",
+        supabaseServiceRoleKey: "service-role-key",
+      })
+    ).toEqual(["APP_BASE_URL (absolute HTTPS URL)"]);
   });
 });

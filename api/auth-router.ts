@@ -4,6 +4,7 @@ import { PasswordPolicy, Session } from "@contracts/constants";
 import { getSessionCookieOptions } from "./lib/cookies";
 import { createRouter, authedQuery, publicQuery } from "./middleware";
 import {
+  assertCaptchaChallenge,
   assertLoginAllowed,
   buildLoginCaptcha,
   recordFailedLogin,
@@ -13,11 +14,8 @@ import { signSessionToken } from "./oauth/session";
 import { upsertUser } from "./queries/users";
 import { subscriptions, sheets, users } from "./store";
 import { supabase, supabaseAdmin } from "./lib/supabase";
-import { supabaseConfigured } from "./lib/env";
-import {
-  adminAppDb,
-  getSupabaseUserIdFromUnionId,
-} from "./lib/db";
+import { env, supabaseAdminConfigured, supabaseConfigured } from "./lib/env";
+import { adminAppDb, getSupabaseUserIdFromUnionId } from "./lib/db";
 import {
   databaseOperationError,
   missingResourceError,
@@ -31,6 +29,14 @@ import {
   appendClearedSupabaseSessionCookies,
   appendSupabaseSessionCookies,
 } from "./lib/session-cookies";
+import {
+  PASSWORD_RESET_SUCCESS_MESSAGE,
+  buildPasswordResetRedirectUrl,
+  getPasswordResetFailureCode,
+  getPasswordResetWindowStart,
+  hashPasswordResetIdentifier,
+  isPasswordResetRateLimited,
+} from "./lib/password-reset-security";
 
 // Supabase email/password authentication lives in this router. OAuth provider
 // handlers are intentionally separate so removing Google OAuth does not affect
@@ -86,8 +92,77 @@ const loginCredentialsSchema = credentialsSchema
     captchaAnswer: z.string().optional(),
   });
 
+const passwordResetRequestSchema = z.object({
+  email: z.email().transform(value => value.trim().toLowerCase()),
+  captchaChallengeId: z.string().min(1),
+  captchaAnswer: z.string().min(1).max(32),
+});
+
+type PasswordResetRequestStatus =
+  | "sent"
+  | "failed"
+  | "rate_limited"
+  | "suppressed";
+
+async function countRecentPasswordResetRequests(
+  db: AppDbClient,
+  column: "email_hash" | "client_ip_hash",
+  value: string,
+  windowStart: string
+) {
+  const { count, error } = await db
+    .from("password_reset_requests")
+    .select("id", { count: "exact", head: true })
+    .eq(column, value)
+    .gte("created_at", windowStart);
+
+  if (error) {
+    throw databaseOperationError(
+      "verificare il limite recupero password",
+      error
+    );
+  }
+
+  return count ?? 0;
+}
+
+async function recordPasswordResetRequest(params: {
+  db: AppDbClient;
+  emailHash: string;
+  clientIpHash: string;
+  status: PasswordResetRequestStatus;
+  failureCode?: string;
+}) {
+  const { error } = await params.db.from("password_reset_requests").insert({
+    email_hash: params.emailHash,
+    client_ip_hash: params.clientIpHash,
+    status: params.status,
+    failure_code: params.failureCode ?? null,
+  });
+
+  if (error) {
+    console.warn("[password-reset] audit insert failed", {
+      status: params.status,
+      code: getPasswordResetFailureCode(error),
+    });
+  }
+}
+
 export const authRouter = createRouter({
   loginCaptcha: publicQuery.query(() => buildLoginCaptcha()),
+  supabasePublicConfig: publicQuery.query(() => {
+    if (!supabaseConfigured) {
+      throw userFacingError(
+        "SERVICE_UNAVAILABLE",
+        "Recupero password temporaneamente non disponibile: autenticazione non configurata."
+      );
+    }
+
+    return {
+      supabaseUrl: env.supabaseUrl,
+      supabasePublishableKey: env.supabasePublishableKey,
+    };
+  }),
   registerWithCredentials: publicQuery
     .input(credentialsSchema)
     .mutation(async ({ input }) => {
@@ -180,6 +255,96 @@ export const authRouter = createRouter({
         );
 
       return { success: true, verificationRequired: true };
+    }),
+  requestPasswordReset: publicQuery
+    .input(passwordResetRequestSchema)
+    .mutation(async ({ input, ctx }) => {
+      if (!supabaseConfigured || !supabaseAdminConfigured) {
+        throw userFacingError(
+          "SERVICE_UNAVAILABLE",
+          "Recupero password temporaneamente non disponibile: autenticazione non configurata."
+        );
+      }
+
+      assertCaptchaChallenge({
+        captchaChallengeId: input.captchaChallengeId,
+        captchaAnswer: input.captchaAnswer,
+      });
+
+      const appDatabase = adminAppDb();
+      const emailHash = hashPasswordResetIdentifier(input.email);
+      const hasClientIp = ctx.clientIp !== "unknown";
+      const clientIpHash = hashPasswordResetIdentifier(ctx.clientIp);
+      const windowStart = getPasswordResetWindowStart();
+      const [emailRequestCount, clientIpRequestCount] = await Promise.all([
+        countRecentPasswordResetRequests(
+          appDatabase,
+          "email_hash",
+          emailHash,
+          windowStart
+        ),
+        hasClientIp
+          ? countRecentPasswordResetRequests(
+              appDatabase,
+              "client_ip_hash",
+              clientIpHash,
+              windowStart
+            )
+          : Promise.resolve(0),
+      ]);
+
+      if (
+        isPasswordResetRateLimited({
+          emailRequestCount,
+          clientIpRequestCount,
+          hasClientIp,
+        })
+      ) {
+        await recordPasswordResetRequest({
+          db: appDatabase,
+          emailHash,
+          clientIpHash,
+          status: "rate_limited",
+        });
+        return { success: true, message: PASSWORD_RESET_SUCCESS_MESSAGE };
+      }
+
+      const redirectTo = buildPasswordResetRedirectUrl(ctx.req);
+      let status: PasswordResetRequestStatus = "sent";
+      let failureCode: string | undefined;
+
+      try {
+        const { error } = await supabase.auth.resetPasswordForEmail(
+          input.email,
+          {
+            redirectTo,
+          }
+        );
+
+        if (error) {
+          status = "failed";
+          failureCode = getPasswordResetFailureCode(error);
+          console.warn("[password-reset] Supabase request failed", {
+            code: failureCode,
+          });
+        }
+      } catch (error) {
+        status = "failed";
+        failureCode = getPasswordResetFailureCode(error);
+        console.warn("[password-reset] Supabase request failed", {
+          code: failureCode,
+        });
+      }
+
+      await recordPasswordResetRequest({
+        db: appDatabase,
+        emailHash,
+        clientIpHash,
+        status,
+        failureCode,
+      });
+
+      return { success: true, message: PASSWORD_RESET_SUCCESS_MESSAGE };
     }),
   loginWithCredentials: publicQuery
     .input(loginCredentialsSchema)

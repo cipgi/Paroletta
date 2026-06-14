@@ -14,9 +14,14 @@ Il flusso credentials è implementato nel router TRPC `api/auth-router.ts`, tram
 `supabase.auth.signUp` per la registrazione e `supabase.auth.signInWithPassword`
 per l'accesso.
 
+Il recupero password parte da `auth.requestPasswordReset`: il backend applica
+CAPTCHA, rate limit/audit su `app.password_reset_requests` e invia l'email tramite
+`supabase.auth.resetPasswordForEmail`. Il link torna a `/reset-password`, dove il
+frontend usa una sessione Supabase temporanea solo in memoria per chiamare
+`supabase.auth.updateUser`.
+
 Il login Google/OAuth non è esposto: non ci sono route HTTP dedicate a Google in
 `api/boot.ts` e la schermata di login mostra solo il form email/password.
-
 
 ## Variabili d’ambiente di produzione
 
@@ -28,6 +33,11 @@ con `Invalid API key`. Configura queste variabili nel provider di hosting:
 - `SUPABASE_URL`
 - `SUPABASE_PUBLISHABLE_KEY` (oppure `SUPABASE_ANON_KEY` per configurazioni legacy)
 - `SUPABASE_SERVICE_ROLE_KEY`
+- `APP_BASE_URL`, URL pubblico HTTPS dell'app, usato per i link email di recupero password
+
+In Supabase Auth aggiungi anche `${APP_BASE_URL}/reset-password` tra le Redirect
+URLs consentite e configura un SMTP custom in produzione per evitare i limiti del
+servizio email di default.
 
 Gli header IP di proxy (`X-Forwarded-For`, `X-Real-IP`, `CF-Connecting-IP`) sono
 ignorati dal rate limit login per default. Imposta `LOGIN_TRUST_PROXY_HEADERS=true`
@@ -87,9 +97,9 @@ If you are developing a production application, we recommend updating the config
 
 ```js
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(["dist"]),
   {
-    files: ['**/*.{ts,tsx}'],
+    files: ["**/*.{ts,tsx}"],
     extends: [
       // Other configs...
 
@@ -104,40 +114,40 @@ export default defineConfig([
     ],
     languageOptions: {
       parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        project: ["./tsconfig.node.json", "./tsconfig.app.json"],
         tsconfigRootDir: import.meta.dirname,
       },
       // other options...
     },
   },
-])
+]);
 ```
 
 You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
 
 ```js
 // eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+import reactX from "eslint-plugin-react-x";
+import reactDom from "eslint-plugin-react-dom";
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(["dist"]),
   {
-    files: ['**/*.{ts,tsx}'],
+    files: ["**/*.{ts,tsx}"],
     extends: [
       // Other configs...
       // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
+      reactX.configs["recommended-typescript"],
       // Enable lint rules for React DOM
       reactDom.configs.recommended,
     ],
     languageOptions: {
       parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        project: ["./tsconfig.node.json", "./tsconfig.app.json"],
         tsconfigRootDir: import.meta.dirname,
       },
       // other options...
     },
   },
-])
+]);
 ```
