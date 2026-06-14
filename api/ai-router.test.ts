@@ -190,6 +190,60 @@ describe("AI prompt security", () => {
     expect(morphology[1].content).toContain('"tipoOutput":"morfosintassi"');
   });
 
+  it("scopes clinical fields to the selected worksheet type", () => {
+    const pragmaticParams = sanitizeGenerationParams({
+      eta: "8 anni",
+      fonema: "r",
+      interesse: "calcio",
+      tipoOutput: "pragmatica",
+      aspettoSpecifico: "turno conversazionale",
+      scenarioSmart: "due bambini vogliono tirare lo stesso rigore",
+      elementoGrammaticale: "articoli determinativi",
+      descrizioneScena: "una frase con articoli determinativi",
+      numeroOpzioni: 4,
+      numeroScene: 5,
+    });
+    const pragmatic = buildPromptMessages(pragmaticParams);
+
+    expect(pragmaticParams.elementoGrammaticale).toBeUndefined();
+    expect(pragmaticParams.descrizioneScena).toBeUndefined();
+    expect(pragmaticParams.numeroOpzioni).toBeUndefined();
+    expect(pragmaticParams.numeroScene).toBeUndefined();
+    expect(pragmatic[1].content).toContain("turno conversazionale");
+    expect(pragmatic[1].content).not.toContain("articoli determinativi");
+    expect(pragmatic[1].content).not.toContain("elementoGrammaticale");
+    expect(pragmatic[1].content).not.toContain("descrizioneScena");
+
+    const morphologyParams = sanitizeGenerationParams({
+      eta: "6 anni",
+      fonema: "r",
+      interesse: "gatto",
+      tipoOutput: "morfosintassi_complessa",
+      aspettoSpecifico: "turno conversazionale",
+      scenarioSmart: "due bambini vogliono lo stesso gioco",
+      elementoGrammaticale: "articoli determinativi",
+      descrizioneScena: "la bambina prende la mela",
+      livelloComplessita: "base",
+    });
+    const morphology = buildPromptMessages(morphologyParams);
+
+    expect(morphologyParams.aspettoSpecifico).toBeUndefined();
+    expect(morphologyParams.scenarioSmart).toBeUndefined();
+    expect(morphology[1].content).toContain("articoli determinativi");
+    expect(morphology[1].content).not.toContain("turno conversazionale");
+    expect(morphology[1].content).not.toContain("scenarioSmart");
+
+    expect(() =>
+      sanitizeGenerationParams({
+        eta: "8 anni",
+        fonema: "r",
+        interesse: "nessuno",
+        tipoOutput: "pragmatica",
+        elementoGrammaticale: "articoli determinativi",
+      })
+    ).toThrow("Inserisci un argomento o una frase target");
+  });
+
   it("supports disabling images for optional worksheet types only", () => {
     const pragmatic = sanitizeGenerationParams({
       eta: "8 anni",

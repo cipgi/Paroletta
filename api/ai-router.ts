@@ -151,6 +151,27 @@ function hasUserProvidedGenerationContext(input: {
   );
 }
 
+function getGenerationFieldScope(tipoOutput: TipoOutput) {
+  const tipo = normalizeUnifiedSheetType(tipoOutput);
+  const isTextWithFonema =
+    tipo === "storia" || tipo === "filastrocca" || tipo === "lista_parole";
+
+  return {
+    usesFonema: isTextWithFonema,
+    usesAspettoSpecifico: isTextWithFonema || tipo === "pragmatica",
+    usesScenarioSmart:
+      tipo === "discriminazione_visiva" ||
+      tipo === "narrazione_sequenze" ||
+      tipo === "pragmatica",
+    usesElementoGrammaticale: tipo === "morfosintassi",
+    usesLivelloComplessita:
+      tipo === "morfosintassi" || tipo === "pragmatica",
+    usesDescrizioneScena: tipo === "morfosintassi",
+    usesNumeroOpzioni: tipo === "discriminazione_visiva",
+    usesNumeroScene: tipo === "narrazione_sequenze",
+  };
+}
+
 export function sanitizePromptVariable(
   input: string,
   maxLength: number
@@ -213,6 +234,28 @@ export function sanitizeGenerationParams(input: {
         MAX_SCENE_DESCRIPTION_LENGTH
       )
     : undefined;
+  const fieldScope = getGenerationFieldScope(input.tipoOutput);
+  const scopedAspettoSpecifico = fieldScope.usesAspettoSpecifico
+    ? aspettoSpecifico
+    : undefined;
+  const scopedScenarioSmart = fieldScope.usesScenarioSmart
+    ? scenarioSmart
+    : undefined;
+  const scopedElementoGrammaticale = fieldScope.usesElementoGrammaticale
+    ? elementoGrammaticale
+    : undefined;
+  const scopedDescrizioneScena = fieldScope.usesDescrizioneScena
+    ? descrizioneScena
+    : undefined;
+  const scopedLivelloComplessita = fieldScope.usesLivelloComplessita
+    ? input.livelloComplessita
+    : undefined;
+  const scopedNumeroOpzioni = fieldScope.usesNumeroOpzioni
+    ? Math.min(Math.max(input.numeroOpzioni ?? 4, 2), 4)
+    : undefined;
+  const scopedNumeroScene = fieldScope.usesNumeroScene
+    ? Math.min(Math.max(input.numeroScene ?? 4, 3), 5)
+    : undefined;
 
   const allowedInterest = assertAllowedValue(
     input.interesse,
@@ -223,10 +266,10 @@ export function sanitizeGenerationParams(input: {
   if (
     allowedInterest === NO_INTEREST_VALUE &&
     !hasUserProvidedGenerationContext({
-      aspettoSpecifico,
-      scenarioSmart,
-      elementoGrammaticale,
-      descrizioneScena,
+      aspettoSpecifico: scopedAspettoSpecifico,
+      scenarioSmart: scopedScenarioSmart,
+      elementoGrammaticale: scopedElementoGrammaticale,
+      descrizioneScena: scopedDescrizioneScena,
     })
   ) {
     throw new TRPCError({
@@ -241,13 +284,13 @@ export function sanitizeGenerationParams(input: {
     fonema: assertAllowedValue(input.fonema, ALLOWED_FONEMI, "Fonema"),
     interesse: resolveInterestForGeneration(allowedInterest),
     tipoOutput: input.tipoOutput,
-    aspettoSpecifico: aspettoSpecifico || undefined,
-    scenarioSmart: scenarioSmart || undefined,
-    elementoGrammaticale: elementoGrammaticale || undefined,
-    livelloComplessita: input.livelloComplessita,
-    descrizioneScena: descrizioneScena || undefined,
-    numeroOpzioni: Math.min(Math.max(input.numeroOpzioni ?? 4, 2), 4),
-    numeroScene: Math.min(Math.max(input.numeroScene ?? 4, 3), 5),
+    aspettoSpecifico: scopedAspettoSpecifico || undefined,
+    scenarioSmart: scopedScenarioSmart || undefined,
+    elementoGrammaticale: scopedElementoGrammaticale || undefined,
+    livelloComplessita: scopedLivelloComplessita,
+    descrizioneScena: scopedDescrizioneScena || undefined,
+    numeroOpzioni: scopedNumeroOpzioni,
+    numeroScene: scopedNumeroScene,
     includeImages:
       input.includeImages !== false || !canOmitSheetImages(input.tipoOutput),
   };
@@ -500,24 +543,41 @@ Controllo qualità obbligatorio: il target deve rendere vera la consegna; ogni d
 }
 
 export function buildPromptMessages(params: GenerationParams): PromptMessage[] {
-  const sanitizedVariables = {
+  const tipoOutput = normalizeUnifiedSheetType(params.tipoOutput);
+  const fieldScope = getGenerationFieldScope(params.tipoOutput);
+  const sanitizedVariables: Record<string, unknown> = {
     eta: params.eta,
-    fonema: params.fonema,
     interesse: params.interesse,
-    tipoOutput: normalizeUnifiedSheetType(params.tipoOutput),
-    aspettoSpecifico: params.aspettoSpecifico ?? null,
-    scenarioSmart: params.scenarioSmart ?? null,
-    elementoGrammaticale: params.elementoGrammaticale ?? null,
-    livelloComplessita: params.livelloComplessita ?? null,
-    descrizioneScena: params.descrizioneScena ?? null,
-    numeroOpzioni: params.numeroOpzioni ?? null,
-    numeroScene: params.numeroScene ?? null,
+    tipoOutput,
     includeImages: params.includeImages,
-    interessiDisponibili:
-      params.interesse === FREE_INTEREST_VALUE
-        ? AVAILABLE_SPECIFIC_INTERESTS
-        : null,
   };
+  if (fieldScope.usesFonema) sanitizedVariables.fonema = params.fonema;
+  if (fieldScope.usesAspettoSpecifico) {
+    sanitizedVariables.aspettoSpecifico = params.aspettoSpecifico ?? null;
+  }
+  if (fieldScope.usesScenarioSmart) {
+    sanitizedVariables.scenarioSmart = params.scenarioSmart ?? null;
+  }
+  if (fieldScope.usesElementoGrammaticale) {
+    sanitizedVariables.elementoGrammaticale =
+      params.elementoGrammaticale ?? null;
+  }
+  if (fieldScope.usesLivelloComplessita) {
+    sanitizedVariables.livelloComplessita =
+      params.livelloComplessita ?? null;
+  }
+  if (fieldScope.usesDescrizioneScena) {
+    sanitizedVariables.descrizioneScena = params.descrizioneScena ?? null;
+  }
+  if (fieldScope.usesNumeroOpzioni) {
+    sanitizedVariables.numeroOpzioni = params.numeroOpzioni ?? null;
+  }
+  if (fieldScope.usesNumeroScene) {
+    sanitizedVariables.numeroScene = params.numeroScene ?? null;
+  }
+  if (params.interesse === FREE_INTEREST_VALUE) {
+    sanitizedVariables.interessiDisponibili = AVAILABLE_SPECIFIC_INTERESTS;
+  }
 
   return [
     {
