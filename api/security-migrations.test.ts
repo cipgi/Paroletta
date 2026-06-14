@@ -5,6 +5,10 @@ const hardeningSql = readFileSync(
   "db/migrations/023_security_hardening.sql",
   "utf8"
 );
+const passwordResetSql = readFileSync(
+  "db/migrations/024_password_reset_audit.sql",
+  "utf8"
+);
 
 describe("security hardening migration", () => {
   it("does not leave sviluppo as a public default or active plan", () => {
@@ -15,19 +19,17 @@ describe("security hardening migration", () => {
   });
 
   it("blocks direct entitlement and subscription self-writes", () => {
-    expect(hardeningSql).toContain(
-      "profile_entitlement_fields_admin_only"
-    );
+    expect(hardeningSql).toContain("profile_entitlement_fields_admin_only");
     expect(hardeningSql).toContain("subscription_admin_only");
-    expect(hardeningSql).toContain("drop policy if exists \"sub owner read/write\"");
+    expect(hardeningSql).toContain(
+      'drop policy if exists "sub owner read/write"'
+    );
   });
 
   it("binds generated illustration cache rows to owner and sheet", () => {
     expect(hardeningSql).toContain("owner_user_id uuid");
     expect(hardeningSql).toContain("sheet_id uuid");
-    expect(hardeningSql).toContain(
-      "idx_illustrations_owner_sheet_cache_key"
-    );
+    expect(hardeningSql).toContain("idx_illustrations_owner_sheet_cache_key");
   });
 
   it("adds atomic quota and invitation RPCs while revoking direct user execution", () => {
@@ -40,5 +42,22 @@ describe("security hardening migration", () => {
     );
     expect(hardeningSql).toContain("team_seat_limit_reached");
     expect(hardeningSql).toContain("invalid_invitation");
+  });
+});
+
+describe("password reset audit migration", () => {
+  it("stores hashed reset identifiers without direct user access", () => {
+    expect(passwordResetSql).toContain("app.password_reset_requests");
+    expect(passwordResetSql).toContain("email_hash text not null");
+    expect(passwordResetSql).toContain("client_ip_hash text not null");
+    expect(passwordResetSql).toContain(
+      "alter table app.password_reset_requests enable row level security"
+    );
+    expect(passwordResetSql).toContain(
+      "revoke all on table app.password_reset_requests from public, anon, authenticated"
+    );
+    expect(passwordResetSql).toContain(
+      "grant select, insert on table app.password_reset_requests to service_role"
+    );
   });
 });

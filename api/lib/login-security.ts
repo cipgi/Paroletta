@@ -112,6 +112,36 @@ export function getLoginSecurityStatus(ip: string, email: string) {
   };
 }
 
+export function assertCaptchaChallenge(params: {
+  captchaChallengeId?: string;
+  captchaAnswer?: string;
+}) {
+  const timestamp = now();
+  pruneCaptchaChallenges(timestamp);
+
+  const challengeId = params.captchaChallengeId?.trim();
+  const answer = params.captchaAnswer?.trim();
+  const challenge = challengeId
+    ? captchaChallenges.get(challengeId)
+    : undefined;
+
+  if (
+    !challenge ||
+    challenge.used ||
+    challenge.expiresAt <= timestamp ||
+    !answer ||
+    answer !== challenge.answer
+  ) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "CAPTCHA richiesto o non valido.",
+    });
+  }
+
+  challenge.used = true;
+  captchaChallenges.delete(challengeId!);
+}
+
 export function assertLoginAllowed(params: {
   ip: string;
   email: string;
@@ -142,27 +172,7 @@ export function assertLoginAllowed(params: {
     (account?.count ?? 0) >= CAPTCHA_FAILURE_THRESHOLD;
   if (!captchaRequired) return;
 
-  const challengeId = params.captchaChallengeId?.trim();
-  const answer = params.captchaAnswer?.trim();
-  const challenge = challengeId
-    ? captchaChallenges.get(challengeId)
-    : undefined;
-
-  if (
-    !challenge ||
-    challenge.used ||
-    challenge.expiresAt <= timestamp ||
-    !answer ||
-    answer !== challenge.answer
-  ) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: "CAPTCHA richiesto o non valido.",
-    });
-  }
-
-  challenge.used = true;
-  captchaChallenges.delete(challengeId!);
+  assertCaptchaChallenge(params);
 }
 
 export function recordFailedLogin(ip: string, email: string) {

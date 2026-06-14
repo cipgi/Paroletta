@@ -4,11 +4,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { trpc } from "@/providers/trpc";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { z } from "zod";
 import { PasswordPolicy } from "@contracts/constants";
 
 const CAPTCHA_FAILURE_THRESHOLD = 3;
+type AuthMode = "login" | "register" | "password-reset";
 
 const registrationSchema = z.object({
   email: z.email("Inserisci un indirizzo email valido."),
@@ -24,20 +25,27 @@ const registrationSchema = z.object({
 
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [isRegister, setIsRegister] = useState(false);
+  const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [failedLoginAttempts, setFailedLoginAttempts] = useState(0);
   const [captchaAnswer, setCaptchaAnswer] = useState("");
   const [registrationMessage, setRegistrationMessage] = useState<string | null>(
-    null
+    () =>
+      searchParams.get("reset") === "success"
+        ? "Password aggiornata. Accedi con la nuova password."
+        : null
   );
+  const [formError, setFormError] = useState<string | null>(null);
   const utils = trpc.useUtils();
+  const isRegister = authMode === "register";
+  const isPasswordReset = authMode === "password-reset";
   const captchaRequired =
-    !isRegister && failedLoginAttempts >= CAPTCHA_FAILURE_THRESHOLD;
+    authMode === "login" && failedLoginAttempts >= CAPTCHA_FAILURE_THRESHOLD;
   const captchaQuery = trpc.auth.loginCaptcha.useQuery(undefined, {
-    enabled: captchaRequired,
+    enabled: captchaRequired || isPasswordReset,
     staleTime: 0,
   });
 
@@ -69,19 +77,57 @@ export default function Login() {
       setRegistrationMessage(
         "Account creato. Conferma la tua e-mail tramite il link fornito nella mail di verifica, poi accedi."
       );
-      setIsRegister(false);
+      setAuthMode("login");
       setPassword("");
       setName("");
       navigate("/login");
     },
   });
+  const resetPasswordMutation = trpc.auth.requestPasswordReset.useMutation({
+    onSuccess: data => {
+      setRegistrationMessage(data.message);
+      setFormError(null);
+      setAuthMode("login");
+      setPassword("");
+      setCaptchaAnswer("");
+      void captchaQuery.refetch();
+    },
+    onError: () => {
+      setCaptchaAnswer("");
+      void captchaQuery.refetch();
+    },
+  });
 
   const captchaPending =
-    captchaRequired && (!captchaQuery.data || !captchaAnswer);
+    (captchaRequired || isPasswordReset) &&
+    (!captchaQuery.data || !captchaAnswer);
   const isPending =
-    loginMutation.isPending || registerMutation.isPending || captchaPending;
+    loginMutation.isPending ||
+    registerMutation.isPending ||
+    resetPasswordMutation.isPending ||
+    captchaPending;
   const onCredentialsSubmit = () => {
     setRegistrationMessage(null);
+    setFormError(null);
+    if (isPasswordReset) {
+      const parsedEmail = z
+        .email("Inserisci un indirizzo email valido.")
+        .safeParse(email);
+      if (!parsedEmail.success) {
+        setFormError(
+          parsedEmail.error.issues[0]?.message ?? "Controlla l'email."
+        );
+        return;
+      }
+
+      resetPasswordMutation.mutate({
+        email: parsedEmail.data,
+        captchaChallengeId: captchaQuery.data?.id ?? "",
+        captchaAnswer,
+      });
+      return;
+    }
+
     if (isRegister) {
       const parsedRegistration = registrationSchema.safeParse({
         email,
@@ -89,7 +135,7 @@ export default function Login() {
         name,
       });
       if (!parsedRegistration.success) {
-        setRegistrationMessage(
+        setFormError(
           parsedRegistration.error.issues[0]?.message ??
             "Controlla i dati di registrazione."
         );
@@ -112,7 +158,13 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-          <CardTitle>Accedi</CardTitle>
+          <CardTitle>
+            {isRegister
+              ? "Registrati"
+              : isPasswordReset
+                ? "Recupera password"
+                : "Accedi"}
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {isRegister && (
@@ -134,32 +186,36 @@ export default function Login() {
               onChange={e => setEmail(e.target.value)}
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-            />
-            {isRegister ? (
-              <p className="text-xs text-slate-500">
-                {PasswordPolicy.helpText} Il piano iniziale viene sempre
-                impostato su trial.
-              </p>
-            ) : null}
-          </div>
+          {!isPasswordReset && (
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete={isRegister ? "new-password" : "current-password"}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+              />
+              {isRegister ? (
+                <p className="text-xs text-slate-500">
+                  {PasswordPolicy.helpText} Il piano iniziale viene sempre
+                  impostato su trial.
+                </p>
+              ) : null}
+            </div>
+          )}
           {registrationMessage && !isRegister && (
             <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800">
               {registrationMessage}
             </div>
           )}
-          {captchaRequired && (
+          {(captchaRequired || isPasswordReset) && (
             <div className="space-y-2 rounded-md border p-3">
               <Label htmlFor="captcha">Verifica anti-automazione</Label>
               <p className="text-sm text-muted-foreground">
-                Dopo diversi tentativi falliti, risolvi il CAPTCHA per
-                continuare.
+                {isPasswordReset
+                  ? "Conferma la verifica per ricevere il link."
+                  : "Dopo diversi tentativi falliti, risolvi il CAPTCHA per continuare."}
               </p>
               <p className="text-sm font-medium">
                 {captchaQuery.data?.question ??
@@ -180,29 +236,59 @@ export default function Login() {
             disabled={isPending}
             onClick={onCredentialsSubmit}
           >
-            {isRegister ? "Registrati con email" : "Accedi con email"}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            className="w-full"
-            onClick={() => {
-              setIsRegister(value => {
-                const nextValue = !value;
-                if (nextValue) setRegistrationMessage(null);
-                return nextValue;
-              });
-              setFailedLoginAttempts(0);
-              setCaptchaAnswer("");
-            }}
-          >
             {isRegister
-              ? "Hai già un account? Accedi"
-              : "Non hai un account? Registrati"}
+              ? "Registrati con email"
+              : isPasswordReset
+                ? "Invia link di recupero"
+                : "Accedi con email"}
           </Button>
-          {(loginMutation.error || registerMutation.error) && (
+          {!isPasswordReset && (
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full"
+              onClick={() => {
+                setAuthMode(value => {
+                  const nextValue = value === "register" ? "login" : "register";
+                  if (nextValue === "register") setRegistrationMessage(null);
+                  return nextValue;
+                });
+                setFormError(null);
+                setFailedLoginAttempts(0);
+                setCaptchaAnswer("");
+              }}
+            >
+              {isRegister
+                ? "Hai già un account? Accedi"
+                : "Non hai un account? Registrati"}
+            </Button>
+          )}
+          {!isRegister && (
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full"
+              onClick={() => {
+                setAuthMode(isPasswordReset ? "login" : "password-reset");
+                setRegistrationMessage(null);
+                setFormError(null);
+                setFailedLoginAttempts(0);
+                setCaptchaAnswer("");
+                void captchaQuery.refetch();
+              }}
+            >
+              {isPasswordReset ? "Torna all'accesso" : "Password dimenticata?"}
+            </Button>
+          )}
+          {(loginMutation.error ||
+            registerMutation.error ||
+            resetPasswordMutation.error ||
+            formError) && (
             <p className="text-sm text-red-600">
-              {loginMutation.error?.message || registerMutation.error?.message}
+              {formError ||
+                loginMutation.error?.message ||
+                registerMutation.error?.message ||
+                resetPasswordMutation.error?.message}
             </p>
           )}
         </CardContent>

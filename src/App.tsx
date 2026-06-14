@@ -9,6 +9,7 @@ import SheetDetail from "./pages/SheetDetail";
 import SubscriptionPage from "./pages/Subscription";
 import Management from "./pages/Management";
 import Invitation from "./pages/Invitation";
+import ResetPassword from "./pages/ResetPassword";
 
 export default function App() {
   return (
@@ -46,6 +47,7 @@ export default function App() {
         }
       />
       <Route path="/login" element={<Login />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/invito/:token" element={<Invitation />} />
       <Route
         path="/abbonamento"
