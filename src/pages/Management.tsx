@@ -7,13 +7,26 @@ import {
   CreditCard,
   FileText,
   Images,
+  LogOut,
   MailPlus,
   ShieldCheck,
+  UserMinus,
   Users,
   X,
 } from "lucide-react";
 import { trpc } from "@/providers/trpc";
 import { useAuth } from "@/hooks/useAuth";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -95,6 +108,19 @@ export default function Management() {
   });
   const revokeInvitation = trpc.organization.revokeInvitation.useMutation({
     onSuccess: async () => utils.organization.overview.invalidate(),
+  });
+  const removeMember = trpc.organization.removeMember.useMutation({
+    onSuccess: async () => {
+      await utils.organization.overview.invalidate();
+      await utils.sheets.list.invalidate();
+    },
+  });
+  const leaveTeam = trpc.organization.leaveTeam.useMutation({
+    onSuccess: async () => {
+      await utils.organization.overview.invalidate();
+      await utils.auth.me.invalidate();
+      await utils.subscriptions.mySubscription.invalidate();
+    },
   });
   const acceptInvitation = trpc.organization.acceptInvitation.useMutation({
     onSuccess: async () => {
@@ -586,7 +612,47 @@ export default function Management() {
                   </p>
                 </div>
                 {isTeamOwner && (
-                  <Badge variant="secondary">Incluso nella dashboard</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">Incluso nella dashboard</Badge>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={removeMember.isPending}
+                        >
+                          <UserMinus className="w-4 h-4" />
+                          Espelli
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>
+                            Espellere questo membro?
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            {member.name} ({member.email}) perderà l'accesso al
+                            team. Il limite del pool scenderà in base ai membri
+                            attivi; gli utilizzi già consumati resteranno
+                            conteggiati sul team.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Annulla</AlertDialogCancel>
+                          <AlertDialogAction
+                            className="bg-red-600 text-white hover:bg-red-700"
+                            disabled={removeMember.isPending}
+                            onClick={() =>
+                              removeMember.mutate({ memberUserId: member.id })
+                            }
+                          >
+                            Espelli membro
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
                 )}
               </div>
             ))}
@@ -594,6 +660,53 @@ export default function Management() {
               <p className="text-sm text-slate-500">
                 Nessun sub-account collegato.
               </p>
+            )}
+            {removeMember.error && (
+              <p className="text-sm text-red-600">
+                {removeMember.error.message}
+              </p>
+            )}
+            {overview.role === "staff" && (
+              <div className="border-t border-slate-100 pt-3">
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={leaveTeam.isPending}
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Esci dal team
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Uscire dal team?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Il tuo account non userà più il pool condiviso del
+                        Manager. Il limite del team scenderà in base ai membri
+                        attivi; gli utilizzi già consumati resteranno
+                        conteggiati sul team.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Annulla</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-red-600 text-white hover:bg-red-700"
+                        disabled={leaveTeam.isPending}
+                        onClick={() => leaveTeam.mutate()}
+                      >
+                        Esci dal team
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+                {leaveTeam.error && (
+                  <p className="mt-2 text-sm text-red-600">
+                    {leaveTeam.error.message}
+                  </p>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>
