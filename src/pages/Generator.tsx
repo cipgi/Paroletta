@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
@@ -143,114 +143,24 @@ const canDisableImagesForType = (tipo: TipoScheda) =>
 export default function Generator() {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
-  const savedPreferences = (() => {
-    const saved = localStorage.getItem("generator-preferences");
-    if (!saved) return null;
-    try {
-      const parsed = JSON.parse(saved) as {
-        eta?: string;
-        fonema?: string;
-        interesse?: string;
-        tipoOutput?: TipoScheda;
-        aspettoSpecifico?: string;
-        scenarioSmart?: string;
-        elementoGrammaticale?: string;
-        livelloComplessita?: LivelloComplessita;
-        descrizioneScena?: string;
-        numeroOpzioni?: number;
-        numeroScene?: number;
-        includeImages?: boolean;
-      };
-      return {
-        eta: parsed.eta ?? "6-8 anni",
-        fonema:
-          parsed.fonema && fonemi.includes(parsed.fonema) ? parsed.fonema : "r",
-        interesse:
-          parsed.interesse && interessi.includes(parsed.interesse)
-            ? parsed.interesse
-            : "libero",
-        tipoOutput: parsed.tipoOutput ?? "discriminazione_visiva",
-        aspettoSpecifico: parsed.aspettoSpecifico ?? "",
-        scenarioSmart: parsed.scenarioSmart ?? "",
-        elementoGrammaticale:
-          parsed.elementoGrammaticale ?? "pronome clitico lo/la",
-        livelloComplessita: parsed.livelloComplessita ?? "intermedio",
-        descrizioneScena: parsed.descrizioneScena ?? "",
-        numeroOpzioni: parsed.numeroOpzioni ?? 4,
-        numeroScene: parsed.numeroScene ?? 4,
-        includeImages: parsed.includeImages ?? true,
-      };
-    } catch {
-      return null;
-    }
-  })();
 
-  const [eta, setEta] = useState(savedPreferences?.eta ?? "6-8 anni");
-  const [fonema, setFonema] = useState(savedPreferences?.fonema ?? "r");
-  const [interesse, setInteresse] = useState(
-    savedPreferences?.interesse ?? "libero"
-  );
+  const [eta, setEta] = useState("6-8 anni");
+  const [fonema, setFonema] = useState("r");
+  const [interesse, setInteresse] = useState("libero");
   const [tipoOutput, setTipoOutput] = useState<TipoScheda>(
-    savedPreferences?.tipoOutput ?? "discriminazione_visiva"
+    "discriminazione_visiva"
   );
-  const [aspettoSpecifico, setAspettoSpecifico] = useState(
-    savedPreferences?.aspettoSpecifico ?? ""
-  );
-  const [scenarioSmart, setScenarioSmart] = useState(
-    savedPreferences?.scenarioSmart ?? ""
-  );
+  const [aspettoSpecifico, setAspettoSpecifico] = useState("");
+  const [scenarioSmart, setScenarioSmart] = useState("");
   const [elementoGrammaticale, setElementoGrammaticale] = useState(
-    savedPreferences?.elementoGrammaticale ?? "pronome clitico lo/la"
+    "pronome clitico lo/la"
   );
   const [livelloComplessita, setLivelloComplessita] =
-    useState<LivelloComplessita>(
-      savedPreferences?.livelloComplessita ?? "intermedio"
-    );
-  const [descrizioneScena, setDescrizioneScena] = useState(
-    savedPreferences?.descrizioneScena ?? ""
-  );
-  const [numeroOpzioni, setNumeroOpzioni] = useState(
-    savedPreferences?.numeroOpzioni ?? 4
-  );
-  const [numeroScene, setNumeroScene] = useState(
-    savedPreferences?.numeroScene ?? 4
-  );
-  const [includeImages, setIncludeImages] = useState(
-    savedPreferences?.includeImages ?? true
-  );
-
-  useEffect(() => {
-    localStorage.setItem(
-      "generator-preferences",
-      JSON.stringify({
-        eta,
-        fonema,
-        interesse,
-        tipoOutput,
-        aspettoSpecifico,
-        scenarioSmart,
-        elementoGrammaticale,
-        livelloComplessita,
-        descrizioneScena,
-        numeroOpzioni,
-        numeroScene,
-        includeImages,
-      })
-    );
-  }, [
-    eta,
-    fonema,
-    interesse,
-    tipoOutput,
-    aspettoSpecifico,
-    scenarioSmart,
-    elementoGrammaticale,
-    livelloComplessita,
-    descrizioneScena,
-    numeroOpzioni,
-    numeroScene,
-    includeImages,
-  ]);
+    useState<LivelloComplessita>("intermedio");
+  const [descrizioneScena, setDescrizioneScena] = useState("");
+  const [numeroOpzioni, setNumeroOpzioni] = useState(4);
+  const [numeroScene, setNumeroScene] = useState(4);
+  const [includeImages, setIncludeImages] = useState(true);
 
   const generate = trpc.ai.generate.useMutation({
     onSuccess: data => {
@@ -279,19 +189,46 @@ export default function Generator() {
   });
 
   const handleGenerate = () => {
+    const trimmedAspettoSpecifico = aspettoSpecifico.trim();
+    const trimmedScenarioSmart = scenarioSmart.trim();
+    const trimmedElementoGrammaticale = elementoGrammaticale.trim();
+    const trimmedDescrizioneScena = descrizioneScena.trim();
+
     generate.mutate({
       eta,
       fonema,
       interesse,
       tipoOutput,
-      aspettoSpecifico: aspettoSpecifico.trim() || undefined,
-      scenarioSmart: scenarioSmart.trim() || undefined,
-      elementoGrammaticale: elementoGrammaticale.trim() || undefined,
-      livelloComplessita,
-      descrizioneScena: descrizioneScena.trim() || undefined,
-      numeroOpzioni,
-      numeroScene,
       includeImages: canDisableImagesForType(tipoOutput) ? includeImages : true,
+      ...(isTipoTestoConFonema(tipoOutput)
+        ? { aspettoSpecifico: trimmedAspettoSpecifico || undefined }
+        : {}),
+      ...(tipoOutput === "discriminazione_visiva"
+        ? {
+            scenarioSmart: trimmedScenarioSmart || undefined,
+            numeroOpzioni,
+          }
+        : {}),
+      ...(tipoOutput === "narrazione_sequenze"
+        ? {
+            scenarioSmart: trimmedScenarioSmart || undefined,
+            numeroScene,
+          }
+        : {}),
+      ...(tipoOutput === "pragmatica"
+        ? {
+            aspettoSpecifico: trimmedAspettoSpecifico || undefined,
+            scenarioSmart: trimmedScenarioSmart || undefined,
+            livelloComplessita,
+          }
+        : {}),
+      ...(tipoOutput === "morfosintassi_complessa"
+        ? {
+            elementoGrammaticale: trimmedElementoGrammaticale || undefined,
+            livelloComplessita,
+            descrizioneScena: trimmedDescrizioneScena || undefined,
+          }
+        : {}),
     });
   };
 

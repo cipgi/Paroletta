@@ -11,6 +11,7 @@ import {
 import {
   canOmitSheetImages,
   getUserFacingSheetContent,
+  normalizeUnifiedSheetType,
   parseUnifiedSheetContent,
 } from "@contracts/sheet-content";
 import { sanitizeProfileNameOrFallback } from "./lib/sanitize";
@@ -121,6 +122,20 @@ function toRegenerableTipoOutput(tipoOutput: string): TipoOutput {
   if (tipoOutput === "lista") return tipoOutput;
   if (tipoOutput === "lista_parole") return tipoOutput;
   throw missingResourceError("Tipo scheda");
+}
+
+function getNoInterestRegenerationContext(
+  tipoOutput: TipoOutput,
+  testoGenerato: string
+) {
+  const tipo = normalizeUnifiedSheetType(tipoOutput);
+  if (tipo === "morfosintassi") {
+    return { descrizioneScena: testoGenerato };
+  }
+  if (tipo === "storia" || tipo === "filastrocca" || tipo === "lista_parole") {
+    return { aspettoSpecifico: testoGenerato };
+  }
+  return { scenarioSmart: testoGenerato };
 }
 
 function getRegenerationAgeRange(difficulty: string | null | undefined) {
@@ -393,13 +408,17 @@ export const sheetsRouter = createRouter({
         !parsedSheetContent ||
         !canOmitSheetImages(parsedSheetContent.tipo) ||
         parsedSheetContent.immagini.length > 0;
+      const tipoOutput = toRegenerableTipoOutput(sheet.tipoOutput);
+      const noInterestContext =
+        sheet.interesse === "nessuno"
+          ? getNoInterestRegenerationContext(tipoOutput, sheet.testoGenerato)
+          : {};
       const sanitizedInput = sanitizeGenerationParams({
         eta: getRegenerationAgeRange(sheet.difficolta),
         fonema: sheet.fonema,
         interesse: sheet.interesse,
-        tipoOutput: toRegenerableTipoOutput(sheet.tipoOutput),
-        scenarioSmart:
-          sheet.interesse === "nessuno" ? sheet.testoGenerato : undefined,
+        tipoOutput,
+        ...noInterestContext,
         numeroOpzioni:
           sheet.tipoOutput === "discriminazione_visiva"
             ? getVisualOptionCount(sheet.listaParole)
