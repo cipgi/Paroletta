@@ -9,6 +9,10 @@ const passwordResetSql = readFileSync(
   "db/migrations/024_password_reset_audit.sql",
   "utf8"
 );
+const teamPoolSql = readFileSync(
+  "db/migrations/025_team_pool_and_plan_consistency.sql",
+  "utf8"
+);
 
 describe("security hardening migration", () => {
   it("does not leave sviluppo as a public default or active plan", () => {
@@ -59,5 +63,22 @@ describe("password reset audit migration", () => {
     expect(passwordResetSql).toContain(
       "grant select, insert on table app.password_reset_requests to service_role"
     );
+  });
+});
+
+describe("team pool and plan consistency migration", () => {
+  it("shares usage limits across active team members", () => {
+    expect(teamPoolSql).toContain("app.get_team_active_member_count");
+    expect(teamPoolSql).toContain(
+      "plan_limit := coalesce(plan_limit, 5) * active_member_count"
+    );
+    expect(teamPoolSql).toContain("app.consume_sheet_usage");
+    expect(teamPoolSql).toContain("app.consume_image_usage");
+  });
+
+  it("prevents mixed-plan team membership", () => {
+    expect(teamPoolSql).toContain("app.enforce_team_member_plan_match");
+    expect(teamPoolSql).toContain("team_plan_mismatch");
+    expect(teamPoolSql).toContain("trg_seat_assignments_same_plan");
   });
 });

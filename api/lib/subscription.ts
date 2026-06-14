@@ -95,12 +95,48 @@ export async function getPlanLimits(
   };
 }
 
+async function getUsagePoolOwnerId(userId: string, accessToken?: string) {
+  const { data, error } = await appDb(accessToken)
+    .from("seat_assignments")
+    .select("owner_user_id")
+    .eq("member_user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    throw databaseOperationError("identificare il pool di utilizzo", error);
+  }
+
+  return data?.owner_user_id ?? userId;
+}
+
+async function getActiveTeamMemberCount(
+  ownerUserId: string,
+  accessToken?: string
+) {
+  const { count, error } = await appDb(accessToken)
+    .from("seat_assignments")
+    .select("id", { count: "exact", head: true })
+    .eq("owner_user_id", ownerUserId);
+
+  if (error) {
+    throw databaseOperationError("contare i membri attivi del team", error);
+  }
+
+  return 1 + (count ?? 0);
+}
+
 export async function getUsageSummary(params: {
   ownerUserId: string;
   plan: string;
   accessToken?: string;
 }): Promise<UsageSummary> {
   const limits = await getPlanLimits(params.plan, params.accessToken);
+  const activeTeamMemberCount = await getActiveTeamMemberCount(
+    params.ownerUserId,
+    params.accessToken
+  );
+  const pooledSheetLimit = limits.sheetLimit * activeTeamMemberCount;
+  const pooledImageLimit = limits.imageLimit * activeTeamMemberCount;
   const { data, error } = await appDb(params.accessToken)
     .from("profiles")
     .select("trial_schede_usate,schede_mese,trial_immagini_usate,immagini_mese")
@@ -124,13 +160,13 @@ export async function getUsageSummary(params: {
     plan: params.plan,
     sheets: {
       used: sheetUsed,
-      limit: limits.sheetLimit,
-      remaining: Math.max(limits.sheetLimit - sheetUsed, 0),
+      limit: pooledSheetLimit,
+      remaining: Math.max(pooledSheetLimit - sheetUsed, 0),
     },
     images: {
       used: imageUsed,
-      limit: limits.imageLimit,
-      remaining: Math.max(limits.imageLimit - imageUsed, 0),
+      limit: pooledImageLimit,
+      remaining: Math.max(pooledImageLimit - imageUsed, 0),
     },
   };
 }
@@ -154,8 +190,18 @@ export async function reserveSheetGenerationQuota(params: {
 
   if (error) {
     if (isDatabaseSignal(error, "sheet_limit_reached")) {
+      const ownerUserId = await getUsagePoolOwnerId(
+        params.userId,
+        params.accessToken
+      );
       const limit = params.plan
-        ? (await getPlanLimits(params.plan, params.accessToken)).sheetLimit
+        ? (
+            await getUsageSummary({
+              ownerUserId,
+              plan: params.plan,
+              accessToken: params.accessToken,
+            })
+          ).sheets.limit
         : 0;
       throw forbiddenLimitError("schede", limit);
     }
@@ -189,8 +235,18 @@ export async function reserveImageGenerationQuota(params: {
 
   if (error) {
     if (isDatabaseSignal(error, "image_limit_reached")) {
+      const ownerUserId = await getUsagePoolOwnerId(
+        params.userId,
+        params.accessToken
+      );
       const limit = params.plan
-        ? (await getPlanLimits(params.plan, params.accessToken)).imageLimit
+        ? (
+            await getUsageSummary({
+              ownerUserId,
+              plan: params.plan,
+              accessToken: params.accessToken,
+            })
+          ).images.limit
         : 0;
       throw forbiddenLimitError("immagini", limit);
     }
