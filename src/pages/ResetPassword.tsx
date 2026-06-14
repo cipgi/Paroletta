@@ -15,6 +15,7 @@ import { LOGIN_PATH } from "@/const";
 import {
   createPasswordResetSupabaseClient,
   establishPasswordRecoverySession,
+  getPasswordRecoveryErrorMessage,
 } from "@/lib/supabase-password-reset";
 import { trpc } from "@/providers/trpc";
 import { PasswordPolicy } from "@contracts/constants";
@@ -41,15 +42,30 @@ export default function ResetPassword() {
     typeof createPasswordResetSupabaseClient
   > | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
-  const [sessionError, setSessionError] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [initialRecoveryError] = useState(() =>
+    getPasswordRecoveryErrorMessage()
+  );
   const [formError, setFormError] = useState<string | null>(null);
+  const [sessionError, setSessionError] = useState<string | null>(
+    initialRecoveryError
+  );
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const configQuery = trpc.auth.supabasePublicConfig.useQuery();
+  const configQuery = trpc.auth.supabasePublicConfig.useQuery(undefined, {
+    enabled: !initialRecoveryError,
+    retry: false,
+  });
 
   useEffect(() => {
+    if (initialRecoveryError) {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, [initialRecoveryError]);
+
+  useEffect(() => {
+    if (initialRecoveryError) return;
     if (!configQuery.data || clientRef.current) return;
 
     const client = createPasswordResetSupabaseClient(configQuery.data);
@@ -60,13 +76,15 @@ export default function ResetPassword() {
         setSessionReady(true);
         setSessionError(null);
       })
-      .catch(() => {
+      .catch(error => {
         setSessionReady(false);
         setSessionError(
-          "Link non valido o scaduto. Richiedi un nuovo recupero."
+          error instanceof Error
+            ? error.message
+            : "Link non valido o scaduto. Richiedi un nuovo recupero password."
         );
       });
-  }, [configQuery.data]);
+  }, [configQuery.data, initialRecoveryError]);
 
   const updatePassword = async () => {
     setFormError(null);
@@ -108,6 +126,7 @@ export default function ResetPassword() {
   const isLoadingConfig =
     configQuery.isLoading ||
     (configQuery.isSuccess && !sessionReady && !sessionError);
+  const hasBlockingError = Boolean(sessionError || configQuery.error);
   const canSubmit = sessionReady && !isSubmitting && !successMessage;
 
   return (
@@ -171,7 +190,7 @@ export default function ResetPassword() {
             </div>
           )}
 
-          {!successMessage && (
+          {!successMessage && !hasBlockingError && (
             <Button
               className="w-full"
               size="lg"

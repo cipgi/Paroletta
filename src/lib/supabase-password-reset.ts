@@ -26,6 +26,8 @@ function readRecoveryParams() {
     refreshToken: hash.get("refresh_token") ?? search.get("refresh_token"),
     type: hash.get("type") ?? search.get("type"),
     code: search.get("code") ?? hash.get("code"),
+    error: hash.get("error") ?? search.get("error"),
+    errorCode: hash.get("error_code") ?? search.get("error_code"),
   };
 }
 
@@ -35,6 +37,12 @@ function clearRecoveryParamsFromUrl() {
 
 export async function establishPasswordRecoverySession(client: SupabaseClient) {
   const params = readRecoveryParams();
+  const errorMessage = getPasswordRecoveryErrorMessage();
+
+  if (errorMessage) {
+    clearRecoveryParamsFromUrl();
+    throw new Error(errorMessage);
+  }
 
   if (params.accessToken && params.refreshToken) {
     const { error } = await client.auth.setSession({
@@ -60,4 +68,29 @@ export async function establishPasswordRecoverySession(client: SupabaseClient) {
   }
 
   throw new Error("missing_recovery_session");
+}
+
+export function hasPasswordRecoveryCallback() {
+  const params = readRecoveryParams();
+
+  return Boolean(
+    params.accessToken ||
+    params.refreshToken ||
+    params.code ||
+    params.type === "recovery" ||
+    params.error ||
+    params.errorCode
+  );
+}
+
+export function getPasswordRecoveryErrorMessage() {
+  const params = readRecoveryParams();
+
+  if (!params.error && !params.errorCode) return null;
+
+  if (params.errorCode === "otp_expired") {
+    return "Link non valido o scaduto. Richiedi un nuovo recupero password.";
+  }
+
+  return "Link di recupero non valido. Richiedi un nuovo recupero password.";
 }
