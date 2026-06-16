@@ -877,13 +877,6 @@ export const aiRouter = createRouter({
       assertSheetLimitAvailable(usageBeforeGeneration);
 
       const sanitizedInput = sanitizeGenerationParams(input);
-      if (sanitizedInput.tipoOutput === "discriminazione_visiva") {
-        sanitizedInput.numeroOpzioni = Math.min(
-          sanitizedInput.numeroOpzioni ?? 4,
-          piano === "trial" ? 2 : 4
-        );
-      }
-
       const rollbackSheetQuota = await reserveSheetGenerationQuota({
         userId: supabaseUserId,
         plan: piano,
