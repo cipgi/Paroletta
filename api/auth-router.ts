@@ -4,9 +4,7 @@ import { PasswordPolicy, Session } from "@contracts/constants";
 import { getSessionCookieOptions } from "./lib/cookies";
 import { createRouter, authedQuery, publicQuery } from "./middleware";
 import {
-  assertCaptchaChallenge,
   assertLoginAllowed,
-  buildLoginCaptcha,
   recordFailedLogin,
   recordSuccessfulLogin,
 } from "./lib/login-security";
@@ -85,17 +83,13 @@ const credentialsSchema = z.object({
     .optional(),
 });
 
-const loginCredentialsSchema = credentialsSchema
-  .pick({ email: true, password: true })
-  .extend({
-    captchaChallengeId: z.string().optional(),
-    captchaAnswer: z.string().optional(),
-  });
+const loginCredentialsSchema = credentialsSchema.pick({
+  email: true,
+  password: true,
+});
 
 const passwordResetRequestSchema = z.object({
   email: z.email().transform(value => value.trim().toLowerCase()),
-  captchaChallengeId: z.string().min(1),
-  captchaAnswer: z.string().min(1).max(32),
 });
 
 type PasswordResetRequestStatus =
@@ -149,7 +143,6 @@ async function recordPasswordResetRequest(params: {
 }
 
 export const authRouter = createRouter({
-  loginCaptcha: publicQuery.query(() => buildLoginCaptcha()),
   supabasePublicConfig: publicQuery.query(() => {
     if (!supabaseConfigured) {
       throw userFacingError(
@@ -266,11 +259,6 @@ export const authRouter = createRouter({
         );
       }
 
-      assertCaptchaChallenge({
-        captchaChallengeId: input.captchaChallengeId,
-        captchaAnswer: input.captchaAnswer,
-      });
-
       const appDatabase = adminAppDb();
       const emailHash = hashPasswordResetIdentifier(input.email);
       const hasClientIp = ctx.clientIp !== "unknown";
@@ -359,8 +347,6 @@ export const authRouter = createRouter({
       assertLoginAllowed({
         ip: ctx.clientIp,
         email: input.email,
-        captchaChallengeId: input.captchaChallengeId,
-        captchaAnswer: input.captchaAnswer,
       });
 
       const { data, error } = await supabase.auth.signInWithPassword({

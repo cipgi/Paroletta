@@ -1,8 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  assertCaptchaChallenge,
   assertLoginAllowed,
-  buildLoginCaptcha,
   extractClientIp,
   loginSecurityConfig,
   recordFailedLogin,
@@ -36,48 +34,19 @@ describe("login security controls", () => {
     );
   });
 
-  it("requires a valid CAPTCHA after repeated failed logins", () => {
+  it("allows repeated failed logins below lock threshold", () => {
     const ip = "203.0.113.20";
     const email = "user@example.com";
 
-    for (let i = 0; i < loginSecurityConfig.captchaFailureThreshold; i++) {
+    for (
+      let i = 0;
+      i < loginSecurityConfig.accountLockFailureThreshold - 1;
+      i++
+    ) {
       recordFailedLogin(ip, email);
     }
 
-    expect(() => assertLoginAllowed({ ip, email })).toThrow(
-      "CAPTCHA richiesto o non valido."
-    );
-
-    vi.spyOn(Math, "random").mockReturnValue(0);
-    const captcha = buildLoginCaptcha();
-
-    expect(() =>
-      assertLoginAllowed({
-        ip,
-        email,
-        captchaChallengeId: captcha.id,
-        captchaAnswer: "4",
-      })
-    ).not.toThrow();
-  });
-
-  it("validates one-time CAPTCHA challenges for public anti-automation flows", () => {
-    vi.spyOn(Math, "random").mockReturnValue(0);
-    const captcha = buildLoginCaptcha();
-
-    expect(() =>
-      assertCaptchaChallenge({
-        captchaChallengeId: captcha.id,
-        captchaAnswer: "4",
-      })
-    ).not.toThrow();
-
-    expect(() =>
-      assertCaptchaChallenge({
-        captchaChallengeId: captcha.id,
-        captchaAnswer: "4",
-      })
-    ).toThrow("CAPTCHA richiesto o non valido.");
+    expect(() => assertLoginAllowed({ ip, email })).not.toThrow();
   });
 
   it("rate limits login attempts by IP within the configured window", () => {
@@ -110,7 +79,11 @@ describe("login security controls", () => {
     const ip = "203.0.113.50";
     const email = "user@example.com";
 
-    for (let i = 0; i < loginSecurityConfig.captchaFailureThreshold; i++) {
+    for (
+      let i = 0;
+      i < loginSecurityConfig.accountLockFailureThreshold - 1;
+      i++
+    ) {
       recordFailedLogin(ip, email);
     }
 
