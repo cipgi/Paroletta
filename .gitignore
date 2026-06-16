@@ -46,3 +46,4 @@ coverage/
 !db/migrations/021_development_default_plan.sql
 !db/migrations/022_store_generated_images_in_supabase_storage.sql
 !db/migrations/024_password_reset_audit.sql
+!db/migrations/025_email_confirmation_audit.sql

@@ -16,11 +16,13 @@ import {
 
 type AuthMode = "login" | "register" | "password-reset";
 
+const emailInputSchema = z.preprocess(
+  value => (typeof value === "string" ? value.trim().toLowerCase() : value),
+  z.email("Inserisci un indirizzo email valido.")
+);
+
 const registrationSchema = z.object({
-  email: z.preprocess(
-    value => (typeof value === "string" ? value.trim().toLowerCase() : value),
-    z.email("Inserisci un indirizzo email valido.")
-  ),
+  email: emailInputSchema,
   name: z.string().trim().min(2, "Inserisci un nome di almeno 2 caratteri."),
   password: z
     .string()
@@ -136,29 +138,56 @@ export default function Login() {
   });
   const resetPasswordMutation = trpc.auth.requestPasswordReset.useMutation({
     onSuccess: data => {
-      setRegistrationMessage(data.message);
-      setFormError(null);
+      if (data.success) {
+        setRegistrationMessage(data.message);
+        setFormError(null);
+      } else {
+        setRegistrationMessage(null);
+        setFormError(data.message);
+      }
       setAuthMode("login");
       setPassword("");
     },
   });
+  const resendConfirmationMutation =
+    trpc.auth.resendEmailConfirmation.useMutation({
+      onSuccess: data => {
+        if (data.success) {
+          setRegistrationMessage(data.message);
+          setFormError(null);
+        } else {
+          setRegistrationMessage(null);
+          setFormError(data.message);
+        }
+        setAuthMode("login");
+        setPassword("");
+      },
+    });
 
   const isPending =
     loginMutation.isPending ||
     registerMutation.isPending ||
     resetPasswordMutation.isPending ||
+    resendConfirmationMutation.isPending ||
     isConfirmingEmail;
+  const resendEmailConfirmation = () => {
+    setRegistrationMessage(null);
+    setFormError(null);
+    const parsedEmail = emailInputSchema.safeParse(email);
+    if (!parsedEmail.success) {
+      setFormError(
+        parsedEmail.error.issues[0]?.message ?? "Controlla l'email."
+      );
+      return;
+    }
+
+    resendConfirmationMutation.mutate({ email: parsedEmail.data });
+  };
   const onCredentialsSubmit = () => {
     setRegistrationMessage(null);
     setFormError(null);
     if (isPasswordReset) {
-      const parsedEmail = z
-        .preprocess(
-          value =>
-            typeof value === "string" ? value.trim().toLowerCase() : value,
-          z.email("Inserisci un indirizzo email valido.")
-        )
-        .safeParse(email);
+      const parsedEmail = emailInputSchema.safeParse(email);
       if (!parsedEmail.success) {
         setFormError(
           parsedEmail.error.issues[0]?.message ?? "Controlla l'email."
@@ -301,15 +330,28 @@ export default function Login() {
               {isPasswordReset ? "Torna all'accesso" : "Password dimenticata?"}
             </Button>
           )}
+          {!isRegister && !isPasswordReset && (
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full"
+              disabled={isPending}
+              onClick={resendEmailConfirmation}
+            >
+              Non hai ricevuto la mail di conferma?
+            </Button>
+          )}
           {(loginMutation.error ||
             registerMutation.error ||
             resetPasswordMutation.error ||
+            resendConfirmationMutation.error ||
             formError) && (
             <p className="text-sm text-red-600">
               {formError ||
                 loginMutation.error?.message ||
                 registerMutation.error?.message ||
-                resetPasswordMutation.error?.message}
+                resetPasswordMutation.error?.message ||
+                resendConfirmationMutation.error?.message}
             </p>
           )}
         </CardContent>

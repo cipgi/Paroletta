@@ -9,6 +9,10 @@ const passwordResetSql = readFileSync(
   "db/migrations/024_password_reset_audit.sql",
   "utf8"
 );
+const emailConfirmationSql = readFileSync(
+  "db/migrations/025_email_confirmation_audit.sql",
+  "utf8"
+);
 
 describe("security hardening migration", () => {
   it("does not leave sviluppo as a public default or active plan", () => {
@@ -58,6 +62,23 @@ describe("password reset audit migration", () => {
     );
     expect(passwordResetSql).toContain(
       "grant select, insert on table app.password_reset_requests to service_role"
+    );
+  });
+});
+
+describe("email confirmation audit migration", () => {
+  it("stores hashed confirmation identifiers without direct user access", () => {
+    expect(emailConfirmationSql).toContain("app.email_confirmation_requests");
+    expect(emailConfirmationSql).toContain("email_hash text not null");
+    expect(emailConfirmationSql).toContain("client_ip_hash text not null");
+    expect(emailConfirmationSql).toContain(
+      "alter table app.email_confirmation_requests enable row level security"
+    );
+    expect(emailConfirmationSql).toContain(
+      "revoke all on table app.email_confirmation_requests from public, anon, authenticated"
+    );
+    expect(emailConfirmationSql).toContain(
+      "grant select, insert on table app.email_confirmation_requests to service_role"
     );
   });
 });

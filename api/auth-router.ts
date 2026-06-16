@@ -28,6 +28,9 @@ import {
   appendSupabaseSessionCookies,
 } from "./lib/session-cookies";
 import {
+  PASSWORD_RESET_ACCOUNT_NOT_FOUND_MESSAGE,
+  PASSWORD_RESET_RATE_LIMITED_MESSAGE,
+  PASSWORD_RESET_SEND_FAILED_MESSAGE,
   PASSWORD_RESET_SUCCESS_MESSAGE,
   buildPasswordResetRedirectUrl,
   getPasswordResetFailureCode,
@@ -36,9 +39,19 @@ import {
   isPasswordResetRateLimited,
 } from "./lib/password-reset-security";
 import {
+  EMAIL_CONFIRMATION_ALREADY_CONFIRMED_MESSAGE,
+  EMAIL_CONFIRMATION_NOT_FOUND_MESSAGE,
+  EMAIL_CONFIRMATION_RATE_LIMITED_MESSAGE,
+  EMAIL_CONFIRMATION_RESENT_MESSAGE,
+  EMAIL_CONFIRMATION_SEND_FAILED_MESSAGE,
   buildEmailConfirmationRedirectUrl,
+  getEmailConfirmationFailureCode,
+  getEmailConfirmationWindowStart,
+  hashEmailConfirmationIdentifier,
+  isEmailConfirmationRateLimited,
   isObfuscatedExistingSupabaseUser,
   isSupabaseEmailNotConfirmedError,
+  isSupabaseUserEmailConfirmed,
 } from "./lib/email-confirmation";
 
 // Supabase email/password authentication lives in this router. OAuth provider
@@ -104,11 +117,28 @@ const passwordResetRequestSchema = z.object({
   email: normalizedEmailSchema(),
 });
 
+const emailConfirmationRequestSchema = z.object({
+  email: normalizedEmailSchema(),
+});
+
 type PasswordResetRequestStatus =
   | "sent"
   | "failed"
   | "rate_limited"
   | "suppressed";
+
+type EmailConfirmationRequestStatus =
+  | "sent"
+  | "failed"
+  | "rate_limited"
+  | "suppressed";
+
+type EmailConfirmationDeliveryStatus =
+  | "sent"
+  | "already_confirmed"
+  | "not_found"
+  | "rate_limited"
+  | "failed";
 
 async function countRecentPasswordResetRequests(
   db: AppDbClient,
@@ -152,6 +182,207 @@ async function recordPasswordResetRequest(params: {
       code: getPasswordResetFailureCode(error),
     });
   }
+}
+
+async function countRecentEmailConfirmationRequests(
+  db: AppDbClient,
+  column: "email_hash" | "client_ip_hash",
+  value: string,
+  windowStart: string
+) {
+  const { count, error } = await db
+    .from("email_confirmation_requests")
+    .select("id", { count: "exact", head: true })
+    .eq(column, value)
+    .gte("created_at", windowStart);
+
+  if (error) {
+    throw databaseOperationError(
+      "verificare il limite conferma email",
+      error
+    );
+  }
+
+  return count ?? 0;
+}
+
+async function recordEmailConfirmationRequest(params: {
+  db: AppDbClient;
+  emailHash: string;
+  clientIpHash: string;
+  status: EmailConfirmationRequestStatus;
+  failureCode?: string;
+}) {
+  const { error } = await params.db.from("email_confirmation_requests").insert({
+    email_hash: params.emailHash,
+    client_ip_hash: params.clientIpHash,
+    status: params.status,
+    failure_code: params.failureCode ?? null,
+  });
+
+  if (error) {
+    console.warn("[email-confirmation] audit insert failed", {
+      status: params.status,
+      code: getEmailConfirmationFailureCode(error),
+    });
+  }
+}
+
+async function findSupabaseAuthUserByEmail(db: AppDbClient, email: string) {
+  const { data: profile, error } = await db
+    .from("profiles")
+    .select("id")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (error) {
+    throw databaseOperationError("verificare l'account", error);
+  }
+
+  if (!profile?.id) return null;
+
+  const { data, error: authError } =
+    await supabaseAdmin.auth.admin.getUserById(profile.id);
+
+  if (authError) {
+    throw databaseOperationError(
+      "verificare lo stato dell'account",
+      authError
+    );
+  }
+
+  return data.user;
+}
+
+async function requestEmailConfirmationDelivery(params: {
+  db: AppDbClient;
+  email: string;
+  clientIp: string;
+  request: Request;
+}): Promise<{
+  success: boolean;
+  status: EmailConfirmationDeliveryStatus;
+  message: string;
+}> {
+  const emailHash = hashEmailConfirmationIdentifier(params.email);
+  const hasClientIp = params.clientIp !== "unknown";
+  const clientIpHash = hashEmailConfirmationIdentifier(params.clientIp);
+  const windowStart = getEmailConfirmationWindowStart();
+  const [emailRequestCount, clientIpRequestCount] = await Promise.all([
+    countRecentEmailConfirmationRequests(
+      params.db,
+      "email_hash",
+      emailHash,
+      windowStart
+    ),
+    hasClientIp
+      ? countRecentEmailConfirmationRequests(
+          params.db,
+          "client_ip_hash",
+          clientIpHash,
+          windowStart
+        )
+      : Promise.resolve(0),
+  ]);
+
+  if (
+    isEmailConfirmationRateLimited({
+      emailRequestCount,
+      clientIpRequestCount,
+      hasClientIp,
+    })
+  ) {
+    await recordEmailConfirmationRequest({
+      db: params.db,
+      emailHash,
+      clientIpHash,
+      status: "rate_limited",
+    });
+    return {
+      success: false,
+      status: "rate_limited",
+      message: EMAIL_CONFIRMATION_RATE_LIMITED_MESSAGE,
+    };
+  }
+
+  const user = await findSupabaseAuthUserByEmail(params.db, params.email);
+  if (!user) {
+    await recordEmailConfirmationRequest({
+      db: params.db,
+      emailHash,
+      clientIpHash,
+      status: "suppressed",
+      failureCode: "account_not_found",
+    });
+    return {
+      success: false,
+      status: "not_found",
+      message: EMAIL_CONFIRMATION_NOT_FOUND_MESSAGE,
+    };
+  }
+
+  if (isSupabaseUserEmailConfirmed(user)) {
+    await recordEmailConfirmationRequest({
+      db: params.db,
+      emailHash,
+      clientIpHash,
+      status: "suppressed",
+      failureCode: "already_confirmed",
+    });
+    return {
+      success: true,
+      status: "already_confirmed",
+      message: EMAIL_CONFIRMATION_ALREADY_CONFIRMED_MESSAGE,
+    };
+  }
+
+  let status: EmailConfirmationRequestStatus = "sent";
+  let failureCode: string | undefined;
+  try {
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email: params.email,
+      options: {
+        emailRedirectTo: buildEmailConfirmationRedirectUrl(params.request),
+      },
+    });
+
+    if (error) {
+      status = "failed";
+      failureCode = getEmailConfirmationFailureCode(error);
+      console.warn("[email-confirmation] Supabase resend failed", {
+        code: failureCode,
+      });
+    }
+  } catch (error) {
+    status = "failed";
+    failureCode = getEmailConfirmationFailureCode(error);
+    console.warn("[email-confirmation] Supabase resend failed", {
+      code: failureCode,
+    });
+  }
+
+  await recordEmailConfirmationRequest({
+    db: params.db,
+    emailHash,
+    clientIpHash,
+    status,
+    failureCode,
+  });
+
+  if (status === "failed") {
+    return {
+      success: false,
+      status: "failed",
+      message: EMAIL_CONFIRMATION_SEND_FAILED_MESSAGE,
+    };
+  }
+
+  return {
+    success: true,
+    status: "sent",
+    message: EMAIL_CONFIRMATION_RESENT_MESSAGE,
+  };
 }
 
 export const authRouter = createRouter({
@@ -268,6 +499,23 @@ export const authRouter = createRouter({
 
       return { success: true, verificationRequired: true };
     }),
+  resendEmailConfirmation: publicQuery
+    .input(emailConfirmationRequestSchema)
+    .mutation(async ({ input, ctx }) => {
+      if (!supabaseConfigured || !supabaseAdminConfigured) {
+        throw userFacingError(
+          "SERVICE_UNAVAILABLE",
+          "Conferma email temporaneamente non disponibile: autenticazione non configurata."
+        );
+      }
+
+      return requestEmailConfirmationDelivery({
+        db: adminAppDb(),
+        email: input.email,
+        clientIp: ctx.clientIp,
+        request: ctx.req,
+      });
+    }),
   requestPasswordReset: publicQuery
     .input(passwordResetRequestSchema)
     .mutation(async ({ input, ctx }) => {
@@ -313,7 +561,45 @@ export const authRouter = createRouter({
           clientIpHash,
           status: "rate_limited",
         });
-        return { success: true, message: PASSWORD_RESET_SUCCESS_MESSAGE };
+        return { success: false, message: PASSWORD_RESET_RATE_LIMITED_MESSAGE };
+      }
+
+      const user = await findSupabaseAuthUserByEmail(appDatabase, input.email);
+      if (!user) {
+        await recordPasswordResetRequest({
+          db: appDatabase,
+          emailHash,
+          clientIpHash,
+          status: "suppressed",
+          failureCode: "account_not_found",
+        });
+        return {
+          success: false,
+          message: PASSWORD_RESET_ACCOUNT_NOT_FOUND_MESSAGE,
+        };
+      }
+
+      if (!isSupabaseUserEmailConfirmed(user)) {
+        const confirmationResult = await requestEmailConfirmationDelivery({
+          db: appDatabase,
+          email: input.email,
+          clientIp: ctx.clientIp,
+          request: ctx.req,
+        });
+        await recordPasswordResetRequest({
+          db: appDatabase,
+          emailHash,
+          clientIpHash,
+          status: "suppressed",
+          failureCode: `email_not_confirmed:${confirmationResult.status}`,
+        });
+        return {
+          success: confirmationResult.success,
+          message:
+            confirmationResult.status === "sent"
+              ? "Account non ancora confermato: ti abbiamo reinviato l'email di verifica."
+              : `Account non ancora confermato. ${confirmationResult.message}`,
+        };
       }
 
       const redirectTo = buildPasswordResetRedirectUrl(ctx.req);
@@ -351,7 +637,13 @@ export const authRouter = createRouter({
         failureCode,
       });
 
-      return { success: true, message: PASSWORD_RESET_SUCCESS_MESSAGE };
+      return {
+        success: status === "sent",
+        message:
+          status === "sent"
+            ? PASSWORD_RESET_SUCCESS_MESSAGE
+            : PASSWORD_RESET_SEND_FAILED_MESSAGE,
+      };
     }),
   loginWithCredentials: publicQuery
     .input(loginCredentialsSchema)
@@ -374,9 +666,34 @@ export const authRouter = createRouter({
       });
       if (error || !data.user) {
         if (isSupabaseEmailNotConfirmedError(error)) {
+          let message =
+            "Email non ancora confermata. Apri il link nella mail di verifica, poi riprova ad accedere.";
+          if (supabaseAdminConfigured) {
+            try {
+              const confirmationResult = await requestEmailConfirmationDelivery(
+                {
+                  db: adminAppDb(),
+                  email: input.email,
+                  clientIp: ctx.clientIp,
+                  request: ctx.req,
+                }
+              );
+              message =
+                confirmationResult.status === "sent"
+                  ? "Email non ancora confermata: ti abbiamo reinviato l'email di verifica."
+                  : `Email non ancora confermata. ${confirmationResult.message}`;
+            } catch (resendError) {
+              console.warn(
+                "[email-confirmation] login-triggered resend failed",
+                {
+                  code: getEmailConfirmationFailureCode(resendError),
+                }
+              );
+            }
+          }
           throw userFacingError(
             "UNAUTHORIZED",
-            "Email non ancora confermata. Apri il link nella mail di verifica, poi riprova ad accedere."
+            message
           );
         }
 
