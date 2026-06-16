@@ -72,12 +72,14 @@ export async function establishPasswordRecoverySession(client: SupabaseClient) {
 
 export function hasPasswordRecoveryCallback() {
   const params = readRecoveryParams();
+  const isResetPasswordPath =
+    typeof window !== "undefined" &&
+    window.location.pathname === "/reset-password";
 
   return Boolean(
-    params.accessToken ||
-    params.refreshToken ||
-    params.code ||
     params.type === "recovery" ||
+    (isResetPasswordPath &&
+      (params.accessToken || params.refreshToken || params.code)) ||
     params.error ||
     params.errorCode
   );
