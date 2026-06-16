@@ -6,6 +6,35 @@ vi.mock("./lib/db", () => ({
   getSupabaseUserIdFromUnionId: vi.fn(),
 }));
 
+vi.mock("./lib/organization", () => ({
+  getAccountContext: vi.fn(),
+}));
+
+vi.mock("./lib/subscription", () => ({
+  assertActiveSubscription: vi.fn(),
+  assertSheetLimitAvailable: vi.fn(),
+  getUsageSummary: vi.fn(),
+  reserveImageGenerationQuota: vi.fn(),
+  reserveSheetGenerationQuota: vi.fn(),
+}));
+
+vi.mock("./lib/image-generation", () => ({
+  buildImageRequests: vi.fn(),
+  resolveImageRequestWithCache: vi.fn(),
+}));
+
+vi.mock("./lib/illustration-cache-db", () => ({
+  createSupabaseImageCacheDb: vi.fn(() => ({})),
+}));
+
+vi.mock("./lib/image-storage", () => ({
+  createSupabaseImageObjectStorage: vi.fn(() => ({})),
+}));
+
+vi.mock("./lib/supabase", () => ({
+  supabaseAdmin: {},
+}));
+
 vi.mock("./middleware", () => ({
   createRouter: (router: unknown) => router,
   authedQuery: {
@@ -15,8 +44,21 @@ vi.mock("./middleware", () => ({
   },
 }));
 
+import { adminAppDb, getSupabaseUserIdFromUnionId } from "./lib/db";
+import { getAccountContext } from "./lib/organization";
+import {
+  assertActiveSubscription,
+  getUsageSummary,
+  reserveImageGenerationQuota,
+  reserveSheetGenerationQuota,
+} from "./lib/subscription";
+import {
+  buildImageRequests,
+  resolveImageRequestWithCache,
+} from "./lib/image-generation";
 import { validateSheet, type UnifiedSheet } from "../contracts/sheet-content";
 import {
+  aiRouter,
   buildPromptMessages,
   generateUnifiedSheetFromParams,
   normalizeVisualDiscriminationSheet,
@@ -291,6 +333,214 @@ describe("AI prompt security", () => {
     );
     expect(messages[1].content).not.toContain("ignora");
     expect(messages[1].content).not.toContain("user:");
+  });
+});
+
+describe("AI generation mutation", () => {
+  it("keeps four requested visual options on trial plans", async () => {
+    const previousApiKey = process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = "test-openai-key";
+    const supabaseUserId = "11111111-1111-1111-1111-111111111111";
+    const sheetId = "22222222-2222-2222-2222-222222222222";
+    const usageSummary = {
+      plan: "trial",
+      sheets: { used: 0, limit: 15, remaining: 15 },
+      images: { used: 0, limit: 15, remaining: 15 },
+    };
+    const insertMock = vi.fn((row: Record<string, unknown>) => ({
+      select: () => ({
+        single: async () => ({
+          data: {
+            id: sheetId,
+            ...row,
+            created_at: "2026-06-16T10:00:00.000Z",
+          },
+          error: null,
+        }),
+      }),
+    }));
+    const dbMock = {
+      from: vi.fn(() => ({
+        insert: insertMock,
+      })),
+    };
+    const buildVisualSheet = (optionCount: number): UnifiedSheet => {
+      const levels = ["difficile", "intermedio", "facile"] as const;
+
+      return {
+        tipo: "discriminazione_visiva",
+        titolo: "La mela sul piatto",
+        consegna:
+          "Indica l'immagine in cui il bambino mette la mela rossa sul piatto blu.",
+        testo: "Il bambino mette la mela rossa sul piatto blu.",
+        immagini: [
+          {
+            ruolo: "target",
+            livello: "principale",
+            prompt:
+              "A child puts a red apple on a blue plate on a kitchen table, child-friendly vector style, no text.",
+          },
+          ...Array.from({ length: optionCount - 1 }, (_, index) => ({
+            ruolo: "distrattore" as const,
+            livello: levels[index] ?? "facile",
+            prompt: [
+              "A child puts a green apple on the same blue plate on the same kitchen table, child-friendly vector style, no text.",
+              "A child puts a red apple beside the blue plate on the same kitchen table, child-friendly vector style, no text.",
+              "A child puts a red ball on a chair in the kitchen, child-friendly vector style, no text.",
+            ][index],
+          })),
+        ],
+        domande: [],
+      };
+    };
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (_input, init) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          messages: Array<{ content: string }>;
+        };
+        const optionCount = Number(
+          body.messages[1]?.content.match(/"numeroOpzioni":(\d+)/u)?.[1] ??
+            "4"
+        );
+
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify(buildVisualSheet(optionCount)),
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+    );
+
+    vi.mocked(getSupabaseUserIdFromUnionId).mockReturnValue(supabaseUserId);
+    vi.mocked(getAccountContext).mockResolvedValue({
+      userId: supabaseUserId,
+      ownerUserId: supabaseUserId,
+      role: "single",
+    });
+    vi.mocked(assertActiveSubscription).mockResolvedValue({
+      plan: "trial",
+      status: "trial",
+      created_at: "2026-06-16T10:00:00.000Z",
+      current_period_end: null,
+    });
+    vi.mocked(getUsageSummary).mockResolvedValue(usageSummary);
+    vi.mocked(reserveSheetGenerationQuota).mockResolvedValue(
+      async () => undefined
+    );
+    vi.mocked(reserveImageGenerationQuota).mockResolvedValue(
+      async () => undefined
+    );
+    vi.mocked(buildImageRequests).mockImplementation(({ testoGenerato }) => {
+      const sheet = JSON.parse(testoGenerato) as UnifiedSheet;
+      let distractorIndex = 0;
+
+      return sheet.immagini.map((image, index) => {
+        const role = image.ruolo === "illustrazione" ? "base" : image.ruolo;
+        const label =
+          image.ruolo === "target"
+            ? "Target"
+            : image.ruolo === "distrattore"
+              ? `Distrattore ${++distractorIndex}`
+              : `Illustrazione ${index + 1}`;
+
+        return {
+          role,
+          label,
+          prompt: image.prompt,
+          semanticTags: [`prompt:${image.prompt}`],
+        };
+      });
+    });
+    vi.mocked(resolveImageRequestWithCache).mockResolvedValue({
+      tag: "generated",
+      semanticTags: ["generated"],
+      cacheKey: "generated-cache-key",
+      filePath: "/generated-images/test.png",
+      source: "mock",
+      cacheHit: false,
+    });
+    vi.mocked(adminAppDb).mockReturnValue(dbMock as never);
+
+    try {
+      const generateMutation = aiRouter.generate as unknown as (args: {
+        ctx: {
+          user: { id: string; unionId: string };
+          supabaseAccessToken?: string;
+        };
+        input: {
+          eta: string;
+          fonema: string;
+          interesse: string;
+          tipoOutput: "discriminazione_visiva";
+          scenarioSmart: string;
+          numeroOpzioni: number;
+        };
+      }) => Promise<{
+        sheet: { listaParole: string[] | null };
+      }>;
+
+      const result = await generateMutation({
+        ctx: {
+          user: { id: "local-user", unionId: "supabase:local-user" },
+          supabaseAccessToken: "test-token",
+        },
+        input: {
+          eta: "6-8 anni",
+          fonema: "r",
+          interesse: "nessuno",
+          tipoOutput: "discriminazione_visiva",
+          scenarioSmart: "Il bambino mette la mela rossa sul piatto blu.",
+          numeroOpzioni: 4,
+        },
+      });
+
+      expect(
+        String(
+          JSON.parse(
+            String(fetchSpy.mock.calls[0]?.[1]?.body ?? "{}")
+          ).messages[1].content
+        )
+      ).toContain('"numeroOpzioni":4');
+      expect(buildImageRequests).toHaveBeenCalledWith(
+        expect.objectContaining({ numeroOpzioni: 4 })
+      );
+      expect(result.sheet.listaParole).toEqual([
+        "Target",
+        "Distrattore 1",
+        "Distrattore 2",
+        "Distrattore 3",
+      ]);
+      expect(insertMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lista_parole: [
+            "Target",
+            "Distrattore 1",
+            "Distrattore 2",
+            "Distrattore 3",
+          ],
+        })
+      );
+    } finally {
+      fetchSpy.mockRestore();
+      vi.mocked(adminAppDb).mockReset();
+      vi.mocked(getSupabaseUserIdFromUnionId).mockReset();
+      vi.mocked(getAccountContext).mockReset();
+      vi.mocked(assertActiveSubscription).mockReset();
+      vi.mocked(getUsageSummary).mockReset();
+      vi.mocked(reserveSheetGenerationQuota).mockReset();
+      vi.mocked(reserveImageGenerationQuota).mockReset();
+      vi.mocked(buildImageRequests).mockReset();
+      vi.mocked(resolveImageRequestWithCache).mockReset();
+      if (previousApiKey === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = previousApiKey;
+    }
   });
 });
 
