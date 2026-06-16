@@ -35,6 +35,11 @@ import {
   hashPasswordResetIdentifier,
   isPasswordResetRateLimited,
 } from "./lib/password-reset-security";
+import {
+  buildEmailConfirmationRedirectUrl,
+  isObfuscatedExistingSupabaseUser,
+  isSupabaseEmailNotConfirmedError,
+} from "./lib/email-confirmation";
 
 // Supabase email/password authentication lives in this router. OAuth provider
 // handlers are intentionally separate so removing Google OAuth does not affect
@@ -42,6 +47,13 @@ import {
 
 type AppDbClient = ReturnType<typeof adminAppDb>;
 const PUBLIC_INITIAL_PLAN = "trial";
+
+function normalizedEmailSchema() {
+  return z.preprocess(
+    value => (typeof value === "string" ? value.trim().toLowerCase() : value),
+    z.email()
+  );
+}
 
 async function ensureUserProfile(
   db: AppDbClient,
@@ -68,7 +80,7 @@ async function ensureUserProfile(
 }
 
 const credentialsSchema = z.object({
-  email: z.email().transform(value => value.trim().toLowerCase()),
+  email: normalizedEmailSchema(),
   password: z
     .string()
     .min(PasswordPolicy.minLength, PasswordPolicy.minLengthMessage)
@@ -89,7 +101,7 @@ const loginCredentialsSchema = credentialsSchema.pick({
 });
 
 const passwordResetRequestSchema = z.object({
-  email: z.email().transform(value => value.trim().toLowerCase()),
+  email: normalizedEmailSchema(),
 });
 
 type PasswordResetRequestStatus =
@@ -147,7 +159,7 @@ export const authRouter = createRouter({
     if (!supabaseConfigured) {
       throw userFacingError(
         "SERVICE_UNAVAILABLE",
-        "Recupero password temporaneamente non disponibile: autenticazione non configurata."
+        "Autenticazione temporaneamente non disponibile: Supabase non configurato."
       );
     }
 
@@ -158,7 +170,7 @@ export const authRouter = createRouter({
   }),
   registerWithCredentials: publicQuery
     .input(credentialsSchema)
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (!supabaseConfigured) {
         throw userFacingError(
           "SERVICE_UNAVAILABLE",
@@ -172,7 +184,10 @@ export const authRouter = createRouter({
       const { data, error } = await supabase.auth.signUp({
         email: input.email,
         password: input.password,
-        options: { data: { name: profileName } },
+        options: {
+          data: { name: profileName },
+          emailRedirectTo: buildEmailConfirmationRedirectUrl(ctx.req),
+        },
       });
       if (error || !data.user)
         throw userFacingError(
@@ -182,6 +197,10 @@ export const authRouter = createRouter({
             : "Registrazione non riuscita: controlla email e password e riprova.",
           error
         );
+
+      if (isObfuscatedExistingSupabaseUser(data.user)) {
+        return { success: true, verificationRequired: true };
+      }
 
       const appDatabase = adminAppDb();
       const unionId = `supabase:${data.user.id}`;
@@ -354,6 +373,13 @@ export const authRouter = createRouter({
         password: input.password,
       });
       if (error || !data.user) {
+        if (isSupabaseEmailNotConfirmedError(error)) {
+          throw userFacingError(
+            "UNAUTHORIZED",
+            "Email non ancora confermata. Apri il link nella mail di verifica, poi riprova ad accedere."
+          );
+        }
+
         recordFailedLogin(ctx.clientIp, input.email);
         throw userFacingError(
           "UNAUTHORIZED",

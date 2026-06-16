@@ -2,16 +2,25 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { useNavigate, useSearchParams } from "react-router";
 import { z } from "zod";
 import { PasswordPolicy } from "@contracts/constants";
+import {
+  confirmEmailFromUrl,
+  createEmailConfirmationSupabaseClient,
+  finishEmailConfirmationUrlCleanup,
+  hasEmailConfirmationCallback,
+} from "@/lib/supabase-email-confirmation";
 
 type AuthMode = "login" | "register" | "password-reset";
 
 const registrationSchema = z.object({
-  email: z.email("Inserisci un indirizzo email valido."),
+  email: z.preprocess(
+    value => (typeof value === "string" ? value.trim().toLowerCase() : value),
+    z.email("Inserisci un indirizzo email valido.")
+  ),
   name: z.string().trim().min(2, "Inserisci un nome di almeno 2 caratteri."),
   password: z
     .string()
@@ -30,15 +39,73 @@ export default function Login() {
   const [name, setName] = useState("");
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [registrationMessage, setRegistrationMessage] = useState<string | null>(
-    () =>
-      searchParams.get("reset") === "success"
+    () => {
+      if (searchParams.get("verified") === "success") {
+        return "Email confermata. Ora puoi accedere.";
+      }
+
+      return searchParams.get("reset") === "success"
         ? "Password aggiornata. Accedi con la nuova password."
-        : null
+        : null;
+    }
   );
   const [formError, setFormError] = useState<string | null>(null);
+  const [isConfirmingEmail, setIsConfirmingEmail] = useState(() =>
+    hasEmailConfirmationCallback()
+  );
   const utils = trpc.useUtils();
   const isRegister = authMode === "register";
   const isPasswordReset = authMode === "password-reset";
+  const emailConfirmationConfigQuery = trpc.auth.supabasePublicConfig.useQuery(
+    undefined,
+    {
+      enabled: isConfirmingEmail,
+      retry: false,
+    }
+  );
+
+  useEffect(() => {
+    if (!isConfirmingEmail || !emailConfirmationConfigQuery.data) return;
+
+    let cancelled = false;
+    const client = createEmailConfirmationSupabaseClient(
+      emailConfirmationConfigQuery.data
+    );
+
+    void confirmEmailFromUrl(client)
+      .then(() => {
+        if (cancelled) return;
+        setRegistrationMessage("Email confermata. Ora puoi accedere.");
+        setFormError(null);
+        setAuthMode("login");
+      })
+      .catch(error => {
+        if (cancelled) return;
+        setRegistrationMessage(null);
+        setFormError(
+          error instanceof Error
+            ? error.message
+            : "Non è stato possibile confermare l'email."
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setIsConfirmingEmail(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [emailConfirmationConfigQuery.data, isConfirmingEmail]);
+
+  useEffect(() => {
+    if (!isConfirmingEmail || !emailConfirmationConfigQuery.error) return;
+    finishEmailConfirmationUrlCleanup();
+    queueMicrotask(() => {
+      setRegistrationMessage(null);
+      setFormError("Conferma email temporaneamente non disponibile.");
+      setIsConfirmingEmail(false);
+    });
+  }, [emailConfirmationConfigQuery.error, isConfirmingEmail]);
 
   const refreshAuthStateAfterLogin = () => {
     void Promise.all([
@@ -59,7 +126,7 @@ export default function Login() {
   const registerMutation = trpc.auth.registerWithCredentials.useMutation({
     onSuccess: () => {
       setRegistrationMessage(
-        "Account creato. Conferma la tua e-mail tramite il link fornito nella mail di verifica, poi accedi."
+        "Se l'indirizzo non era già registrato, riceverai una mail di verifica. Apri il link, poi accedi."
       );
       setAuthMode("login");
       setPassword("");
@@ -79,13 +146,18 @@ export default function Login() {
   const isPending =
     loginMutation.isPending ||
     registerMutation.isPending ||
-    resetPasswordMutation.isPending;
+    resetPasswordMutation.isPending ||
+    isConfirmingEmail;
   const onCredentialsSubmit = () => {
     setRegistrationMessage(null);
     setFormError(null);
     if (isPasswordReset) {
       const parsedEmail = z
-        .email("Inserisci un indirizzo email valido.")
+        .preprocess(
+          value =>
+            typeof value === "string" ? value.trim().toLowerCase() : value,
+          z.email("Inserisci un indirizzo email valido.")
+        )
         .safeParse(email);
       if (!parsedEmail.success) {
         setFormError(
@@ -177,6 +249,11 @@ export default function Login() {
           {registrationMessage && !isRegister && (
             <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800">
               {registrationMessage}
+            </div>
+          )}
+          {isConfirmingEmail && (
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+              Conferma email in corso...
             </div>
           )}
           <Button

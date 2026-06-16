@@ -35,9 +35,18 @@ con `Invalid API key`. Configura queste variabili nel provider di hosting:
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `APP_BASE_URL`, URL pubblico HTTPS dell'app, usato per i link email di recupero password
 
-In Supabase Auth aggiungi anche `${APP_BASE_URL}/reset-password` tra le Redirect
-URLs consentite e configura un SMTP custom in produzione per evitare i limiti del
-servizio email di default.
+In Supabase Auth configura questi redirect:
+
+- Site URL: `${APP_BASE_URL}`
+- Redirect URL recupero password: `${APP_BASE_URL}/reset-password`
+- Redirect URL conferma account: `${APP_BASE_URL}/login?auth_action=confirm-email`
+
+Nel template email di conferma account puoi usare il link Supabase standard
+`{{ .ConfirmationURL }}`. Se invece usi un template custom che porta direttamente
+all'app, usa
+`${APP_BASE_URL}/login?auth_action=confirm-email&token_hash={{ .TokenHash }}&type=signup`.
+Nel template recupero password usa `{{ .ConfirmationURL }}`. Configura un SMTP
+custom in produzione per evitare i limiti del servizio email di default.
 
 Se il link email di recupero porta a `/` o a `localhost:3000` invece che a
 `/reset-password`, Supabase sta usando il Site URL o sta rifiutando il redirect
