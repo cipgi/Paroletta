@@ -46,6 +46,13 @@ function teamSeatLimitError() {
   );
 }
 
+function teamPlanMismatchError() {
+  return userFacingError(
+    "BAD_REQUEST",
+    "Puoi collegare al team solo account con lo stesso piano del Manager. Un team deve essere composto interamente da Starter, Pro o Max."
+  );
+}
+
 async function createInvitationAtomically(params: {
   ownerUserId: string;
   email: string;
@@ -59,6 +66,9 @@ async function createInvitationAtomically(params: {
   if (error) {
     if (isDatabaseSignal(error, "team_seat_limit_reached")) {
       throw teamSeatLimitError();
+    }
+    if (isDatabaseSignal(error, "team_plan_mismatch")) {
+      throw teamPlanMismatchError();
     }
     throw databaseOperationError("creare l’invito", error);
   }
@@ -99,6 +109,9 @@ async function acceptInvitationAtomically(params: {
     }
     if (isDatabaseSignal(error, "team_seat_limit_reached")) {
       throw teamSeatLimitError();
+    }
+    if (isDatabaseSignal(error, "team_plan_mismatch")) {
+      throw teamPlanMismatchError();
     }
     if (isDatabaseSignal(error, "account_already_in_team")) {
       throw userFacingError(
@@ -383,7 +396,7 @@ export const organizationRouter = createRouter({
       const { data: invitedProfile, error: invitedProfileError } =
         await adminAppDb()
           .from("profiles")
-          .select("id,email,is_team_manager")
+          .select("id,email,is_team_manager,piano")
           .eq("email", input.email)
           .maybeSingle();
       if (invitedProfileError)
@@ -477,7 +490,7 @@ export const organizationRouter = createRouter({
     .mutation(async ({ ctx, input }) => {
       const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
       await requireManager(supabaseUserId, ctx.supabaseAccessToken);
-      const { error } = await appDb(ctx.supabaseAccessToken)
+      const { error } = await adminAppDb()
         .from("seat_assignments")
         .delete()
         .eq("owner_user_id", supabaseUserId)
@@ -486,4 +499,26 @@ export const organizationRouter = createRouter({
         throw databaseOperationError("rimuovere il membro dal team", error);
       return { success: true };
     }),
+
+  leaveTeam: authedQuery.mutation(async ({ ctx }) => {
+    const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
+    const account = await getAccountContext(
+      supabaseUserId,
+      ctx.supabaseAccessToken
+    );
+    if (account.role !== "staff") {
+      throw userFacingError(
+        "BAD_REQUEST",
+        "Solo un membro staff può uscire da un team."
+      );
+    }
+
+    const { error } = await adminAppDb()
+      .from("seat_assignments")
+      .delete()
+      .eq("owner_user_id", account.ownerUserId)
+      .eq("member_user_id", supabaseUserId);
+    if (error) throw databaseOperationError("uscire dal team", error);
+    return { success: true };
+  }),
 });
