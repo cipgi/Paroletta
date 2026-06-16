@@ -8,7 +8,6 @@ import { useNavigate, useSearchParams } from "react-router";
 import { z } from "zod";
 import { PasswordPolicy } from "@contracts/constants";
 
-const CAPTCHA_FAILURE_THRESHOLD = 3;
 type AuthMode = "login" | "register" | "password-reset";
 
 const registrationSchema = z.object({
@@ -30,8 +29,6 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [authMode, setAuthMode] = useState<AuthMode>("login");
-  const [failedLoginAttempts, setFailedLoginAttempts] = useState(0);
-  const [captchaAnswer, setCaptchaAnswer] = useState("");
   const [registrationMessage, setRegistrationMessage] = useState<string | null>(
     () =>
       searchParams.get("reset") === "success"
@@ -42,12 +39,6 @@ export default function Login() {
   const utils = trpc.useUtils();
   const isRegister = authMode === "register";
   const isPasswordReset = authMode === "password-reset";
-  const captchaRequired =
-    authMode === "login" && failedLoginAttempts >= CAPTCHA_FAILURE_THRESHOLD;
-  const captchaQuery = trpc.auth.loginCaptcha.useQuery(undefined, {
-    enabled: captchaRequired || isPasswordReset,
-    staleTime: 0,
-  });
 
   const refreshAuthStateAfterLogin = () => {
     void Promise.all([
@@ -61,15 +52,8 @@ export default function Login() {
 
   const loginMutation = trpc.auth.loginWithCredentials.useMutation({
     onSuccess: async () => {
-      setFailedLoginAttempts(0);
-      setCaptchaAnswer("");
       refreshAuthStateAfterLogin();
       navigate("/");
-    },
-    onError: () => {
-      setFailedLoginAttempts(value => value + 1);
-      setCaptchaAnswer("");
-      void captchaQuery.refetch();
     },
   });
   const registerMutation = trpc.auth.registerWithCredentials.useMutation({
@@ -89,23 +73,13 @@ export default function Login() {
       setFormError(null);
       setAuthMode("login");
       setPassword("");
-      setCaptchaAnswer("");
-      void captchaQuery.refetch();
-    },
-    onError: () => {
-      setCaptchaAnswer("");
-      void captchaQuery.refetch();
     },
   });
 
-  const captchaPending =
-    (captchaRequired || isPasswordReset) &&
-    (!captchaQuery.data || !captchaAnswer);
   const isPending =
     loginMutation.isPending ||
     registerMutation.isPending ||
-    resetPasswordMutation.isPending ||
-    captchaPending;
+    resetPasswordMutation.isPending;
   const onCredentialsSubmit = () => {
     setRegistrationMessage(null);
     setFormError(null);
@@ -122,8 +96,6 @@ export default function Login() {
 
       resetPasswordMutation.mutate({
         email: parsedEmail.data,
-        captchaChallengeId: captchaQuery.data?.id ?? "",
-        captchaAnswer,
       });
       return;
     }
@@ -149,8 +121,6 @@ export default function Login() {
     loginMutation.mutate({
       email,
       password,
-      captchaChallengeId: captchaQuery.data?.id,
-      captchaAnswer: captchaRequired ? captchaAnswer : undefined,
     });
   };
 
@@ -209,27 +179,6 @@ export default function Login() {
               {registrationMessage}
             </div>
           )}
-          {(captchaRequired || isPasswordReset) && (
-            <div className="space-y-2 rounded-md border p-3">
-              <Label htmlFor="captcha">Verifica anti-automazione</Label>
-              <p className="text-sm text-muted-foreground">
-                {isPasswordReset
-                  ? "Conferma la verifica per ricevere il link."
-                  : "Dopo diversi tentativi falliti, risolvi il CAPTCHA per continuare."}
-              </p>
-              <p className="text-sm font-medium">
-                {captchaQuery.data?.question ??
-                  "Generazione CAPTCHA in corso..."}
-              </p>
-              <Input
-                id="captcha"
-                inputMode="numeric"
-                value={captchaAnswer}
-                onChange={e => setCaptchaAnswer(e.target.value)}
-                placeholder="Risposta"
-              />
-            </div>
-          )}
           <Button
             className="w-full"
             size="lg"
@@ -254,8 +203,6 @@ export default function Login() {
                   return nextValue;
                 });
                 setFormError(null);
-                setFailedLoginAttempts(0);
-                setCaptchaAnswer("");
               }}
             >
               {isRegister
@@ -272,9 +219,6 @@ export default function Login() {
                 setAuthMode(isPasswordReset ? "login" : "password-reset");
                 setRegistrationMessage(null);
                 setFormError(null);
-                setFailedLoginAttempts(0);
-                setCaptchaAnswer("");
-                void captchaQuery.refetch();
               }}
             >
               {isPasswordReset ? "Torna all'accesso" : "Password dimenticata?"}
