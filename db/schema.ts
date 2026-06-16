@@ -99,6 +99,11 @@ export type PasswordResetRequestStatus =
   | "failed"
   | "rate_limited"
   | "suppressed";
+export type EmailConfirmationRequestStatus =
+  | "sent"
+  | "failed"
+  | "rate_limited"
+  | "suppressed";
 
 export interface OrganizationInvitation {
   id: string;
@@ -118,6 +123,15 @@ export interface PasswordResetRequest {
   emailHash: string;
   clientIpHash: string;
   status: PasswordResetRequestStatus;
+  failureCode: string | null;
+  createdAt: string;
+}
+
+export interface EmailConfirmationRequest {
+  id: string;
+  emailHash: string;
+  clientIpHash: string;
+  status: EmailConfirmationRequestStatus;
   failureCode: string | null;
   createdAt: string;
 }

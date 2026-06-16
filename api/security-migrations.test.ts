@@ -13,6 +13,10 @@ const teamPoolSql = readFileSync(
   "db/migrations/025_team_pool_and_plan_consistency.sql",
   "utf8"
 );
+const emailConfirmationSql = readFileSync(
+  "db/migrations/026_email_confirmation_audit.sql",
+  "utf8"
+);
 
 describe("security hardening migration", () => {
   it("does not leave sviluppo as a public default or active plan", () => {
@@ -80,5 +84,22 @@ describe("team pool and plan consistency migration", () => {
     expect(teamPoolSql).toContain("app.enforce_team_member_plan_match");
     expect(teamPoolSql).toContain("team_plan_mismatch");
     expect(teamPoolSql).toContain("trg_seat_assignments_same_plan");
+  });
+});
+
+describe("email confirmation audit migration", () => {
+  it("stores hashed confirmation identifiers without direct user access", () => {
+    expect(emailConfirmationSql).toContain("app.email_confirmation_requests");
+    expect(emailConfirmationSql).toContain("email_hash text not null");
+    expect(emailConfirmationSql).toContain("client_ip_hash text not null");
+    expect(emailConfirmationSql).toContain(
+      "alter table app.email_confirmation_requests enable row level security"
+    );
+    expect(emailConfirmationSql).toContain(
+      "revoke all on table app.email_confirmation_requests from public, anon, authenticated"
+    );
+    expect(emailConfirmationSql).toContain(
+      "grant select, insert on table app.email_confirmation_requests to service_role"
+    );
   });
 });
