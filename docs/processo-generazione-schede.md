@@ -31,8 +31,9 @@ Il server costruisce due messaggi:
 
 ### Validazione output
 
-- Parse con schema zod (`aiResponseSchema`).
-- Se `discriminazione_visiva`, controllo di coerenza strutturale (`validateVisualDiscriminationPlan`); se il piano non è valido, la richiesta viene interrotta invece di sostituire il risultato con dati mockup.
+- Parse con schema zod (`unifiedSheetSchema`).
+- Validazione con `validateSheet`: tipo richiesto, consegna non generica, domande coerenti, immagini nel numero/ruolo/livello atteso e prompt non duplicati o troppo generici.
+- Se il primo output del modello non passa la validazione, il server effettua un secondo tentativo con correzione esplicita; dopo il secondo errore interrompe la richiesta invece di sostituire il risultato con dati mockup.
 
 ### Post-processing e persistenza
 
@@ -88,7 +89,7 @@ Tipi inclusi: `storia`, `filastrocca`, `lista`.
 
 - età, interesse,
 - `scenarioSmart`: frase target + struttura/asse da allenare,
-- `numeroOpzioni` (2-4; in trial cap automatico a 2).
+- `numeroOpzioni` (2-4).
 
 ### Prompt processing
 
@@ -115,7 +116,7 @@ Tipi inclusi: `storia`, `filastrocca`, `lista`.
 
 - esercizi "indica l'immagine in cui..." ad alta precisione clinica,
 - lavoro su comprensione frasale e differenze minime percettive,
-- stampa PDF con frame coerenti.
+- stampa o salvataggio PDF tramite la finestra di stampa del browser, usando l'anteprima reale della scheda.
 
 ### Leve qualità da ottimizzare
 
@@ -218,7 +219,7 @@ Dopo la generazione:
 
 - la scheda viene salvata in DB,
 - appare in elenco dettagli/preview,
-- può essere esportata in PDF.
+- può essere stampata o salvata come PDF dal browser.
 
 Questo consente cicli rapidi di miglioramento qualità:
 

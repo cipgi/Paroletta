@@ -62,6 +62,16 @@ const OPTIONAL_IMAGE_SHEET_TYPES: UnifiedSheetType[] = [
   "lista_parole",
 ];
 
+const SHEET_TYPE_LABELS: Record<UnifiedSheetType, string> = {
+  discriminazione_visiva: "Indica l'immagine corretta",
+  morfosintassi: "Morfologia e morfosintassi",
+  narrazione_sequenze: "Narrazione e sequenze",
+  pragmatica: "Pragmatica",
+  storia: "Storia",
+  filastrocca: "Filastrocca",
+  lista_parole: "Lista parole",
+};
+
 type ValidateSheetOptions =
   | number
   | {
@@ -72,6 +82,7 @@ type ValidateSheetOptions =
 
 const GENERIC_INSTRUCTION_PATTERNS = [
   /^\s*trova l['’]intruso tra le immagini\.?\s*$/iu,
+  /^\s*indica l['’]immagine corretta\.?\s*$/iu,
   /^\s*leggi il testo e svolgi l['’]?esercizio\.?\s*$/iu,
   /^\s*leggi il testo e completa l['’]?esercizio\.?\s*$/iu,
   /^\s*osserva le immagini e scegli quella corretta\.?\s*$/iu,
@@ -81,11 +92,25 @@ const VISUAL_LEVEL_ORDER: UnifiedSheetImage["livello"][] = [
   "intermedio",
   "facile",
 ];
-const VISUAL_IMAGE_PROMPT_MIN_WORDS = 1;
+const VISUAL_IMAGE_PROMPT_MIN_WORDS = 6;
 const TOO_GENERIC_IMAGE_PROMPT_PATTERNS = [
   /^\s*(?:target|distrattore|illustrazione|immagine)\s*(?:\d+)?\s*$/iu,
   /^\s*(?:realistic\s+)?(?:child-friendly\s+)?(?:target|distractor|image|illustration)(?:\s+image)?(?:,\s*no\s+text\.?)?\s*$/iu,
+  /^\s*(?:same|similar)\s+(?:image|illustration|scene)(?:,\s*no\s+text\.?)?\s*$/iu,
 ];
+const NON_SEMANTIC_PROMPT_WORDS = new Set([
+  "child",
+  "friendly",
+  "image",
+  "illustration",
+  "realistic",
+  "square",
+  "scene",
+  "single",
+  "text",
+  "vector",
+  "without",
+]);
 
 function isNonEmptyString(value: string) {
   return value.trim().length > 0;
@@ -124,6 +149,29 @@ function hasUniquePrompts(images: UnifiedSheetImage[]) {
   return new Set(prompts).size === prompts.length;
 }
 
+function getPromptContentWords(value: string) {
+  return normalizeForValidation(value)
+    .split(" ")
+    .filter(word => word.length > 2 && !NON_SEMANTIC_PROMPT_WORDS.has(word));
+}
+
+function countSharedPromptWords(first: string, second: string) {
+  const firstWords = new Set(getPromptContentWords(first));
+  return getPromptContentWords(second).filter(word => firstWords.has(word))
+    .length;
+}
+
+function hasAlignedInstructionAndText(sheet: UnifiedSheet) {
+  const textWords = normalizeForValidation(sheet.testo)
+    .split(" ")
+    .filter(word => word.length > 3);
+  if (textWords.length === 0) return false;
+
+  const instruction = normalizeForValidation(sheet.consegna);
+  const sharedWords = textWords.filter(word => instruction.includes(word));
+  return sharedWords.length >= Math.min(2, textWords.length);
+}
+
 function validateVisualDiscriminationImages(
   images: UnifiedSheetImage[],
   numeroOpzioni: number
@@ -143,7 +191,8 @@ function validateVisualDiscriminationImages(
     return (
       image.ruolo === "distrattore" &&
       image.livello === expectedLevel &&
-      !isGenericImagePrompt(image.prompt, VISUAL_IMAGE_PROMPT_MIN_WORDS)
+      !isGenericImagePrompt(image.prompt, VISUAL_IMAGE_PROMPT_MIN_WORDS) &&
+      countSharedPromptWords(target.prompt, image.prompt) >= 2
     );
   });
 }
@@ -251,18 +300,42 @@ function validateNarrativeSequenceImages(
   return validateIllustrationImages(images);
 }
 
+function resolveKnownUnifiedSheetType(
+  tipo: SheetContentType
+): UnifiedSheetType | null {
+  if (tipo === "lista") return "lista_parole";
+  if (tipo === "morfosintassi_complessa") return "morfosintassi";
+  const parsed = unifiedSheetTypeSchema.safeParse(tipo);
+  return parsed.success ? parsed.data : null;
+}
+
 export function normalizeUnifiedSheetType(
   tipo: SheetContentType
 ): UnifiedSheetType {
-  if (tipo === "lista") return "lista_parole";
-  if (tipo === "morfosintassi_complessa") return "morfosintassi";
-  if (unifiedSheetTypeSchema.safeParse(tipo).success)
-    return tipo as UnifiedSheetType;
-  return "storia";
+  return resolveKnownUnifiedSheetType(tipo) ?? "storia";
 }
 
 export function canOmitSheetImages(tipo: SheetContentType) {
   return OPTIONAL_IMAGE_SHEET_TYPES.includes(normalizeUnifiedSheetType(tipo));
+}
+
+export function getSheetTypeLabel(tipo: SheetContentType) {
+  const normalizedType = resolveKnownUnifiedSheetType(tipo);
+  return normalizedType ? SHEET_TYPE_LABELS[normalizedType] : String(tipo);
+}
+
+export function isTextWithPhonemeSheet(tipo: SheetContentType) {
+  const normalizedType = resolveKnownUnifiedSheetType(tipo);
+  return (
+    normalizedType === "storia" ||
+    normalizedType === "filastrocca" ||
+    normalizedType === "lista_parole"
+  );
+}
+
+export function getVisualDiscriminationTitle(interesse: string) {
+  const label = SHEET_TYPE_LABELS.discriminazione_visiva;
+  return interesse.trim() ? `${label} — tema ${interesse}` : label;
 }
 
 export function validateSheet(
@@ -281,6 +354,9 @@ export function validateSheet(
   if (!isNonEmptyString(sheet.consegna)) return false;
   if (isGenericInstruction(sheet.consegna)) return false;
   if (!isNonEmptyString(sheet.testo)) return false;
+  if (expectedType === "discriminazione_visiva") {
+    if (!hasAlignedInstructionAndText(sheet)) return false;
+  }
 
   if (!validateQuestions(sheet, expectedType)) return false;
 

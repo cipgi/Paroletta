@@ -4,23 +4,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { FileText, ArrowRight, Sparkles } from "lucide-react";
-
-function getSheetTypeLabel(tipoOutput: string) {
-  const labels: Record<string, string> = {
-    storia: "Storia",
-    filastrocca: "Filastrocca",
-    lista: "Lista parole",
-    discriminazione_visiva: "Trova l'intruso",
-    morfosintassi_complessa: "Morfologia e morfosintassi",
-    narrazione_sequenze: "Narrazione e sequenze",
-    pragmatica: "Pragmatica",
-  };
-  return labels[tipoOutput] ?? tipoOutput;
-}
-
-function isTextWithPhonemeSheet(tipoOutput: string) {
-  return ["storia", "filastrocca", "lista"].includes(tipoOutput);
-}
+import {
+  getSheetTypeLabel,
+  isTextWithPhonemeSheet,
+} from "@contracts/sheet-content";
 
 export default function Sheets() {
   const { data: sheets, isLoading } = trpc.sheets.list.useQuery();

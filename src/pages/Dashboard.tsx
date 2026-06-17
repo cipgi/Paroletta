@@ -6,23 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Sparkles, FileText, TrendingUp, ArrowRight } from "lucide-react";
 import { SubscriptionPlanLimits } from "@contracts/constants";
-
-function getSheetTypeLabel(tipoOutput: string) {
-  const labels: Record<string, string> = {
-    storia: "Storia",
-    filastrocca: "Filastrocca",
-    lista: "Lista parole",
-    discriminazione_visiva: "Trova l'intruso",
-    morfosintassi_complessa: "Morfologia e morfosintassi",
-    narrazione_sequenze: "Narrazione e sequenze",
-    pragmatica: "Pragmatica",
-  };
-  return labels[tipoOutput] ?? tipoOutput;
-}
-
-function isTextWithPhonemeSheet(tipoOutput: string) {
-  return ["storia", "filastrocca", "lista"].includes(tipoOutput);
-}
+import {
+  getSheetTypeLabel,
+  isTextWithPhonemeSheet,
+} from "@contracts/sheet-content";
 
 export default function Dashboard() {
   const { user, isAuthenticated, isLoading } = useAuth();

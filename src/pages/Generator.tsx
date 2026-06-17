@@ -97,7 +97,7 @@ const tipoSchedaConfig: Record<
   { titolo: string; descrizione: string; icona: typeof FileText }
 > = {
   discriminazione_visiva: {
-    titolo: "Trova l'intruso",
+    titolo: "Indica l'immagine corretta",
     descrizione:
       "Categorizzazione semantica o attenzione visiva: un target corretto e distrattori coordinati.",
     icona: Eye,
