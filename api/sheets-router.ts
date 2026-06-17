@@ -1,20 +1,11 @@
 import { createRouter, authedQuery } from "./middleware";
 import { z } from "zod";
-import { createDidacticPdf } from "./lib/pdf";
-import { illustrations } from "./store";
 import { adminAppDb, appDb, getSupabaseUserIdFromUnionId } from "./lib/db";
 import {
   databaseOperationError,
   invalidSessionError,
   missingResourceError,
 } from "./lib/errors";
-import {
-  canOmitSheetImages,
-  getUserFacingSheetContent,
-  normalizeUnifiedSheetType,
-  parseUnifiedSheetContent,
-} from "@contracts/sheet-content";
-import { sanitizeProfileNameOrFallback } from "./lib/sanitize";
 import { getAccountContext } from "./lib/organization";
 import { createSupabaseImageCacheDb } from "./lib/illustration-cache-db";
 import { createSupabaseImageObjectStorage } from "./lib/image-storage";
@@ -27,16 +18,8 @@ import {
   resolveImageRequestWithCache,
 } from "./lib/image-generation";
 import {
-  generateUnifiedSheetFromParams,
-  sanitizeGenerationParams,
-  type TipoOutput,
-} from "./ai-router";
-import {
   assertActiveSubscription,
-  assertSheetLimitAvailable,
-  getUsageSummary,
   reserveImageGenerationQuota,
-  reserveSheetGenerationQuota,
 } from "./lib/subscription";
 
 function requireSupabaseUserId(unionId: string) {
@@ -102,47 +85,6 @@ function getVisualOptionCount(words: string[] | null) {
     /^(target|distrattore)/i.test(word.trim())
   ).length;
   return Math.min(Math.max(count || 4, 2), 4);
-}
-
-function getNarrativeSceneCount(words: string[] | null) {
-  const count = (words ?? []).filter(word =>
-    /^scena\s+\d+/i.test(word.trim())
-  ).length;
-  return Math.min(Math.max(count || 4, 3), 5);
-}
-
-function toRegenerableTipoOutput(tipoOutput: string): TipoOutput {
-  if (tipoOutput === "morfosintassi_complessa") return tipoOutput;
-  if (tipoOutput === "morfosintassi") return tipoOutput;
-  if (tipoOutput === "narrazione_sequenze") return tipoOutput;
-  if (tipoOutput === "pragmatica") return tipoOutput;
-  if (tipoOutput === "discriminazione_visiva") return tipoOutput;
-  if (tipoOutput === "storia") return tipoOutput;
-  if (tipoOutput === "filastrocca") return tipoOutput;
-  if (tipoOutput === "lista") return tipoOutput;
-  if (tipoOutput === "lista_parole") return tipoOutput;
-  throw missingResourceError("Tipo scheda");
-}
-
-function getNoInterestRegenerationContext(
-  tipoOutput: TipoOutput,
-  testoGenerato: string
-) {
-  const tipo = normalizeUnifiedSheetType(tipoOutput);
-  if (tipo === "morfosintassi") {
-    return { descrizioneScena: testoGenerato };
-  }
-  if (tipo === "storia" || tipo === "filastrocca" || tipo === "lista_parole") {
-    return { aspettoSpecifico: testoGenerato };
-  }
-  return { scenarioSmart: testoGenerato };
-}
-
-function getRegenerationAgeRange(difficulty: string | null | undefined) {
-  const normalized = (difficulty ?? "").toLocaleLowerCase("it-IT");
-  if (normalized === "bassa" || normalized === "facile") return "3-5 anni";
-  if (normalized === "alta" || normalized === "difficile") return "9-11 anni";
-  return "6-8 anni";
 }
 
 type ImageQuotaContext = {
@@ -370,192 +312,6 @@ export const sheetsRouter = createRouter({
         storagePath: illustration.storagePath ?? null,
         fallbackReason: illustration.fallbackReason ?? null,
         cacheHit: illustration.cacheHit,
-      };
-    }),
-  regenerateText: authedQuery
-    .input(z.object({ id: z.string().uuid() }))
-    .mutation(async ({ ctx, input }) => {
-      const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
-      const { data, error } = await appDb(ctx.supabaseAccessToken)
-        .from("sheets")
-        .select("*")
-        .eq("id", input.id)
-        .single();
-      if (error || !data) throw missingResourceError("Scheda");
-      await assertCanManageSheetOwner(
-        supabaseUserId,
-        data.user_id,
-        ctx.supabaseAccessToken
-      );
-      const account = await getAccountContext(
-        supabaseUserId,
-        ctx.supabaseAccessToken
-      );
-      const subscription = await assertActiveSubscription({
-        ownerUserId: account.ownerUserId,
-        accessToken: ctx.supabaseAccessToken,
-      });
-      const plan = subscription.plan ?? "trial";
-      const usageBeforeGeneration = await getUsageSummary({
-        ownerUserId: account.ownerUserId,
-        plan,
-        accessToken: ctx.supabaseAccessToken,
-      });
-      assertSheetLimitAvailable(usageBeforeGeneration);
-      const sheet = mapSheet(data);
-      const parsedSheetContent = parseUnifiedSheetContent(sheet.testoGenerato);
-      const includeImages =
-        !parsedSheetContent ||
-        !canOmitSheetImages(parsedSheetContent.tipo) ||
-        parsedSheetContent.immagini.length > 0;
-      const tipoOutput = toRegenerableTipoOutput(sheet.tipoOutput);
-      const noInterestContext =
-        sheet.interesse === "nessuno"
-          ? getNoInterestRegenerationContext(tipoOutput, sheet.testoGenerato)
-          : {};
-      const sanitizedInput = sanitizeGenerationParams({
-        eta: getRegenerationAgeRange(sheet.difficolta),
-        fonema: sheet.fonema,
-        interesse: sheet.interesse,
-        tipoOutput,
-        ...noInterestContext,
-        numeroOpzioni:
-          sheet.tipoOutput === "discriminazione_visiva"
-            ? getVisualOptionCount(sheet.listaParole)
-            : undefined,
-        numeroScene:
-          sheet.tipoOutput === "narrazione_sequenze"
-            ? getNarrativeSceneCount(sheet.listaParole)
-            : undefined,
-        includeImages,
-      });
-      const rollbackSheetQuota = await reserveSheetGenerationQuota({
-        userId: supabaseUserId,
-        plan,
-        accessToken: ctx.supabaseAccessToken,
-      });
-      let generatedSheet: Awaited<
-        ReturnType<typeof generateUnifiedSheetFromParams>
-      >;
-      try {
-        generatedSheet = await generateUnifiedSheetFromParams(sanitizedInput);
-      } catch (error) {
-        await rollbackSheetQuota();
-        throw error;
-      }
-      const { data: updated, error: updateError } = await appDb(
-        ctx.supabaseAccessToken
-      )
-        .from("sheets")
-        .update({
-          testo_generato: generatedSheet.serializedSheet,
-          tag_immagine: generatedSheet.tagImmagine,
-          lista_parole: generatedSheet.words,
-          pdf_url: null,
-        })
-        .eq("id", input.id)
-        .select("*")
-        .single();
-
-      if (updateError || !updated) {
-        await rollbackSheetQuota();
-        throw databaseOperationError(
-          "rigenerare il testo della scheda",
-          updateError
-        );
-      }
-
-      const updatedSheet = mapSheet(updated);
-      const imageAssets = await resolveSheetImageAssets(updatedSheet);
-      return { ...updatedSheet, imageAssets };
-    }),
-  generatePdf: authedQuery
-    .input(z.object({ id: z.string().uuid() }))
-    .mutation(async ({ ctx, input }) => {
-      const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
-      const { data, error } = await appDb(ctx.supabaseAccessToken)
-        .from("sheets")
-        .select("*")
-        .eq("id", input.id)
-        .single();
-      if (error || !data) throw missingResourceError("Scheda");
-      await assertCanManageSheetOwner(
-        supabaseUserId,
-        data.user_id,
-        ctx.supabaseAccessToken
-      );
-      const sheet = mapSheet(data);
-      let illustrationLabel = sheet.tagImmagine ?? "generico";
-      if (sheet.tagImmagine) {
-        const fuzzy =
-          illustrations.find(i => i.tag === sheet.tagImmagine) ??
-          illustrations.find(i => i.tag.includes(sheet.tagImmagine!));
-        if (fuzzy) illustrationLabel = `${fuzzy.tag} (${fuzzy.filePath})`;
-      }
-      const doctorName = sanitizeProfileNameOrFallback(
-        [ctx.user.firstName, ctx.user.lastName].filter(Boolean).join(" ") ||
-          ctx.user.name,
-        "Nome Utente"
-      );
-      const parsedSheetContent = parseUnifiedSheetContent(sheet.testoGenerato);
-      const includeImageSections =
-        !parsedSheetContent || parsedSheetContent.immagini.length > 0;
-      const bytes = createDidacticPdf({
-        title: "Paroletta",
-        subtitle: "Scheda didattica personalizzata",
-        fonema: sheet.fonema,
-        interesse: sheet.interesse,
-        difficolta: sheet.difficolta ?? "media",
-        content: getUserFacingSheetContent({
-          tipoOutput: sheet.tipoOutput,
-          testoGenerato: sheet.testoGenerato,
-        }),
-        words: sheet.listaParole ?? [],
-        illustrationLabel,
-        watermarkDoctor: doctorName,
-        tipoOutput: sheet.tipoOutput,
-        includeImageSections,
-      });
-      return {
-        fileName: `scheda-${sheet.id}.pdf`,
-        data: Buffer.from(bytes).toString("base64"),
-      };
-    }),
-  create: authedQuery
-    .input(
-      z.object({
-        fonema: z.string().max(10),
-        interesse: z.string().max(100),
-        tipoOutput: z.enum([
-          "storia",
-          "filastrocca",
-          "lista",
-          "discriminazione_visiva",
-          "morfosintassi_complessa",
-          "narrazione_sequenze",
-          "pragmatica",
-        ]),
-        testoGenerato: z.string(),
-        tagImmagine: z.string().max(100).optional(),
-        listaParole: z.array(z.string()).optional(),
-        difficolta: z.enum(["bassa", "media", "alta"]).optional(),
-        pdfUrl: z.string().max(500).optional(),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      const supabaseUserId = requireSupabaseUserId(ctx.user.unionId);
-      return {
-        id: crypto.randomUUID(),
-        userId: supabaseUserId,
-        fonema: input.fonema,
-        interesse: input.interesse,
-        tipoOutput: input.tipoOutput,
-        testoGenerato: input.testoGenerato,
-        tagImmagine: input.tagImmagine ?? null,
-        listaParole: input.listaParole ?? null,
-        difficolta: input.difficolta ?? "media",
-        pdfUrl: input.pdfUrl ?? null,
-        createdAt: new Date(),
       };
     }),
 });

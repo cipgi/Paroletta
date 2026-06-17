@@ -5,7 +5,6 @@ import type {
 } from "./image-generation";
 import type { ImageObjectStorage } from "./image-storage";
 import { parseStorageFilePath } from "./image-storage";
-import { illustrations } from "../store";
 
 type DbIllustration = {
   id: string;
@@ -132,79 +131,15 @@ export function createSupabaseImageCacheDb(
         .single();
 
       if (error || !data) {
-        const fallback: CachedIllustration = {
+        return {
           ...illustration,
           id: illustration.cacheKey,
           generatedCostUsd: illustration.generatedCostUsd ?? 0,
           createdAt: new Date().toISOString(),
         };
-        if (!scope && fallback.source !== "generated") {
-          illustrations.push({
-            tag: fallback.tag,
-            semanticTags: fallback.semanticTags,
-            cacheKey: fallback.cacheKey,
-            filePath: fallback.filePath,
-            mimeType: fallback.mimeType ?? null,
-            source: fallback.source,
-            storageBucket: fallback.storageBucket ?? null,
-            storagePath: fallback.storagePath ?? null,
-            byteSize: fallback.byteSize ?? null,
-            fallbackReason: fallback.fallbackReason ?? null,
-            generationModel: fallback.generationModel ?? null,
-            generatedCostUsd: fallback.generatedCostUsd ?? 0,
-          });
-        }
-        return fallback;
       }
 
       return mapDbIllustration(data as DbIllustration, options.imageStorage);
-    },
-  };
-}
-
-export function createMemoryImageCacheDb(): ImageCacheDb {
-  return {
-    async findByCacheKey(cacheKey, scope) {
-      if (scope) return null;
-      const found = illustrations.find(item => item.cacheKey === cacheKey);
-      return found
-        ? {
-            tag: found.tag,
-            semanticTags: found.semanticTags,
-            cacheKey: found.cacheKey,
-            filePath: found.filePath,
-            mimeType: found.mimeType,
-            source: found.source,
-            storageBucket: found.storageBucket ?? null,
-            storagePath: found.storagePath ?? null,
-            byteSize: found.byteSize ?? null,
-            fallbackReason: found.fallbackReason ?? null,
-            generationModel: found.generationModel,
-            generatedCostUsd: found.generatedCostUsd,
-          }
-        : null;
-    },
-    async save(illustration, scope) {
-      if (scope) {
-        return {
-          ...illustration,
-          id: illustration.cacheKey,
-          createdAt: new Date().toISOString(),
-        };
-      }
-      const existingIndex = illustrations.findIndex(
-        item => item.cacheKey === illustration.cacheKey
-      );
-      if (existingIndex >= 0) {
-        illustrations[existingIndex] = illustration;
-      } else {
-        illustrations.push(illustration);
-      }
-      return {
-        ...illustration,
-        id: illustration.cacheKey,
-        createdAt: new Date().toISOString(),
-      };
     },
   };
 }

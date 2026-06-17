@@ -33,27 +33,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { TeamLimits } from "@contracts/constants";
+import {
+  getSheetTypeLabel,
+  isTextWithPhonemeSheet,
+} from "@contracts/sheet-content";
 
 function percent(value: number, total: number) {
   if (total <= 0) return 0;
   return Math.min(Math.round((value / total) * 100), 100);
-}
-
-function getSheetTypeLabel(tipoOutput: string) {
-  const labels: Record<string, string> = {
-    storia: "Storia",
-    filastrocca: "Filastrocca",
-    lista: "Lista parole",
-    discriminazione_visiva: "Trova l'intruso",
-    morfosintassi_complessa: "Morfologia e morfosintassi",
-    narrazione_sequenze: "Narrazione e sequenze",
-    pragmatica: "Pragmatica",
-  };
-  return labels[tipoOutput] ?? tipoOutput;
-}
-
-function isTextWithPhonemeSheet(tipoOutput: string) {
-  return ["storia", "filastrocca", "lista"].includes(tipoOutput);
 }
 
 export default function Management() {

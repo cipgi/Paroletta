@@ -1,8 +1,10 @@
 import { useParams, Link } from "react-router";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { trpc } from "@/providers/trpc";
 import {
+  getSheetTypeLabel,
   getNeutralVisualOptionLabel,
+  getVisualDiscriminationTitle,
   getUserFacingSheetContent,
   orderNarrativeSequenceForDisplay,
   orderVisualOptionsForDisplay,
@@ -23,24 +25,6 @@ import {
   RefreshCcw,
   Loader2,
 } from "lucide-react";
-
-function getSheetTypeLabel(tipoOutput: string) {
-  const labels: Record<string, string> = {
-    storia: "Storia",
-    filastrocca: "Filastrocca",
-    lista: "Lista di parole",
-    discriminazione_visiva: "Trova l'intruso",
-    morfosintassi_complessa: "Morfologia e morfosintassi",
-    narrazione_sequenze: "Narrazione e sequenze",
-    pragmatica: "Pragmatica",
-  };
-  return labels[tipoOutput] ?? tipoOutput;
-}
-
-function getVisualSheetTitle(interesse: string) {
-  if (!interesse.trim()) return "Trova l'intruso";
-  return `Trova l'intruso — tema ${interesse}`;
-}
 
 function getVisualOptionCount(words: string[]) {
   const count = words.filter(word =>
@@ -177,6 +161,9 @@ export default function SheetDetail() {
 
   const { user } = useAuth();
   const sheetCardRef = useRef<HTMLDivElement | null>(null);
+  const [regeneratingImageKeys, setRegeneratingImageKeys] = useState(
+    () => new Set<string>()
+  );
 
   const { data: sheet, isLoading } = trpc.sheets.detail.useQuery(
     { id: sheetId },
@@ -187,6 +174,25 @@ export default function SheetDetail() {
       void utils.sheets.detail.invalidate({ id: sheetId });
     },
   });
+
+  const regenerateImageAsset = (cacheKey: string) => {
+    setRegeneratingImageKeys(current => new Set(current).add(cacheKey));
+    regenerateImage.mutate(
+      {
+        id: sheetId,
+        cacheKey,
+      },
+      {
+        onSettled: () => {
+          setRegeneratingImageKeys(current => {
+            const next = new Set(current);
+            next.delete(cacheKey);
+            return next;
+          });
+        },
+      }
+    );
+  };
 
   const printSheetAsPdf = () => {
     const sheetElement = sheetCardRef.current;
@@ -319,7 +325,7 @@ export default function SheetDetail() {
 
   const displayTitle =
     sheet.tipoOutput === "discriminazione_visiva"
-      ? getVisualSheetTitle(sheet.interesse)
+      ? getVisualDiscriminationTitle(sheet.interesse)
       : getSheetTypeLabel(sheet.tipoOutput);
 
   return (
@@ -425,9 +431,6 @@ export default function SheetDetail() {
                         </div>
                         <p className="mt-4 text-base font-bold text-slate-700">
                           {label}
-                        </p>
-                        <p className="mt-1 text-sm text-slate-500">
-                          Didascalia: opzione {index + 1}
                         </p>
                       </div>
                     );
@@ -567,8 +570,7 @@ export default function SheetDetail() {
               <div className="mt-4 flex flex-wrap gap-2">
                 {imageActionAssets.map((asset, index) => {
                   const isRegenerating =
-                    regenerateImage.isPending &&
-                    regenerateImage.variables?.cacheKey === asset.cacheKey;
+                    regeneratingImageKeys.has(asset.cacheKey);
                   const hasImage = isDisplayableImagePath(asset.filePath);
 
                   return (
@@ -577,12 +579,9 @@ export default function SheetDetail() {
                       variant="outline"
                       size="sm"
                       className="gap-1"
-                      disabled={regenerateImage.isPending}
+                      disabled={isRegenerating}
                       onClick={() => {
-                        regenerateImage.mutate({
-                          id: sheet.id,
-                          cacheKey: asset.cacheKey,
-                        });
+                        regenerateImageAsset(asset.cacheKey);
                       }}
                     >
                       {isRegenerating ? (

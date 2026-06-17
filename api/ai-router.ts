@@ -116,6 +116,7 @@ const MAX_SMART_INPUT_LENGTH = 900;
 const MAX_GRAMMAR_ELEMENT_LENGTH = 120;
 const MAX_SCENE_DESCRIPTION_LENGTH = 900;
 const MAX_ETA_LENGTH = 20;
+const MAX_TEXT_GENERATION_ATTEMPTS = 2;
 const FREE_INTEREST_VALUE = "libero";
 const NO_INTEREST_VALUE = "nessuno";
 const INSTRUCTION_MARKER_PATTERN =
@@ -371,29 +372,6 @@ function getSheetWords(
     : splitWordsFromListText(sheet.testo).slice(0, 8);
 }
 
-function isPlaceholderVisualPrompt(value: string) {
-  return /^\s*(?:target|distrattore|distractor|illustrazione|illustration|image|immagine)(?:\s+\d+)?(?:\s+image)?(?:,\s*no\s+text\.?)?\s*$/iu.test(
-    value
-  );
-}
-
-function normalizeVisualPrompt(prompt: string | undefined, fallback: string) {
-  const cleanedPrompt = prompt?.trim() ?? "";
-  const cleanedFallback = fallback.trim() || "scena visiva concreta";
-  return !cleanedPrompt || isPlaceholderVisualPrompt(cleanedPrompt)
-    ? cleanedFallback
-    : cleanedPrompt;
-}
-
-function getVisualTargetText(params: GenerationParams) {
-  return (
-    params.scenarioSmart?.trim() ||
-    params.aspettoSpecifico?.trim() ||
-    params.descrizioneScena?.trim() ||
-    "scena target"
-  );
-}
-
 export function normalizeVisualDiscriminationSheet(
   sheet: UnifiedSheet,
   numeroOpzioni: number,
@@ -406,37 +384,15 @@ export function normalizeVisualDiscriminationSheet(
   const target =
     sheet.immagini.find(image => image.ruolo === "target") ?? sheet.immagini[0];
   const distractors = sheet.immagini.filter(image => image !== target);
-  const fallbackDistractorPrompts = [
-    `${resolvedTargetText}; cambia solo un dettaglio spaziale o relazionale.`,
-    `${resolvedTargetText}; cambia l'oggetto principale mantenendo lo stesso contesto.`,
-    `${resolvedTargetText}; cambia la scena in modo semplice ed evidente.`,
-  ];
   const imagePlan = [
-    target ?? {
-      ruolo: "target" as const,
-      livello: "principale" as const,
-      prompt: resolvedTargetText,
-    },
-    ...Array.from({ length: optionCount - 1 }, (_, index) => {
-      return (
-        distractors[index] ?? {
-          ruolo: "distrattore" as const,
-          livello: "difficile" as const,
-          prompt: fallbackDistractorPrompts[index] ?? resolvedTargetText,
-        }
-      );
-    }),
+    ...(target ? [target] : []),
+    ...distractors.slice(0, optionCount - 1),
   ];
 
   const normalizedImages = imagePlan
     .slice(0, optionCount)
     .map((image, index) => {
-      const prompt = normalizeVisualPrompt(
-        image.prompt,
-        index === 0
-          ? resolvedTargetText
-          : (fallbackDistractorPrompts[index - 1] ?? resolvedTargetText)
-      );
+      const prompt = image.prompt.trim();
 
       if (index === 0) {
         return {
@@ -467,24 +423,6 @@ export function normalizeVisualDiscriminationSheet(
   };
 }
 
-function buildVisualDiscriminationFallbackSheet(
-  params: GenerationParams
-): UnifiedSheet {
-  const targetText = getVisualTargetText(params);
-  return normalizeVisualDiscriminationSheet(
-    {
-      tipo: "discriminazione_visiva",
-      titolo: "Indica l'immagine corretta",
-      consegna: `Indica l'immagine che rappresenta: ${targetText}`,
-      testo: targetText,
-      immagini: [],
-      domande: [],
-    },
-    params.numeroOpzioni ?? 4,
-    targetText
-  );
-}
-
 function buildTypeSpecificSection(params: GenerationParams): string {
   const tipo = normalizeUnifiedSheetType(params.tipoOutput);
   const includeImages = params.includeImages || !canOmitSheetImages(tipo);
@@ -493,13 +431,13 @@ function buildTypeSpecificSection(params: GenerationParams): string {
 
   if (tipo === "discriminazione_visiva") {
     return `discriminazione_visiva: crea un esercizio "indica l'immagine corretta", non un "trova l'intruso".
-Output obbligatorio: testo = una sola frase target visualmente rappresentabile; consegna = "Indica l'immagine in cui ..." e deve contenere lo stesso significato della frase target; domande = []; immagini = esattamente numeroOpzioni elementi ordinati così: target, distrattore difficile, distrattore intermedio, distrattore facile. Se numeroOpzioni è 2 usa solo target + distrattore difficile; se è 3 usa target + difficile + intermedio.
+Output obbligatorio: testo = una sola frase target visualmente rappresentabile; se scenarioSmart contiene una frase target, usala come fonte primaria e non sostituirla con il tema/interesse. consegna = "Indica l'immagine in cui ..." e deve contenere lo stesso significato della frase target; domande = []; immagini = esattamente numeroOpzioni elementi ordinati così: target, distrattore difficile, distrattore intermedio, distrattore facile. Se numeroOpzioni è 2 usa solo target + distrattore difficile; se è 3 usa target + difficile + intermedio.
 Procedura obbligatoria prima di scrivere il JSON:
 1. Scegli una frase target concreta con soggetto, azione, oggetto e almeno un dettaglio verificabile (colore, posizione, luogo o destinazione). Evita concetti astratti non visibili.
 2. Definisci un contesto comune semplice che possa restare stabile nella serie.
 3. Definisci un solo asse di variazione per ogni distrattore: agente, azione, oggetto, colore, posizione spaziale, destinazione o luogo. Non modificare casualmente più elementi.
 4. Scrivi prompt immagine in inglese come singole scene quadrate, child-friendly, senza testo, senza collage, senza più vignette e senza etichette.
-5. Ogni prompt deve nominare esplicitamente soggetto, azione, oggetto, luogo/contesto e dettaglio variato; non usare pronomi o descrizioni vaghe come "similar image".
+5. Ogni prompt deve nominare esplicitamente soggetto, azione, oggetto, luogo/contesto e dettaglio variato; non usare pronomi o descrizioni vaghe come "similar image". Ogni distrattore deve condividere il dominio semantico del target e non può essere un tema scollegato.
 Scala didattica obbligatoria: D1 difficile estremamente simile al target, con solo 1 dettaglio saliente modificato; D2 intermedio con differenze evidenti ma stesso tema e contesto generale; D3 facile con differenze sostanziali e immediate su agente, oggetto principale, destinazione o luogo. D3 facile con differenze sostanziali non deve essere assurdo o fuori tema.
 Controllo qualità obbligatorio: il target deve rendere vera la consegna; ogni distrattore deve rendere falsa la consegna per un motivo preciso; i distrattori non devono essere tutti quasi identici e non devono essere tutti ovviamente scollegati. Mantieni coerenza di stile, palette e livello di dettaglio in tutta la serie.`;
   }
@@ -542,7 +480,18 @@ Controllo qualità obbligatorio: il target deve rendere vera la consegna; ogni d
   return `lista_parole: testo = lista di parole target con il fonema indicato, adatta all'età, concreta, pronunciabile e vicina all'interesse. Evita parole astratte o troppo simili se confondono il bambino. ${imageRule} domande = [].`;
 }
 
-export function buildPromptMessages(params: GenerationParams): PromptMessage[] {
+function safeStringifyForPrompt(value: unknown) {
+  try {
+    return JSON.stringify(value, null, 2).slice(0, 6000);
+  } catch {
+    return String(value).slice(0, 6000);
+  }
+}
+
+export function buildPromptMessages(
+  params: GenerationParams,
+  correction?: { reason: string; previousOutput: unknown }
+): PromptMessage[] {
   const tipoOutput = normalizeUnifiedSheetType(params.tipoOutput);
   const fieldScope = getGenerationFieldScope(params.tipoOutput);
   const sanitizedVariables: Record<string, unknown> = {
@@ -557,6 +506,9 @@ export function buildPromptMessages(params: GenerationParams): PromptMessage[] {
   }
   if (fieldScope.usesScenarioSmart) {
     sanitizedVariables.scenarioSmart = params.scenarioSmart ?? null;
+  }
+  if (tipoOutput === "discriminazione_visiva" && params.scenarioSmart) {
+    sanitizedVariables.fraseTargetVincolante = params.scenarioSmart;
   }
   if (fieldScope.usesElementoGrammaticale) {
     sanitizedVariables.elementoGrammaticale =
@@ -579,7 +531,7 @@ export function buildPromptMessages(params: GenerationParams): PromptMessage[] {
     sanitizedVariables.interessiDisponibili = AVAILABLE_SPECIFIC_INTERESTS;
   }
 
-  return [
+  const messages: PromptMessage[] = [
     {
       role: "system",
       content: `Rispondi SOLO con JSON valido, nessun testo extra.
@@ -629,6 +581,7 @@ REGOLE RIGIDE PER IL JSON:
 - Il campo "tipo" deve essere esattamente "${normalizeUnifiedSheetType(params.tipoOutput)}".
 - Non usare consegne generiche come "Trova l'intruso tra le immagini".
 - Non usare prompt immagine generici, duplicati o basati su "same image"; descrivi sempre la scena completa.
+- Non usare dati statici, esempi di fallback, mockup o contenuti segnaposto: genera solo una scheda clinica coerente con i parametri ricevuti.
 - Prima di rispondere verifica mentalmente: titolo, consegna, testo e prompt non vuoti; immagini coerenti con il tipo; numero immagini corretto; ruoli e livelli ordinati; risposta corretta unica; distrattori graduati.`,
     },
     {
@@ -637,11 +590,29 @@ REGOLE RIGIDE PER IL JSON:
 ${JSON.stringify(sanitizedVariables)}`,
     },
   ];
+
+  if (!correction) return messages;
+
+  return [
+    ...messages,
+    {
+      role: "user",
+      content: `La risposta precedente NON è valida e non deve essere riutilizzata.
+Motivo della validazione fallita: ${correction.reason}
+Risposta precedente:
+${safeStringifyForPrompt(correction.previousOutput)}
+
+Rigenera da zero un nuovo oggetto JSON valido, rispettando lo schema, il tipo richiesto e tutti i vincoli clinici. Non usare fallback, esempi locali o placeholder.`,
+    },
+  ];
 }
+
+class OpenAITextUnavailableError extends Error {}
+class OpenAIInvalidJsonError extends Error {}
 
 async function callOpenAI(messages: PromptMessage[]): Promise<unknown> {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
+  if (!apiKey) throw new OpenAITextUnavailableError("OPENAI_API_KEY not configured");
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -656,58 +627,47 @@ async function callOpenAI(messages: PromptMessage[]): Promise<unknown> {
       response_format: { type: "json_object" },
     }),
   });
-  if (!res.ok) throw new Error(`OpenAI API error: ${res.status}`);
+  if (!res.ok) throw new OpenAITextUnavailableError(`OpenAI API error: ${res.status}`);
 
   const data = (await res.json()) as {
     choices: Array<{ message: { content: string } }>;
   };
   const content = data.choices[0]?.message?.content ?? "{}";
-  return JSON.parse(content);
+  try {
+    return JSON.parse(content);
+  } catch {
+    throw new OpenAIInvalidJsonError("OpenAI returned invalid JSON");
+  }
 }
 
-export async function generateUnifiedSheetFromParams(params: GenerationParams) {
-  const messages = buildPromptMessages(params);
-  let raw: unknown;
-  try {
-    raw = await callOpenAI(messages);
-  } catch (error) {
-    console.error("[ai-router] OpenAI text generation failed", { error });
-    throw userFacingError(
-      "SERVICE_UNAVAILABLE",
-      "La generazione AI non è disponibile in questo momento. Riprova tra poco."
-    );
-  }
-
-  const parsed = unifiedSheetSchema.safeParse(raw);
-  if (!parsed.success) {
-    if (params.tipoOutput === "discriminazione_visiva") {
-      const data = buildVisualDiscriminationFallbackSheet(params);
-      return {
-        data,
-        serializedSheet: serializeUnifiedSheet(data),
-        tagImmagine: getSheetTag(data),
-        words: getSheetWords(data, params),
-      };
-    }
-
-    throw userFacingError(
-      "SERVICE_UNAVAILABLE",
-      "La generazione non ha restituito una scheda valida. Riprova modificando leggermente i parametri."
-    );
-  }
-
-  const normalizedVisualSheet =
-    parsed.data.tipo === "discriminazione_visiva"
+function prepareGeneratedSheetForValidation(
+  sheet: UnifiedSheet,
+  params: GenerationParams
+) {
+  const normalizedSheet =
+    sheet.tipo === "discriminazione_visiva"
       ? normalizeVisualDiscriminationSheet(
-          parsed.data,
+          sheet,
           params.numeroOpzioni ?? 4,
           params.scenarioSmart
         )
-      : parsed.data;
-  let data =
-    params.includeImages || !canOmitSheetImages(normalizedVisualSheet.tipo)
-      ? normalizedVisualSheet
-      : { ...normalizedVisualSheet, immagini: [] };
+      : sheet;
+
+  return params.includeImages || !canOmitSheetImages(normalizedSheet.tipo)
+    ? normalizedSheet
+    : { ...normalizedSheet, immagini: [] };
+}
+
+function validateGeneratedSheet(
+  raw: unknown,
+  params: GenerationParams
+): { data: UnifiedSheet; reason?: undefined } | { data?: undefined; reason: string } {
+  const parsed = unifiedSheetSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { reason: "schema JSON unificato non rispettato" };
+  }
+
+  const data = prepareGeneratedSheetForValidation(parsed.data, params);
   if (
     !validateSheet(data, params.tipoOutput, {
       numeroOpzioni: params.numeroOpzioni ?? 4,
@@ -715,30 +675,55 @@ export async function generateUnifiedSheetFromParams(params: GenerationParams) {
       includeImages: params.includeImages,
     })
   ) {
-    if (params.tipoOutput === "discriminazione_visiva") {
-      data = buildVisualDiscriminationFallbackSheet(params);
+    return { reason: "contenuto non coerente con il tipo scheda richiesto" };
+  }
+
+  return { data };
+}
+
+export async function generateUnifiedSheetFromParams(params: GenerationParams) {
+  let correction: { reason: string; previousOutput: unknown } | undefined;
+
+  for (let attempt = 0; attempt < MAX_TEXT_GENERATION_ATTEMPTS; attempt += 1) {
+    let raw: unknown;
+    try {
+      raw = await callOpenAI(buildPromptMessages(params, correction));
+    } catch (error) {
+      if (error instanceof OpenAIInvalidJsonError) {
+        correction = {
+          reason: "la risposta non era JSON valido",
+          previousOutput: error.message,
+        };
+        continue;
+      }
+
+      console.error("[ai-router] OpenAI text generation failed", { error });
+      throw userFacingError(
+        "SERVICE_UNAVAILABLE",
+        "La generazione AI non è disponibile in questo momento. Riprova tra poco."
+      );
     }
+
+    const result = validateGeneratedSheet(raw, params);
+    if (result.data) {
+      return {
+        data: result.data,
+        serializedSheet: serializeUnifiedSheet(result.data),
+        tagImmagine: getSheetTag(result.data),
+        words: getSheetWords(result.data, params),
+      };
+    }
+
+    correction = {
+      reason: result.reason,
+      previousOutput: raw,
+    };
   }
 
-  if (
-    !validateSheet(data, params.tipoOutput, {
-      numeroOpzioni: params.numeroOpzioni ?? 4,
-      numeroScene: params.numeroScene ?? 4,
-      includeImages: params.includeImages,
-    })
-  ) {
-    throw userFacingError(
-      "SERVICE_UNAVAILABLE",
-      "La generazione non ha restituito una scheda valida. Riprova modificando leggermente i parametri."
-    );
-  }
-
-  return {
-    data,
-    serializedSheet: serializeUnifiedSheet(data),
-    tagImmagine: getSheetTag(data),
-    words: getSheetWords(data, params),
-  };
+  throw userFacingError(
+    "SERVICE_UNAVAILABLE",
+    "La generazione non ha restituito una scheda valida dopo il controllo qualità. Riprova modificando leggermente i parametri."
+  );
 }
 
 async function rollbackCreatedSheet(sheetId: string) {

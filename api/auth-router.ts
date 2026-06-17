@@ -10,7 +10,7 @@ import {
 } from "./lib/login-security";
 import { signSessionToken } from "./oauth/session";
 import { upsertUser } from "./queries/users";
-import { subscriptions, sheets, users } from "./store";
+import { users } from "./store";
 import { supabase, supabaseAdmin } from "./lib/supabase";
 import { env, supabaseAdminConfigured, supabaseConfigured } from "./lib/env";
 import { adminAppDb, getSupabaseUserIdFromUnionId } from "./lib/db";
@@ -456,10 +456,6 @@ export const authRouter = createRouter({
         );
       }
 
-      for (let i = sheets.length - 1; i >= 0; i--)
-        if (sheets[i].userId === ctx.user.id) sheets.splice(i, 1);
-      for (let i = subscriptions.length - 1; i >= 0; i--)
-        if (subscriptions[i].userId === ctx.user.id) subscriptions.splice(i, 1);
       for (let i = users.length - 1; i >= 0; i--)
         if (users[i].id === ctx.user.id) users.splice(i, 1);
 

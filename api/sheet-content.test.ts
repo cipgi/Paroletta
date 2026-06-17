@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  getSheetTypeLabel,
   getNeutralVisualOptionLabel,
+  getVisualDiscriminationTitle,
   getUserFacingSheetContent,
+  isTextWithPhonemeSheet,
   orderNarrativeSequenceForDisplay,
   orderVisualOptionsForDisplay,
   parseUnifiedSheetContent,
   validateSheet,
+  type SheetContentType,
   type UnifiedSheet,
 } from "@contracts/sheet-content";
 
@@ -35,6 +39,162 @@ describe("unified sheet content", () => {
     expect(parseUnifiedSheetContent(JSON.stringify(unifiedSheet))).toEqual(
       unifiedSheet
     );
+  });
+
+  it("formats shared labels and type predicates for legacy and unified types", () => {
+    expect(getSheetTypeLabel("morfosintassi_complessa")).toBe(
+      "Morfologia e morfosintassi"
+    );
+    expect(getSheetTypeLabel("lista_parole")).toBe("Lista parole");
+    expect(getSheetTypeLabel("tipo_sconosciuto")).toBe("tipo_sconosciuto");
+    expect(isTextWithPhonemeSheet("lista")).toBe(true);
+    expect(isTextWithPhonemeSheet("discriminazione_visiva")).toBe(false);
+    expect(getVisualDiscriminationTitle("mare")).toBe(
+      "Indica l'immagine corretta — tema mare"
+    );
+  });
+
+  it.each(
+    [
+      [
+        "discriminazione_visiva",
+        {
+          tipo: "discriminazione_visiva",
+          titolo: "Penna sopra il tavolo",
+          consegna:
+            "Indica l'immagine in cui una penna rossa è sopra il tavolo.",
+          testo: "Una penna rossa è sopra il tavolo.",
+          immagini: [
+            {
+              ruolo: "target",
+              livello: "principale",
+              prompt:
+                "A red pen resting above a wooden table in a classroom, no text.",
+            },
+            {
+              ruolo: "distrattore",
+              livello: "difficile",
+              prompt:
+                "A blue pen resting above the same wooden table in a classroom, no text.",
+            },
+          ],
+          domande: [],
+        },
+        "discriminazione_visiva",
+        { numeroOpzioni: 2 },
+      ],
+      [
+        "morfosintassi",
+        {
+          tipo: "morfosintassi",
+          titolo: "Il plurale delle palle",
+          consegna:
+            "Leggi la frase sulle palle colorate e completa gli accordi al plurale.",
+          testo: "Le palle rosse sono sul tappeto.",
+          immagini: [
+            {
+              ruolo: "illustrazione",
+              livello: "principale",
+              prompt:
+                "Child-friendly illustration of several red balls on a carpet, no text.",
+            },
+          ],
+          domande: [
+            { domanda: "Quale parola è al plurale?", risposta: "Palle." },
+            { domanda: "Com'è l'aggettivo al plurale?", risposta: "Rosse." },
+            { domanda: "Completa la frase: le palle ___", risposta: "Rosse." },
+          ],
+        },
+        "morfosintassi_complessa",
+        {},
+      ],
+      [
+        "narrazione_sequenze",
+        {
+          tipo: "narrazione_sequenze",
+          titolo: "La palla ritrovata",
+          consegna:
+            "Osserva le scene mescolate, riordinale e racconta come Luca ritrova la palla.",
+          testo:
+            "Luca gioca con la palla. La palla rotola sotto la panchina. Luca chiede aiuto. Luca ritrova la palla.",
+          immagini: [1, 2, 3].map(index => ({
+            ruolo: "illustrazione" as const,
+            livello: "principale" as const,
+            prompt: `Child-friendly illustration of scene ${index} with Luca and the red ball in the same park, no text.`,
+          })),
+          domande: [
+            { domanda: "Chi perde la palla?", risposta: "Luca." },
+            { domanda: "Dove rotola la palla?", risposta: "Sotto la panchina." },
+            { domanda: "Che cosa fa Luca?", risposta: "Chiede aiuto." },
+            { domanda: "Come finisce la storia?", risposta: "Ritrova la palla." },
+          ],
+        },
+        "narrazione_sequenze",
+        { numeroScene: 3 },
+      ],
+      [
+        "pragmatica",
+        {
+          tipo: "pragmatica",
+          titolo: "Chiedere un turno",
+          consegna:
+            "Leggi la scena e rispondi alle domande su cosa possono dire i bambini.",
+          testo:
+            "Marco tiene il camion giocattolo e Sara aspetta il suo turno.",
+          immagini: [],
+          domande: [
+            { domanda: "Che cosa vuole Sara?", risposta: "Vuole un turno." },
+            { domanda: "Come può sentirsi Sara?", risposta: "Impaziente." },
+            { domanda: "Che cosa può dire Sara?", risposta: "Posso giocare dopo di te?" },
+            { domanda: "Che cosa può fare Marco?", risposta: "Condividerlo." },
+          ],
+        },
+        "pragmatica",
+        { includeImages: false },
+      ],
+      [
+        "storia",
+        unifiedSheet,
+        "storia",
+        {},
+      ],
+      [
+        "filastrocca",
+        {
+          ...unifiedSheet,
+          tipo: "filastrocca",
+          titolo: "La rana e il ramo",
+          consegna:
+            "Ascolta la filastrocca della rana e rispondi alle domande sul ramo.",
+          testo:
+            "La rana salta sul ramo, ride piano nel prato e trova un regalo.",
+        },
+        "filastrocca",
+        {},
+      ],
+      [
+        "lista_parole",
+        {
+          tipo: "lista_parole",
+          titolo: "Parole con R",
+          consegna: "Leggi le parole con R e ripetile una alla volta.",
+          testo: "rana, ramo, ruota",
+          immagini: [],
+          domande: [],
+        },
+        "lista",
+        { includeImages: false },
+      ],
+    ] satisfies Array<
+      [
+        string,
+        UnifiedSheet,
+        SheetContentType,
+        Parameters<typeof validateSheet>[2],
+      ]
+    >
+  )("validates the %s contract without local fallback data", (_, sheet, type, options) => {
+    expect(validateSheet(sheet, type, options)).toBe(true);
   });
 
   it("renders title, contextual delivery, text, questions and image summary from unified JSON", () => {
@@ -150,22 +310,26 @@ describe("unified sheet content", () => {
             {
               ruolo: "target",
               livello: "principale",
-              prompt: "A pen on a table.",
+              prompt:
+                "A red pen resting above a wooden table in a classroom, no text.",
             },
             {
               ruolo: "distrattore",
               livello: "difficile",
-              prompt: "A pen under a table.",
+              prompt:
+                "A red pen resting under the same wooden table in a classroom, no text.",
             },
             {
               ruolo: "distrattore",
               livello: "intermedio",
-              prompt: "A pencil on a table.",
+              prompt:
+                "A red pencil resting above the same wooden table in a classroom, no text.",
             },
             {
               ruolo: "distrattore",
               livello: "facile",
-              prompt: "A cup on a table.",
+              prompt:
+                "A blue pen resting above the same wooden table in a classroom, no text.",
             },
           ],
           domande: [],

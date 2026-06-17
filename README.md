@@ -15,7 +15,7 @@ Il flusso credentials è implementato nel router TRPC `api/auth-router.ts`, tram
 per l'accesso.
 
 Il recupero password parte da `auth.requestPasswordReset`: il backend applica
-CAPTCHA, rate limit/audit su `app.password_reset_requests` e invia l'email tramite
+rate limit/audit su `app.password_reset_requests` e invia l'email tramite
 `supabase.auth.resetPasswordForEmail`. Il link torna a `/reset-password`, dove il
 frontend usa una sessione Supabase temporanea solo in memoria per chiamare
 `supabase.auth.updateUser`.
