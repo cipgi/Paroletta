@@ -44,7 +44,7 @@ In Supabase Auth configura questi redirect:
 Nel template email di conferma account puoi usare il link Supabase standard
 `{{ .ConfirmationURL }}`. Se invece usi un template custom che porta direttamente
 all'app, usa
-`${APP_BASE_URL}/login?auth_action=confirm-email&token_hash={{ .TokenHash }}&type=signup`.
+`{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=email`.
 Nel template recupero password usa `{{ .ConfirmationURL }}`. Configura un SMTP
 custom in produzione per evitare i limiti del servizio email di default.
 
