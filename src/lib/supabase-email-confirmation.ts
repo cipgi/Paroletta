@@ -9,6 +9,8 @@ type EmailConfirmationType = "signup" | "email";
 
 const EMAIL_CONFIRMATION_ACTION = "confirm-email";
 const EMAIL_CONFIRMATION_TYPES = new Set(["signup", "email"]);
+const MISSING_EMAIL_CONFIRMATION_TOKEN_MESSAGE =
+  "Link di verifica email incompleto. Apri il link completo ricevuto via email o richiedi una nuova email di conferma.";
 
 export function createEmailConfirmationSupabaseClient(
   config: SupabasePublicConfig
@@ -65,6 +67,18 @@ function isEmailConfirmationType(
   return EMAIL_CONFIRMATION_TYPES.has(value ?? "");
 }
 
+function getEmailConfirmationTypes(
+  explicitType: EmailConfirmationType | null
+) {
+  const fallbackTypes: EmailConfirmationType[] = ["email", "signup"];
+  return explicitType
+    ? [
+        explicitType,
+        ...fallbackTypes.filter(type => type !== explicitType),
+      ]
+    : fallbackTypes;
+}
+
 function clearEmailConfirmationParamsFromUrl() {
   if (typeof window === "undefined") return;
   window.history.replaceState(null, "", "/login");
@@ -87,9 +101,7 @@ async function verifyTokenHash(
   tokenHash: string,
   explicitType: EmailConfirmationType | null
 ) {
-  const types: EmailConfirmationType[] = explicitType
-    ? [explicitType]
-    : ["signup", "email"];
+  const types = getEmailConfirmationTypes(explicitType);
   let lastError: unknown;
 
   for (const type of types) {
@@ -110,9 +122,7 @@ async function verifyEmailToken(
   token: string,
   explicitType: EmailConfirmationType | null
 ) {
-  const types: EmailConfirmationType[] = explicitType
-    ? [explicitType]
-    : ["signup", "email"];
+  const types = getEmailConfirmationTypes(explicitType);
   let lastError: unknown;
 
   for (const type of types) {
@@ -184,8 +194,7 @@ export async function confirmEmailFromUrl(client: SupabaseClient) {
     }
 
     if (params.action === EMAIL_CONFIRMATION_ACTION) {
-      clearEmailConfirmationParamsFromUrl();
-      return;
+      throw new Error(MISSING_EMAIL_CONFIRMATION_TOKEN_MESSAGE);
     }
   } catch (error) {
     clearEmailConfirmationParamsFromUrl();
@@ -193,7 +202,7 @@ export async function confirmEmailFromUrl(client: SupabaseClient) {
   }
 
   clearEmailConfirmationParamsFromUrl();
-  throw new Error("missing_email_confirmation_token");
+  throw new Error(MISSING_EMAIL_CONFIRMATION_TOKEN_MESSAGE);
 }
 
 export function finishEmailConfirmationUrlCleanup() {
