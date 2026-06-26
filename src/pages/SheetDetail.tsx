@@ -2,6 +2,7 @@ import { useParams, Link } from "react-router";
 import { useRef, useState } from "react";
 import { trpc } from "@/providers/trpc";
 import {
+  getVisualDisplayOptionCount,
   getSheetTypeLabel,
   getNeutralVisualOptionLabel,
   getVisualDiscriminationTitle,
@@ -25,13 +26,6 @@ import {
   RefreshCcw,
   Loader2,
 } from "lucide-react";
-
-function getVisualOptionCount(words: string[]) {
-  const count = words.filter(word =>
-    /^(target|distrattore)/i.test(word.trim())
-  ).length;
-  return Math.min(Math.max(count || 4, 2), 4);
-}
 
 function isDisplayableImagePath(path: string | null | undefined) {
   return Boolean(path && /^(https?:|data:image\/|\/)/u.test(path));
@@ -286,6 +280,8 @@ export default function SheetDetail() {
   const isNarrativeSequence = sheet.tipoOutput === "narrazione_sequenze";
   const isPragmatic = sheet.tipoOutput === "pragmatica";
   const imageAssets = sheet.imageAssets ?? [];
+  const deliveryLabel =
+    sheet.targetAudience === "adulto" ? "Consegna adulto" : "Consegna bambino";
   const hasImageAssets = imageAssets.length > 0;
   const hasDisplayableImageAssets = imageAssets.some(asset =>
     isDisplayableImagePath(asset.filePath)
@@ -301,10 +297,10 @@ export default function SheetDetail() {
     imageAssets,
     sheet.id
   );
-  const visualOptionCount = Math.min(
-    Math.max(getVisualOptionCount(words), visualImageAssets.length || 0),
-    4
-  );
+  const visualOptionCount = getVisualDisplayOptionCount({
+    words,
+    imageCount: visualImageAssets.length,
+  });
   const primaryImageAsset = imageAssets[0];
   const userFacingContent = getUserFacingSheetContent({
     tipoOutput: sheet.tipoOutput,
@@ -379,7 +375,7 @@ export default function SheetDetail() {
 
               <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Consegna bambino
+                  {deliveryLabel}
                 </p>
                 <div className="text-slate-800 leading-relaxed whitespace-pre-line text-lg">
                   {userFacingContent}

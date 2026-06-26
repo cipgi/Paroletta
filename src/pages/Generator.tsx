@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { trpc } from "@/providers/trpc";
+import type { TargetAudience } from "@contracts/target-audience";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -109,15 +110,15 @@ const tipoSchedaConfig: Record<
     icona: Brain,
   },
   narrazione_sequenze: {
-    titolo: "Narrazione e sequenze",
+    titolo: "Cognitivo-comunicativa: narrazione",
     descrizione:
-      "Storia in 3-5 scene ordinate con domande su prima/dopo, problema e soluzione.",
+      "Controllo esecutivo applicato al discorso: sequenze, prima/dopo, problema e soluzione.",
     icona: ListOrdered,
   },
   pragmatica: {
-    titolo: "Pragmatica",
+    titolo: "Cognitivo-comunicativa: pragmatica",
     descrizione:
-      "Turni conversazionali, inferenze, emozioni e intenzioni comunicative.",
+      "Cognizione sociale applicata alla comunicazione: turni, inferenze, emozioni e intenzioni.",
     icona: MessageCircle,
   },
   testo_con_fonema: {
@@ -144,7 +145,8 @@ export default function Generator() {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
 
-  const [eta, setEta] = useState("6-8 anni");
+  const [targetAudience, setTargetAudience] =
+    useState<TargetAudience>("bambino");
   const [fonema, setFonema] = useState("r");
   const [interesse, setInteresse] = useState("libero");
   const [tipoOutput, setTipoOutput] = useState<TipoScheda>(
@@ -195,7 +197,7 @@ export default function Generator() {
     const trimmedDescrizioneScena = descrizioneScena.trim();
 
     generate.mutate({
-      eta,
+      targetAudience,
       fonema,
       interesse,
       tipoOutput,
@@ -262,6 +264,8 @@ export default function Generator() {
   };
 
   const renderClinicalInputs = () => {
+    const isAdultAudience = targetAudience === "adulto";
+
     if (tipoOutput === "discriminazione_visiva") {
       return (
         <div className="space-y-5 rounded-2xl border border-teal-100 bg-teal-50/50 p-4">
@@ -274,7 +278,11 @@ export default function Generator() {
               id="scenarioSmart"
               value={scenarioSmart}
               onChange={e => setScenarioSmart(e.target.value)}
-              placeholder='es. "Frase target: Il bambino accarezza il dinosauro. Struttura: soggetto-verbo-oggetto. Variazioni: azione, agente, oggetto"'
+              placeholder={
+                isAdultAudience
+                  ? 'es. "Frase target: La donna appoggia le chiavi sul tavolo. Struttura: soggetto-verbo-oggetto. Variazioni: azione, oggetto, posizione"'
+                  : 'es. "Frase target: Il bambino accarezza il dinosauro. Struttura: soggetto-verbo-oggetto. Variazioni: azione, agente, oggetto"'
+              }
               rows={5}
             />
             <p className="text-xs text-slate-500">
@@ -323,18 +331,22 @@ export default function Generator() {
           <div className="space-y-2">
             <Label htmlFor="scenarioSmart" className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-amber-600" />
-              Tema narrativo e obiettivo
+              Obiettivo narrativo cognitivo-comunicativo
             </Label>
             <Textarea
               id="scenarioSmart"
               value={scenarioSmart}
               onChange={e => setScenarioSmart(e.target.value)}
-              placeholder='es. "Un bambino perde la palla al parco, chiede aiuto e la ritrova. Lavora su prima/dopo, problema e soluzione."'
+              placeholder={
+                isAdultAudience
+                  ? 'es. "Una persona dimentica la tessera in farmacia, chiede supporto e risolve il problema. Lavora su prima/dopo, problema e soluzione."'
+                  : 'es. "Un bambino perde la palla al parco, chiede aiuto e la ritrova. Lavora su prima/dopo, problema e soluzione."'
+              }
               rows={5}
             />
             <p className="text-xs text-slate-500">
-              Paroletta crea una sequenza ordinata con personaggi coerenti,
-              problema semplice e soluzione finale.
+              Paroletta crea una sequenza per lavorare su pianificazione del
+              discorso, ordine temporale, problema e soluzione.
             </p>
           </div>
 
@@ -367,7 +379,7 @@ export default function Generator() {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="aspettoSpecifico">
-                Abilità pragmatica target
+                Abilità pragmatico-sociale target
               </Label>
               <Input
                 id="aspettoSpecifico"
@@ -405,12 +417,16 @@ export default function Generator() {
               id="scenarioSmart"
               value={scenarioSmart}
               onChange={e => setScenarioSmart(e.target.value)}
-              placeholder='es. "Due bambini vogliono lo stesso gioco. Uno è triste e l’altro deve scegliere cosa dire."'
+              placeholder={
+                isAdultAudience
+                  ? 'es. "Due colleghi vogliono parlare nello stesso momento durante una riunione. Uno deve scegliere cosa dire."'
+                  : 'es. "Due bambini vogliono lo stesso gioco. Uno è triste e l’altro deve scegliere cosa dire."'
+              }
               rows={5}
             />
             <p className="text-xs text-slate-500">
-              L’IA genera uno scenario quotidiano con domande su emozioni,
-              intenzioni, inferenze e frasi possibili.
+              L’IA genera uno scenario quotidiano per lavorare su cognizione
+              sociale, intenzioni, inferenze e frasi possibili.
             </p>
           </div>
         </div>
@@ -464,7 +480,11 @@ export default function Generator() {
               id="descrizioneScena"
               value={descrizioneScena}
               onChange={e => setDescrizioneScena(e.target.value)}
-              placeholder='es. "Due bambini hanno una palla rossa e due palle blu: voglio lavorare su plurali e accordo nome-aggettivo."'
+              placeholder={
+                isAdultAudience
+                  ? 'es. "Due persone hanno una borsa rossa e due borse blu: voglio lavorare su plurali e accordo nome-aggettivo."'
+                  : 'es. "Due bambini hanno una palla rossa e due palle blu: voglio lavorare su plurali e accordo nome-aggettivo."'
+              }
               rows={5}
             />
             <p className="text-xs text-slate-500">
@@ -648,19 +668,24 @@ export default function Generator() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="eta" className="flex items-center gap-2">
+              <Label
+                htmlFor="targetAudience"
+                className="flex items-center gap-2"
+              >
                 <Baby className="w-4 h-4 text-teal-600" />
-                Fascia d'età
+                Destinatario
               </Label>
-              <Select value={eta} onValueChange={setEta}>
-                <SelectTrigger id="eta">
-                  <SelectValue placeholder="Seleziona fascia d'età" />
+              <Select
+                value={targetAudience}
+                onValueChange={(value: TargetAudience) =>
+                  setTargetAudience(value)
+                }
+              >
+                <SelectTrigger id="targetAudience">
+                  <SelectValue placeholder="Seleziona destinatario" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="3-5 anni">3-5 anni</SelectItem>
-                  <SelectItem value="6-8 anni">6-8 anni</SelectItem>
-                  <SelectItem value="9-11 anni">9-11 anni</SelectItem>
-                  <SelectItem value="12-14 anni">12-14 anni</SelectItem>
+                  <SelectItem value="bambino">Bambino</SelectItem>
                   <SelectItem value="adulto">Adulto</SelectItem>
                 </SelectContent>
               </Select>
@@ -669,7 +694,7 @@ export default function Generator() {
             <div className="space-y-2">
               <Label htmlFor="interesse" className="flex items-center gap-2">
                 <Heart className="w-4 h-4 text-teal-600" />
-                Interesse del bambino
+                Interesse o tema
               </Label>
               <Select value={interesse} onValueChange={setInteresse}>
                 <SelectTrigger id="interesse">

@@ -18,9 +18,14 @@ import {
   resolveImageRequestWithCache,
 } from "./lib/image-generation";
 import {
+  DEFAULT_TARGET_AUDIENCE,
+  isTargetAudience,
+} from "../contracts/target-audience";
+import {
   assertActiveSubscription,
   reserveImageGenerationQuota,
 } from "./lib/subscription";
+import { getVisualDisplayOptionCount } from "../contracts/sheet-content";
 
 function requireSupabaseUserId(unionId: string) {
   const id = getSupabaseUserIdFromUnionId(unionId);
@@ -57,6 +62,7 @@ type DbSheet = {
   user_id: string;
   fonema: string;
   interesse: string;
+  target_audience?: string | null;
   tipo_output: string;
   testo_generato: string;
   tag_immagine: string | null;
@@ -71,6 +77,9 @@ const mapSheet = (s: DbSheet) => ({
   userId: s.user_id,
   fonema: s.fonema,
   interesse: s.interesse,
+  targetAudience: isTargetAudience(s.target_audience)
+    ? s.target_audience
+    : DEFAULT_TARGET_AUDIENCE,
   tipoOutput: s.tipo_output,
   testoGenerato: s.testo_generato,
   tagImmagine: s.tag_immagine,
@@ -79,13 +88,6 @@ const mapSheet = (s: DbSheet) => ({
   pdfUrl: s.pdf_url,
   createdAt: new Date(s.created_at),
 });
-
-function getVisualOptionCount(words: string[] | null) {
-  const count = (words ?? []).filter(word =>
-    /^(target|distrattore)/i.test(word.trim())
-  ).length;
-  return Math.min(Math.max(count || 4, 2), 4);
-}
 
 type ImageQuotaContext = {
   userId: string;
@@ -111,11 +113,12 @@ async function resolveSheetImageAssets(sheet: ReturnType<typeof mapSheet>) {
   const imageRequests = buildImageRequests({
     tipoOutput: sheet.tipoOutput,
     interesse: sheet.interesse,
+    targetAudience: sheet.targetAudience,
     tagImmagine: sheet.tagImmagine,
     testoGenerato: sheet.testoGenerato,
     numeroOpzioni:
       sheet.tipoOutput === "discriminazione_visiva"
-        ? getVisualOptionCount(sheet.listaParole)
+        ? getVisualDisplayOptionCount({ words: sheet.listaParole })
         : undefined,
   });
   const imageStorage = createSupabaseImageObjectStorage(supabaseAdmin);
@@ -268,11 +271,12 @@ export const sheetsRouter = createRouter({
       const imageRequests = buildImageRequests({
         tipoOutput: sheet.tipoOutput,
         interesse: sheet.interesse,
+        targetAudience: sheet.targetAudience,
         tagImmagine: sheet.tagImmagine,
         testoGenerato: sheet.testoGenerato,
         numeroOpzioni:
           sheet.tipoOutput === "discriminazione_visiva"
-            ? getVisualOptionCount(sheet.listaParole)
+            ? getVisualDisplayOptionCount({ words: sheet.listaParole })
             : undefined,
       });
       const request = imageRequests.find(

@@ -48,3 +48,4 @@ coverage/
 !db/migrations/024_password_reset_audit.sql
 !db/migrations/025_team_pool_and_plan_consistency.sql
 !db/migrations/026_email_confirmation_audit.sql
+!db/migrations/027_add_sheet_target_audience.sql

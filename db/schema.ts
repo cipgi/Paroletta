@@ -8,6 +8,7 @@ export type Plan =
   | "max";
 export type SubscriptionStatus = "trial" | "attivo" | "cancellato";
 export type AccountRole = "manager" | "staff" | "single";
+export type TargetAudience = "bambino" | "adulto";
 export type SheetOutputType =
   | "storia"
   | "filastrocca"
@@ -57,6 +58,7 @@ export interface Sheet {
   userId: string;
   fonema: string;
   interesse: string;
+  targetAudience: TargetAudience;
   tipoOutput: SheetOutputType;
   testoGenerato: string;
   tagImmagine: string | null;
