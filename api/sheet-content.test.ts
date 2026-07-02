@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   getSheetTypeLabel,
   getNeutralVisualOptionLabel,
+  getVisualDisplayOptionCount,
   getVisualDiscriminationTitle,
   getUserFacingSheetContent,
   isTextWithPhonemeSheet,
@@ -44,6 +45,12 @@ describe("unified sheet content", () => {
   it("formats shared labels and type predicates for legacy and unified types", () => {
     expect(getSheetTypeLabel("morfosintassi_complessa")).toBe(
       "Morfologia e morfosintassi"
+    );
+    expect(getSheetTypeLabel("narrazione_sequenze")).toBe(
+      "Riabilitazione cognitivo-comunicativa: narrazione e sequenze"
+    );
+    expect(getSheetTypeLabel("pragmatica")).toBe(
+      "Riabilitazione cognitivo-comunicativa: pragmatica"
     );
     expect(getSheetTypeLabel("lista_parole")).toBe("Lista parole");
     expect(getSheetTypeLabel("tipo_sconosciuto")).toBe("tipo_sconosciuto");
@@ -252,6 +259,34 @@ describe("unified sheet content", () => {
     expect(result).not.toContain("prompt");
   });
 
+  it("normalizes recoverable legacy aliases inside unified JSON", () => {
+    const result = parseUnifiedSheetContent(
+      JSON.stringify({
+        tipo: "morfosintassi_complessa",
+        titolo: "Accordo al plurale",
+        consegna:
+          "Leggi la frase e completa gli accordi al plurale sulle palle colorate.",
+        testo: "Le palle rosse sono sul tappeto.",
+        immagini: [
+          {
+            ruolo: "illustrazione",
+            livello: "principale",
+            prompt:
+              "Child-friendly illustration of several red balls on a carpet, no text.",
+          },
+        ],
+        domande: [
+          { domanda: "Completa: palle ___", risposta: "rosse" },
+          { domanda: "Scegli l'articolo: le o la?", risposta: "le palle" },
+          { domanda: "Trasforma: palla rossa", risposta: "palle rosse" },
+        ],
+      })
+    );
+
+    expect(result?.tipo).toBe("morfosintassi");
+    expect(validateSheet(result, "morfosintassi_complessa")).toBe(true);
+  });
+
   it("renders visual discrimination content without repeated delivery or image metadata", () => {
     const result = getUserFacingSheetContent({
       tipoOutput: "discriminazione_visiva",
@@ -434,6 +469,21 @@ describe("getNeutralVisualOptionLabel", () => {
   it("does not reveal target or distractor roles", () => {
     expect(getNeutralVisualOptionLabel(0)).toBe("Opzione 1");
     expect(getNeutralVisualOptionLabel(2)).toBe("Opzione 3");
+  });
+});
+
+describe("getVisualDisplayOptionCount", () => {
+  it("uses image asset count when saved visual captions are missing", () => {
+    expect(
+      getVisualDisplayOptionCount({ words: [], imageCount: 2 })
+    ).toBe(2);
+    expect(
+      getVisualDisplayOptionCount({
+        words: ["Target", "Distrattore 1", "Distrattore 2"],
+        imageCount: 2,
+      })
+    ).toBe(3);
+    expect(getVisualDisplayOptionCount({ words: [], imageCount: 0 })).toBe(4);
   });
 });
 

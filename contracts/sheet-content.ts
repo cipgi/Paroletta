@@ -65,8 +65,9 @@ const OPTIONAL_IMAGE_SHEET_TYPES: UnifiedSheetType[] = [
 const SHEET_TYPE_LABELS: Record<UnifiedSheetType, string> = {
   discriminazione_visiva: "Indica l'immagine corretta",
   morfosintassi: "Morfologia e morfosintassi",
-  narrazione_sequenze: "Narrazione e sequenze",
-  pragmatica: "Pragmatica",
+  narrazione_sequenze:
+    "Riabilitazione cognitivo-comunicativa: narrazione e sequenze",
+  pragmatica: "Riabilitazione cognitivo-comunicativa: pragmatica",
   storia: "Storia",
   filastrocca: "Filastrocca",
   lista_parole: "Lista parole",
@@ -213,6 +214,15 @@ function validateQuestions(
   sheet: UnifiedSheet,
   expectedType: UnifiedSheetType
 ) {
+  const hasValidQuestion = (
+    question: UnifiedSheetQuestion,
+    minimumWords = 3
+  ) =>
+    isNonEmptyString(question.domanda) &&
+    isNonEmptyString(question.risposta) &&
+    countMeaningfulWords(question.domanda) >= minimumWords &&
+    countMeaningfulWords(question.risposta) >= 1;
+
   if (expectedType === "discriminazione_visiva") {
     return sheet.domande.length === 0;
   }
@@ -223,52 +233,28 @@ function validateQuestions(
     return (
       sheet.domande.length >= 4 &&
       sheet.domande.length <= 5 &&
-      sheet.domande.every(
-        question =>
-          isNonEmptyString(question.domanda) &&
-          isNonEmptyString(question.risposta) &&
-          countMeaningfulWords(question.domanda) >= 3 &&
-          countMeaningfulWords(question.risposta) >= 1
-      )
+      sheet.domande.every(question => hasValidQuestion(question))
     );
   }
   if (expectedType === "pragmatica") {
     return (
       sheet.domande.length >= 4 &&
       sheet.domande.length <= 6 &&
-      sheet.domande.every(
-        question =>
-          isNonEmptyString(question.domanda) &&
-          isNonEmptyString(question.risposta) &&
-          countMeaningfulWords(question.domanda) >= 3 &&
-          countMeaningfulWords(question.risposta) >= 1
-      )
+      sheet.domande.every(question => hasValidQuestion(question))
     );
   }
   if (expectedType === "morfosintassi") {
     return (
       sheet.domande.length >= 3 &&
       sheet.domande.length <= 8 &&
-      sheet.domande.every(
-        question =>
-          isNonEmptyString(question.domanda) &&
-          isNonEmptyString(question.risposta) &&
-          countMeaningfulWords(question.domanda) >= 3 &&
-          countMeaningfulWords(question.risposta) >= 1
-      )
+      sheet.domande.every(question => hasValidQuestion(question, 2))
     );
   }
 
   return (
     sheet.domande.length >= 3 &&
     sheet.domande.length <= 5 &&
-    sheet.domande.every(
-      question =>
-        isNonEmptyString(question.domanda) &&
-        isNonEmptyString(question.risposta) &&
-        countMeaningfulWords(question.domanda) >= 3 &&
-        countMeaningfulWords(question.risposta) >= 1
-    )
+    sheet.domande.every(question => hasValidQuestion(question))
   );
 }
 
@@ -324,6 +310,22 @@ export function getSheetTypeLabel(tipo: SheetContentType) {
   return normalizedType ? SHEET_TYPE_LABELS[normalizedType] : String(tipo);
 }
 
+export function normalizeUnifiedSheetJsonAliases(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return value;
+  }
+
+  const sheet = value as Record<string, unknown>;
+  if (sheet.tipo === "morfosintassi_complessa") {
+    return { ...sheet, tipo: "morfosintassi" };
+  }
+  if (sheet.tipo === "lista") {
+    return { ...sheet, tipo: "lista_parole" };
+  }
+
+  return value;
+}
+
 export function isTextWithPhonemeSheet(tipo: SheetContentType) {
   const normalizedType = resolveKnownUnifiedSheetType(tipo);
   return (
@@ -343,7 +345,9 @@ export function validateSheet(
   tipo: SheetContentType,
   options: ValidateSheetOptions = 4
 ): json is UnifiedSheet {
-  const parsed = unifiedSheetSchema.safeParse(json);
+  const parsed = unifiedSheetSchema.safeParse(
+    normalizeUnifiedSheetJsonAliases(json)
+  );
   if (!parsed.success) return false;
 
   const sheet = parsed.data;
@@ -401,7 +405,9 @@ export function parseUnifiedSheetContent(
 
   for (const candidate of candidates) {
     try {
-      return unifiedSheetSchema.parse(JSON.parse(candidate));
+      return unifiedSheetSchema.parse(
+        normalizeUnifiedSheetJsonAliases(JSON.parse(candidate))
+      );
     } catch {
       // Try the next balanced object; legacy wrappers may contain prose first.
     }
@@ -485,8 +491,9 @@ function getSheetTitle(tipoOutput: SheetContentType): string {
   const titles: Record<UnifiedSheetType, string> = {
     discriminazione_visiva: "Discriminazione visiva",
     morfosintassi: "Morfologia e morfosintassi",
-    narrazione_sequenze: "Narrazione e sequenze",
-    pragmatica: "Pragmatica",
+    narrazione_sequenze:
+      "Riabilitazione cognitivo-comunicativa: narrazione e sequenze",
+    pragmatica: "Riabilitazione cognitivo-comunicativa: pragmatica",
     storia: "Storia con fonema",
     filastrocca: "Filastrocca con fonema",
     lista_parole: "Lista parole con fonema",
@@ -559,6 +566,20 @@ export function orderVisualOptionsForDisplay<T extends StableDisplayItem>(
     targetEntry.option,
     ...distractors.slice(targetIndex),
   ];
+}
+
+export function getVisualDisplayOptionCount(params: {
+  words?: readonly string[] | null;
+  imageCount?: number;
+  fallbackCount?: number;
+}) {
+  const wordCount = (params.words ?? []).filter(word =>
+    /^(target|distrattore)/i.test(word.trim())
+  ).length;
+  const fallbackCount = params.fallbackCount ?? 4;
+  const resolvedCount = wordCount || params.imageCount || fallbackCount;
+
+  return Math.min(Math.max(resolvedCount, 2), 4);
 }
 
 export function orderNarrativeSequenceForDisplay<T extends StableDisplayItem>(
