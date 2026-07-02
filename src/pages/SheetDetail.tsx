@@ -2,7 +2,6 @@ import { useParams, Link } from "react-router";
 import { useRef, useState } from "react";
 import { trpc } from "@/providers/trpc";
 import {
-  getVisualDisplayOptionCount,
   getSheetTypeLabel,
   getNeutralVisualOptionLabel,
   getVisualDiscriminationTitle,
@@ -26,6 +25,20 @@ import {
   RefreshCcw,
   Loader2,
 } from "lucide-react";
+
+function getVisualOptionCount(params: {
+  words?: readonly string[] | null;
+  imageCount?: number;
+  fallbackCount?: number;
+}) {
+  const wordCount = (params.words ?? []).filter(word =>
+    /^(target|distrattore)/i.test(word.trim())
+  ).length;
+  const fallbackCount = params.fallbackCount ?? 4;
+  const resolvedCount = wordCount || params.imageCount || fallbackCount;
+
+  return Math.min(Math.max(resolvedCount, 2), 4);
+}
 
 function isDisplayableImagePath(path: string | null | undefined) {
   return Boolean(path && /^(https?:|data:image\/|\/)/u.test(path));
@@ -315,7 +328,7 @@ export default function SheetDetail() {
     imageAssets,
     sheet.id
   );
-  const visualOptionCount = getVisualDisplayOptionCount({
+  const visualOptionCount = getVisualOptionCount({
     words,
     imageCount: visualImageAssets.length,
   });
