@@ -12,10 +12,11 @@ Questo documento descrive, per ogni tipologia di scheda, il flusso completo:
 ### Input UI
 
 L'utente compila i campi nella pagina `Generator` e avvia la mutazione `ai.generate`.
+Il campo destinatario e obbligatorio e ha due valori: `bambino` e `adulto`.
 
 ### Sanitizzazione server
 
-Il server applica una sanitizzazione aggressiva sui campi testuali (`sanitizePromptVariable`) e valida i campi a enum consentiti (fonemi/interessi/tipo).
+Il server applica una sanitizzazione aggressiva sui campi testuali (`sanitizePromptVariable`) e valida i campi a enum consentiti (destinatario, fonemi, interessi e tipo scheda).
 
 ### Prompting
 
@@ -23,6 +24,11 @@ Il server costruisce due messaggi:
 
 - `system`: template clinico fisso + regole di sicurezza + formato JSON obbligatorio.
 - `user`: JSON con parametri già sanitizzati (trattati come dati, non istruzioni).
+
+Il destinatario modifica il profilo del prompt:
+
+- `bambino`: comportamento pediatrico, linguaggio e immagini child-friendly.
+- `adulto`: tono rispettoso e non infantile, scenari quotidiani adulti, immagini pulite/neutre/professionali.
 
 ### Chiamata modello
 
@@ -38,8 +44,18 @@ Il server costruisce due messaggi:
 ### Post-processing e persistenza
 
 - Normalizzazione `listaParole` in base al tipo scheda.
-- Salvataggio DB tabella `sheets`.
+- Salvataggio DB tabella `sheets`, incluso `target_audience`.
 - Ritorno di `sheet`, `remaining`, `totalUsed`.
+
+### Errori prodotti
+
+- Input non valido: il router rifiuta destinatario, fonema, interesse o tipo scheda fuori enum con `BAD_REQUEST`.
+- Interesse `nessuno` senza contesto: `sanitizeGenerationParams` interrompe la richiesta con `BAD_REQUEST` e chiede argomento, frase target, scenario o descrizione.
+- Limite schede o immagini raggiunto: la pipeline interrompe con `FORBIDDEN` prima di salvare o prima di generare immagini oltre quota.
+- Chiamata testo AI non disponibile o JSON non parsabile: la pipeline interrompe con `SERVICE_UNAVAILABLE`; non produce fallback locali.
+- Output AI non coerente dopo il retry di validazione: la pipeline interrompe con `SERVICE_UNAVAILABLE`.
+- Errore DB su salvataggio scheda: rollback quota scheda e `SERVICE_UNAVAILABLE` tramite `databaseOperationError`.
+- Errore generazione immagini: rollback quota immagine e scheda appena creata; il client riceve errore generico, mentre il dettaglio tecnico viene scritto nei log server da `image-generation` e dal middleware.
 
 ---
 
@@ -49,7 +65,7 @@ Tipi inclusi: `storia`, `filastrocca`, `lista`.
 
 ### Input utente
 
-- comuni: età, interesse.
+- comuni: destinatario (`bambino` o `adulto`), interesse.
 - specifici: fonema target, aspetto specifico opzionale.
 - selezione formato: storia/filastrocca/lista.
 
@@ -87,7 +103,7 @@ Tipi inclusi: `storia`, `filastrocca`, `lista`.
 
 ### Input utente
 
-- età, interesse,
+- destinatario (`bambino` o `adulto`), interesse,
 - `scenarioSmart`: frase target + struttura/asse da allenare,
 - `numeroOpzioni` (2-4).
 
@@ -131,7 +147,7 @@ Tipi inclusi: `storia`, `filastrocca`, `lista`.
 
 ### Input utente
 
-- età, interesse,
+- destinatario (`bambino` o `adulto`), interesse,
 - `elementoGrammaticale` (es. clitici/relative/subordinate),
 - `livelloComplessita` (base/intermedio/avanzato),
 - `descrizioneScena` (smart input clinico-visivo).
@@ -167,11 +183,11 @@ Tipi inclusi: `storia`, `filastrocca`, `lista`.
 
 ---
 
-## 4) Scheda "Narrazione e sequenze" (`narrazione_sequenze`)
+## 4) Scheda "Riabilitazione cognitivo-comunicativa: narrazione e sequenze" (`narrazione_sequenze`)
 
 ### Input utente
 
-- età, interesse,
+- destinatario (`bambino` o `adulto`), interesse,
 - tema narrativo/obiettivo clinico (`scenarioSmart`),
 - numero scene (`numeroScene`, 3-5).
 
@@ -184,16 +200,17 @@ Tipi inclusi: `storia`, `filastrocca`, `lista`.
 ### Cosa può farne l'utente
 
 - riordino e racconto di sequenze,
+- controllo esecutivo applicato al discorso,
 - produzione narrativa guidata,
 - lavoro su nessi temporali e causali.
 
 ---
 
-## 5) Scheda "Pragmatica" (`pragmatica`)
+## 5) Scheda "Riabilitazione cognitivo-comunicativa: pragmatica" (`pragmatica`)
 
 ### Input utente
 
-- età, interesse,
+- destinatario (`bambino` o `adulto`), interesse,
 - abilità pragmatica target,
 - scenario sociale quotidiano,
 - livello di complessità.
@@ -208,6 +225,7 @@ Tipi inclusi: `storia`, `filastrocca`, `lista`.
 ### Cosa può farne l'utente
 
 - discussione guidata su cosa dire/fare in una situazione,
+- lavoro su cognizione sociale applicata alla comunicazione,
 - lavoro su emozioni e intenzioni,
 - esercizi di risposta sociale flessibile.
 

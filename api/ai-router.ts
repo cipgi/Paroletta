@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 
 import {
   canOmitSheetImages,
+  normalizeUnifiedSheetJsonAliases,
   normalizeUnifiedSheetType,
   unifiedSheetSchema,
   validateSheet,
@@ -22,6 +23,12 @@ import {
   resolveImageRequestWithCache,
   type ImageRequest,
 } from "./lib/image-generation";
+import {
+  DEFAULT_TARGET_AUDIENCE,
+  TARGET_AUDIENCE_VALUES,
+  targetAudienceSchema,
+  type TargetAudience,
+} from "../contracts/target-audience";
 import { createSupabaseImageObjectStorage } from "./lib/image-storage";
 import {
   assertActiveSubscription,
@@ -33,9 +40,7 @@ import {
 } from "./lib/subscription";
 import { sanitizePlainText } from "./lib/sanitize";
 
-const ALLOWED_INTERESSI = [
-  "libero",
-  "nessuno",
+const INTEREST_SUGGESTIONS = [
   "dinosauro",
   "principessa",
   "calcio",
@@ -47,10 +52,6 @@ const ALLOWED_INTERESSI = [
   "ballo",
   "musica",
 ] as const;
-
-const AVAILABLE_SPECIFIC_INTERESTS = ALLOWED_INTERESSI.filter(
-  interesse => !["libero", "nessuno"].includes(interesse)
-);
 
 const ALLOWED_FONEMI = [
   "r",
@@ -78,9 +79,9 @@ export type TipoOutput =
   | "pragmatica";
 
 export type GenerationParams = {
-  eta: string;
+  targetAudience: TargetAudience;
   fonema: (typeof ALLOWED_FONEMI)[number];
-  interesse: (typeof ALLOWED_INTERESSI)[number];
+  interesse: string;
   tipoOutput: TipoOutput;
   aspettoSpecifico?: string;
   scenarioSmart?: string;
@@ -106,16 +107,18 @@ type GeneratedSheetRow = {
   testo_generato: string;
   tag_immagine: string | null;
   lista_parole: string[] | null;
+  target_audience?: string | null;
   difficolta: string;
   pdf_url: string | null;
   created_at: string;
 };
 
 const MAX_ASPETTO_SPECIFICO_LENGTH = 400;
+const MAX_INTEREST_LENGTH = 60;
+const MAX_INTEREST_INPUT_LENGTH = 240;
 const MAX_SMART_INPUT_LENGTH = 900;
 const MAX_GRAMMAR_ELEMENT_LENGTH = 120;
 const MAX_SCENE_DESCRIPTION_LENGTH = 900;
-const MAX_ETA_LENGTH = 20;
 const MAX_TEXT_GENERATION_ATTEMPTS = 2;
 const FREE_INTEREST_VALUE = "libero";
 const NO_INTEREST_VALUE = "nessuno";
@@ -127,14 +130,14 @@ const CODE_FENCE_PATTERN = /```+/g;
 const ROLE_MARKER_PATTERN = /\b(?:system|developer|assistant|user)\s*:/giu;
 
 function resolveInterestForGeneration(
-  interesse: (typeof ALLOWED_INTERESSI)[number]
-): (typeof ALLOWED_INTERESSI)[number] {
+  interesse: string
+): string {
   if (interesse !== FREE_INTEREST_VALUE) return interesse;
   const randomIndex = Math.floor(
-    Math.random() * AVAILABLE_SPECIFIC_INTERESTS.length
+    Math.random() * INTEREST_SUGGESTIONS.length
   );
   return (
-    AVAILABLE_SPECIFIC_INTERESTS[randomIndex] ?? AVAILABLE_SPECIFIC_INTERESTS[0]
+    INTEREST_SUGGESTIONS[randomIndex] ?? INTEREST_SUGGESTIONS[0] ?? "musica"
   );
 }
 
@@ -186,6 +189,27 @@ export function sanitizePromptVariable(
     .slice(0, maxLength);
 }
 
+function sanitizeInterest(input: string): string {
+  const sanitizedInterest = sanitizePromptVariable(
+    input,
+    MAX_INTEREST_LENGTH
+  );
+  const normalizedSpecialValue =
+    sanitizedInterest.toLocaleLowerCase("it-IT");
+
+  if (normalizedSpecialValue === FREE_INTEREST_VALUE) {
+    return FREE_INTEREST_VALUE;
+  }
+  if (normalizedSpecialValue === NO_INTEREST_VALUE) {
+    return NO_INTEREST_VALUE;
+  }
+  if (!sanitizedInterest.replace(/[^\p{L}\p{N}]+/gu, "")) {
+    return FREE_INTEREST_VALUE;
+  }
+
+  return sanitizedInterest;
+}
+
 function assertAllowedValue<T extends readonly string[]>(
   value: string,
   allowedValues: T,
@@ -199,8 +223,59 @@ function assertAllowedValue<T extends readonly string[]>(
   });
 }
 
+function getAudiencePromptProfile(targetAudience: TargetAudience) {
+  if (targetAudience === "adulto") {
+    return {
+      clinicianRole:
+        "Sei un logopedista esperto in riabilitazione del linguaggio per adulti. Devi creare una scheda nel formato JSON unificato.",
+      modeRule:
+        "- Modalità destinatario adulto: usa tono rispettoso, neutro e non infantile; scegli scenari quotidiani adulti e materiali adatti a una persona adulta.",
+      deliveryTarget:
+        "La consegna deve essere contestualizzata per la persona adulta e citare contenuti concreti della scheda; non deve essere generica.",
+      schemaDelivery:
+        "istruzione contestualizzata per la persona adulta (mai generica)",
+      imageStyle:
+        "pulito, neutro, professionale, non infantile, semanticamente fedele e senza testo nell'immagine",
+      imageSchemaStyle:
+        "prompt in inglese per la generazione immagine AI, realistico o illustrativo, pulito, neutro e professionale",
+      visualImageInstruction:
+        "Scrivi prompt immagine in inglese come singole scene quadrate, con stile pulito e neutro per adulti, senza testo, senza collage, senza più vignette e senza etichette.",
+      rhymeInstruction:
+        "testo ritmato breve, chiaro e non infantile, con lessico adatto a una persona adulta",
+      wordListInstruction:
+        "lista di parole target con il fonema indicato, adatta a una persona adulta, concreta, pronunciabile e vicina all'interesse. Evita parole astratte o troppo simili se possono confondere la discriminazione.",
+    };
+  }
+
+  return {
+    clinicianRole:
+      "Sei un logopedista esperto in riabilitazione del linguaggio pediatrico. Devi creare una scheda nel formato JSON unificato.",
+    modeRule:
+      "- Modalità destinatario bambino: usa linguaggio, esempi e scenari adatti a un bambino.",
+    deliveryTarget:
+      "La consegna deve essere contestualizzata per il bambino e citare contenuti concreti della scheda; non deve essere generica.",
+    schemaDelivery:
+      "istruzione contestualizzata per il bambino (mai generica)",
+    imageStyle:
+      "child-friendly, semanticamente fedele e senza testo nell'immagine",
+    imageSchemaStyle:
+      "prompt in inglese per la generazione immagine AI, realistico, child-friendly",
+    visualImageInstruction:
+      "Scrivi prompt immagine in inglese come singole scene quadrate, child-friendly, senza testo, senza collage, senza più vignette e senza etichette.",
+    rhymeInstruction:
+      "testo in rima, semplice e child-friendly con lessico adatto al bambino",
+    wordListInstruction:
+      "lista di parole target con il fonema indicato, adatta al bambino, concreta, pronunciabile e vicina all'interesse. Evita parole astratte o troppo simili se confondono il bambino.",
+  };
+}
+
+function normalizeTargetAudience(value: unknown): TargetAudience {
+  const parsed = targetAudienceSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_TARGET_AUDIENCE;
+}
+
 export function sanitizeGenerationParams(input: {
-  eta: string;
+  targetAudience: string;
   fonema: string;
   interesse: string;
   tipoOutput: TipoOutput;
@@ -213,7 +288,11 @@ export function sanitizeGenerationParams(input: {
   numeroScene?: number;
   includeImages?: boolean;
 }): GenerationParams {
-  const eta = sanitizePromptVariable(input.eta, MAX_ETA_LENGTH) || "6 anni";
+  const targetAudience = assertAllowedValue(
+    input.targetAudience,
+    TARGET_AUDIENCE_VALUES,
+    "Destinatario"
+  );
   const aspettoSpecifico = input.aspettoSpecifico
     ? sanitizePromptVariable(
         input.aspettoSpecifico,
@@ -258,14 +337,10 @@ export function sanitizeGenerationParams(input: {
     ? Math.min(Math.max(input.numeroScene ?? 4, 3), 5)
     : undefined;
 
-  const allowedInterest = assertAllowedValue(
-    input.interesse,
-    ALLOWED_INTERESSI,
-    "Interesse"
-  );
+  const sanitizedInterest = sanitizeInterest(input.interesse);
 
   if (
-    allowedInterest === NO_INTEREST_VALUE &&
+    sanitizedInterest === NO_INTEREST_VALUE &&
     !hasUserProvidedGenerationContext({
       aspettoSpecifico: scopedAspettoSpecifico,
       scenarioSmart: scopedScenarioSmart,
@@ -281,9 +356,9 @@ export function sanitizeGenerationParams(input: {
   }
 
   return {
-    eta,
+    targetAudience,
     fonema: assertAllowedValue(input.fonema, ALLOWED_FONEMI, "Fonema"),
-    interesse: resolveInterestForGeneration(allowedInterest),
+    interesse: resolveInterestForGeneration(sanitizedInterest),
     tipoOutput: input.tipoOutput,
     aspettoSpecifico: scopedAspettoSpecifico || undefined,
     scenarioSmart: scopedScenarioSmart || undefined,
@@ -426,6 +501,7 @@ export function normalizeVisualDiscriminationSheet(
 function buildTypeSpecificSection(params: GenerationParams): string {
   const tipo = normalizeUnifiedSheetType(params.tipoOutput);
   const includeImages = params.includeImages || !canOmitSheetImages(tipo);
+  const audience = getAudiencePromptProfile(params.targetAudience);
   const questionRule =
     "Le domande, quando richieste, devono essere oggetti con domanda e risposta, specifiche al testo generato e non formule riutilizzabili.";
 
@@ -436,7 +512,7 @@ Procedura obbligatoria prima di scrivere il JSON:
 1. Scegli una frase target concreta con soggetto, azione, oggetto e almeno un dettaglio verificabile (colore, posizione, luogo o destinazione). Evita concetti astratti non visibili.
 2. Definisci un contesto comune semplice che possa restare stabile nella serie.
 3. Definisci un solo asse di variazione per ogni distrattore: agente, azione, oggetto, colore, posizione spaziale, destinazione o luogo. Non modificare casualmente più elementi.
-4. Scrivi prompt immagine in inglese come singole scene quadrate, child-friendly, senza testo, senza collage, senza più vignette e senza etichette.
+4. ${audience.visualImageInstruction}
 5. Ogni prompt deve nominare esplicitamente soggetto, azione, oggetto, luogo/contesto e dettaglio variato; non usare pronomi o descrizioni vaghe come "similar image". Ogni distrattore deve condividere il dominio semantico del target e non può essere un tema scollegato.
 Scala didattica obbligatoria: D1 difficile estremamente simile al target, con solo 1 dettaglio saliente modificato; D2 intermedio con differenze evidenti ma stesso tema e contesto generale; D3 facile con differenze sostanziali e immediate su agente, oggetto principale, destinazione o luogo. D3 facile con differenze sostanziali non deve essere assurdo o fuori tema.
 Controllo qualità obbligatorio: il target deve rendere vera la consegna; ogni distrattore deve rendere falsa la consegna per un motivo preciso; i distrattori non devono essere tutti quasi identici e non devono essere tutti ovviamente scollegati. Mantieni coerenza di stile, palette e livello di dettaglio in tutta la serie.`;
@@ -446,7 +522,7 @@ Controllo qualità obbligatorio: il target deve rendere vera la consegna; ogni d
     const imageRule = includeImages
       ? 'immagini = 1-2 illustrazioni con ruolo "illustrazione" e livello "principale"; il prompt immagine deve rappresentare una scena concreta coerente con la frase, non il concetto grammaticale astratto.'
       : "immagini = []; non inserire prompt immagine o metadati visivi.";
-    return `morfosintassi: crea una scheda unica di "Morfologia e morfosintassi". Può lavorare su morfologia di base (articoli, genere/numero, plurali, accordi nome-aggettivo, tempi verbali semplici) oppure su strutture più complesse (pronomi clitici, relative, subordinate), in base a elementoGrammaticale, livelloComplessita e descrizioneScena. testo = frase target o breve micro-scenario concreto; la struttura target deve comparire in modo esplicito, corretto e ripetibile, senza frasi ambigue. ${imageRule} domande = 3-8 domande specifiche con risposta: per livello base includi esercizi brevi di scelta/completamento/produzione guidata, per livello intermedio o avanzato includi domande di comprensione e trasformazione mirate alla struttura. ${questionRule}`;
+    return `morfosintassi: crea una scheda unica di "Morfologia e morfosintassi". Il campo tipo nel JSON deve essere "morfosintassi", non "morfosintassi_complessa". Può lavorare su morfologia di base (articoli, genere/numero, plurali, accordi nome-aggettivo, tempi verbali semplici) oppure su strutture più complesse (pronomi clitici, relative, subordinate), in base a elementoGrammaticale, livelloComplessita e descrizioneScena. testo = frase target o breve micro-scenario concreto; la struttura target deve comparire in modo esplicito, corretto e ripetibile, senza frasi ambigue. ${imageRule} domande = 3-8 domande specifiche con risposta: per livello base includi esercizi brevi di scelta/completamento/produzione guidata, per livello intermedio o avanzato includi domande di comprensione e trasformazione mirate alla struttura; anche i completamenti devono avere una consegna leggibile, non una sola parola. ${questionRule}`;
   }
 
   if (tipo === "narrazione_sequenze") {
@@ -471,13 +547,13 @@ Controllo qualità obbligatorio: il target deve rendere vera la consegna; ogni d
     const imageRule = includeImages
       ? 'immagini = 1-2 illustrazioni con ruolo "illustrazione" e livello "principale".'
       : "immagini = []; non inserire prompt immagine o metadati visivi.";
-    return `filastrocca: testo = testo in rima, semplice e child-friendly con lessico adatto all'età. Il fonema target deve comparire in parole naturali e pronunciabili. ${imageRule} domande = 3-5 domande specifiche sul contenuto con risposta. ${questionRule}`;
+    return `filastrocca: testo = ${audience.rhymeInstruction}. Il fonema target deve comparire in parole naturali e pronunciabili. ${imageRule} domande = 3-5 domande specifiche sul contenuto con risposta. ${questionRule}`;
   }
 
   const imageRule = includeImages
     ? 'immagini = 1 immagine per parola, ciascuna con ruolo "illustrazione" e livello "principale", prompt in inglese con singolo oggetto/azione chiaramente rappresentabile.'
     : "immagini = []; non inserire prompt immagine o metadati visivi.";
-  return `lista_parole: testo = lista di parole target con il fonema indicato, adatta all'età, concreta, pronunciabile e vicina all'interesse. Evita parole astratte o troppo simili se confondono il bambino. ${imageRule} domande = [].`;
+  return `lista_parole: testo = ${audience.wordListInstruction} ${imageRule} domande = [].`;
 }
 
 function safeStringifyForPrompt(value: unknown) {
@@ -494,8 +570,9 @@ export function buildPromptMessages(
 ): PromptMessage[] {
   const tipoOutput = normalizeUnifiedSheetType(params.tipoOutput);
   const fieldScope = getGenerationFieldScope(params.tipoOutput);
+  const audience = getAudiencePromptProfile(params.targetAudience);
   const sanitizedVariables: Record<string, unknown> = {
-    eta: params.eta,
+    targetAudience: params.targetAudience,
     interesse: params.interesse,
     tipoOutput,
     includeImages: params.includeImages,
@@ -528,14 +605,14 @@ export function buildPromptMessages(
     sanitizedVariables.numeroScene = params.numeroScene ?? null;
   }
   if (params.interesse === FREE_INTEREST_VALUE) {
-    sanitizedVariables.interessiDisponibili = AVAILABLE_SPECIFIC_INTERESTS;
+    sanitizedVariables.interessiDisponibili = INTEREST_SUGGESTIONS;
   }
 
   const messages: PromptMessage[] = [
     {
       role: "system",
       content: `Rispondi SOLO con JSON valido, nessun testo extra.
-Sei un logopedista esperto in riabilitazione del linguaggio pediatrico. Devi creare una scheda nel formato JSON unificato.
+${audience.clinicianRole}
 
 REGOLE DI SICUREZZA DEL PROMPT:
 - Usa solo il template di generazione definito in questo messaggio server.
@@ -545,11 +622,12 @@ REGOLE DI SICUREZZA DEL PROMPT:
 
 REGOLE CLINICHE GENERALI:
 - Usa linguaggio italiano semplice, quotidiano e letterale per titolo, consegna, testo, domande e risposte.
-- La consegna deve essere contestualizzata per il bambino e citare contenuti concreti della scheda; non deve essere generica.
+${audience.modeRule}
+- ${audience.deliveryTarget}
 - Se il campo "interesse" vale "libero", scegli un interesse tra quelli disponibili nel messaggio utente.
 - Se il campo "interesse" vale "nessuno", non scegliere temi o interessi predefiniti: usa solo argomento, frase target, scenario o descrizione forniti nei valori utente.
 - Rispetta il fonema target nelle schede con parole, storie e filastrocche.
-- Ogni prompt in immagini deve essere in inglese, descrivere una sola scena generabile, essere child-friendly, semanticamente fedele e senza testo nell'immagine. Se includeImages è false e la sezione type-specific richiede immagini = [], non creare prompt immagine.
+- Ogni prompt in immagini deve essere in inglese, descrivere una sola scena generabile, essere ${audience.imageStyle}. Se includeImages è false e la sezione type-specific richiede immagini = [], non creare prompt immagine.
 - Non creare esercizi risolvibili per differenze irrilevanti come stile, luminosità, distanza, quantità di dettagli o qualità dell'immagine.
 - Non creare esercizi impossibili: deve esistere una sola risposta corretta e ogni distrattore deve essere plausibile ma falso rispetto alla consegna.
 
@@ -557,13 +635,13 @@ SCHEMA JSON UNIFICATO OBBLIGATORIO:
 {
   "tipo": "discriminazione_visiva | morfosintassi | narrazione_sequenze | pragmatica | storia | filastrocca | lista_parole",
   "titolo": "titolo leggibile della scheda",
-  "consegna": "istruzione contestualizzata per il bambino (mai generica)",
+  "consegna": "${audience.schemaDelivery}",
   "testo": "contenuto principale: frase target, storia, filastrocca, lista parole, ecc.",
   "immagini": [
     {
       "ruolo": "target | distrattore | illustrazione",
       "livello": "difficile | intermedio | facile | principale",
-      "prompt": "prompt in inglese per la generazione immagine AI, realistico, child-friendly"
+      "prompt": "${audience.imageSchemaStyle}"
     }
   ],
   "domande": [
@@ -662,7 +740,9 @@ function validateGeneratedSheet(
   raw: unknown,
   params: GenerationParams
 ): { data: UnifiedSheet; reason?: undefined } | { data?: undefined; reason: string } {
-  const parsed = unifiedSheetSchema.safeParse(raw);
+  const parsed = unifiedSheetSchema.safeParse(
+    normalizeUnifiedSheetJsonAliases(raw)
+  );
   if (!parsed.success) {
     return { reason: "schema JSON unificato non rispettato" };
   }
@@ -806,9 +886,9 @@ export const aiRouter = createRouter({
   generate: authedQuery
     .input(
       z.object({
-        eta: z.string().max(20),
+        targetAudience: targetAudienceSchema,
         fonema: z.string().max(10),
-        interesse: z.string().max(100),
+        interesse: z.string().max(MAX_INTEREST_INPUT_LENGTH),
         tipoOutput: z.enum([
           "storia",
           "filastrocca",
@@ -880,6 +960,7 @@ export const aiRouter = createRouter({
       const imageRequests = buildImageRequests({
         tipoOutput: sanitizedInput.tipoOutput,
         interesse: sanitizedInput.interesse,
+        targetAudience: sanitizedInput.targetAudience,
         tagImmagine: generatedSheet.tagImmagine,
         testoGenerato: generatedSheet.serializedSheet,
         numeroOpzioni:
@@ -900,6 +981,7 @@ export const aiRouter = createRouter({
           user_id: supabaseUserId,
           fonema: sanitizedInput.fonema,
           interesse: sanitizedInput.interesse,
+          target_audience: sanitizedInput.targetAudience,
           tipo_output: sanitizedInput.tipoOutput,
           testo_generato: generatedSheet.serializedSheet,
           tag_immagine: generatedSheet.tagImmagine,
@@ -940,6 +1022,7 @@ export const aiRouter = createRouter({
         userId: inserted.user_id,
         fonema: inserted.fonema,
         interesse: inserted.interesse,
+        targetAudience: normalizeTargetAudience(inserted.target_audience),
         tipoOutput: inserted.tipo_output,
         testoGenerato: inserted.testo_generato,
         tagImmagine: inserted.tag_immagine,

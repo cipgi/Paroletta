@@ -1,4 +1,8 @@
 import { parseUnifiedSheetContent } from "../../contracts/sheet-content";
+import {
+  DEFAULT_TARGET_AUDIENCE,
+  type TargetAudience,
+} from "../../contracts/target-audience";
 import type { ImageObjectStorage } from "./image-storage";
 import { buildStorageFilePath } from "./image-storage";
 export const IMAGE_GENERATION_MODEL =
@@ -253,6 +257,21 @@ function getVisualDistractorDifficulty(index: number): string {
   );
 }
 
+function getVisualDistractorDifficultyForAudience(
+  index: number,
+  targetAudience: TargetAudience
+): string {
+  if (targetAudience === "bambino") return getVisualDistractorDifficulty(index);
+
+  return (
+    [
+      "difficile: immagine estremamente simile al target; mantieni soggetto, azione generale, oggetto principale e contesto, cambiando 1 solo dettaglio clinicamente rilevante come colore, dimensione o posizione precisa",
+      "intermedio: mantieni tema e scenario riconoscibili, ma cambia chiaramente la modalità dell'azione, la posizione rispetto all'obiettivo o un passaggio dell'azione, per esempio appoggiare l'oggetto accanto al contenitore oppure consegnarlo a una persona diversa",
+      "facile: distrattore più semplice; crea differenze sostanziali e immediate cambiando persona, oggetto principale oppure luogo/destinazione, per esempio uomo al posto della donna, documento al posto della borsa o ufficio al posto del negozio",
+    ][index] ?? "graduato; differenza coerente con il livello clinico richiesto"
+  );
+}
+
 function extractVariationAxis(
   description: string,
   axes: string | undefined,
@@ -280,13 +299,22 @@ function extractVariationAxis(
 export function buildImageRequests(params: {
   tipoOutput: string;
   interesse: string;
+  targetAudience?: TargetAudience;
   tagImmagine?: string | null;
   testoGenerato: string;
   numeroOpzioni?: number;
   scenarioSmart?: string;
   descrizioneScena?: string;
 }): ImageRequest[] {
-  const baseStyleTags = ["stile:vettoriale_bambini", "formato:quadrato_1024"];
+  const targetAudience = params.targetAudience ?? DEFAULT_TARGET_AUDIENCE;
+  const baseStyleTags =
+    targetAudience === "adulto"
+      ? [
+          "audience:adulto",
+          "stile:adulto_neutro_professionale",
+          "formato:quadrato_1024",
+        ]
+      : ["stile:vettoriale_bambini", "formato:quadrato_1024"];
   const visualStyleTags = [...baseStyleTags, "prompt_version:visual_graded_v5"];
   const unifiedSheet = parseUnifiedSheetContent(params.testoGenerato);
 
@@ -334,7 +362,10 @@ export function buildImageRequests(params: {
                 : undefined,
             difficultyGuidance:
               image.ruolo === "distrattore"
-                ? getVisualDistractorDifficulty(currentDistractorIndex)
+                ? getVisualDistractorDifficultyForAudience(
+                    currentDistractorIndex,
+                    targetAudience
+                  )
                 : undefined,
             exclude:
               image.ruolo === "target"
@@ -346,7 +377,7 @@ export function buildImageRequests(params: {
       return {
         role,
         label,
-        prompt: buildClinicalImagePrompt(visualPrompt),
+        prompt: buildClinicalImagePrompt(visualPrompt, targetAudience),
         semanticTags: [
           ...(isVisual ? visualStyleTags : baseStyleTags),
           `tipo:${unifiedSheet.tipo}`,
@@ -391,7 +422,8 @@ export function buildImageRequests(params: {
             isTarget: true,
             context,
             exclude: allDistractorDescriptions,
-          })
+          }),
+          targetAudience
         ),
         semanticTags: [
           ...visualStyleTags,
@@ -424,14 +456,18 @@ export function buildImageRequests(params: {
             isTarget: false,
             context,
             variationAxis,
-            difficultyGuidance: getVisualDistractorDifficulty(index),
+            difficultyGuidance: getVisualDistractorDifficultyForAudience(
+              index,
+              targetAudience
+            ),
             exclude: [
               target,
               ...allDistractorDescriptions.filter(
                 (_, itemIndex) => itemIndex !== index
               ),
             ],
-          })
+          }),
+          targetAudience
         ),
         semanticTags: [
           ...visualStyleTags,
@@ -460,7 +496,7 @@ export function buildImageRequests(params: {
     {
       role: "base",
       label: params.tagImmagine ?? "Illustrazione",
-      prompt: buildClinicalImagePrompt(String(scene)),
+      prompt: buildClinicalImagePrompt(String(scene), targetAudience),
       semanticTags: [
         ...baseStyleTags,
         `tipo:${params.tipoOutput}`,
@@ -477,12 +513,38 @@ function isEphemeralGeneratedImagePath(path: string): boolean {
   );
 }
 
-export function buildClinicalImagePrompt(scene: string): string {
+function sanitizeAdultStyleLeakage(scene: string): string {
+  return scene
+    .replace(/\bchild[-\s]?friendly\b/giu, "neutral adult-oriented")
+    .replace(/\bpediatric(?:a|o|he|i)?\b/giu, "adult-oriented");
+}
+
+export function buildClinicalImagePrompt(
+  scene: string,
+  targetAudience: TargetAudience = DEFAULT_TARGET_AUDIENCE
+): string {
   const sanitizedScene = sanitizeImagePrompt(scene);
+  const resolvedScene =
+    targetAudience === "adulto"
+      ? sanitizeAdultStyleLeakage(sanitizedScene)
+      : sanitizedScene;
+
+  if (targetAudience === "adulto") {
+    return [
+      "Illustrazione per esercizio di logopedia rivolto a una persona adulta.",
+      "Priorità massima: l'immagine deve essere semanticamente fedele alla consegna clinica; non aggiungere soggetti alternativi o non richiesti.",
+      `Scena: ${resolvedScene}.`,
+      "Crea una sola scena, un solo pannello, nessuna griglia, nessun collage, nessuna vignetta multipla.",
+      "Stile visivo pulito, neutro e professionale per adulti, colori chiari, sfondo semplice, nessun testo nell'immagine, nessuna etichetta, nessun fumetto.",
+      `Output obbligatorio: aspect ratio ${IMAGE_GENERATION_ASPECT_RATIO}, risoluzione ${IMAGE_GENERATION_SIZE}.`,
+      "Non includere nomi, dati clinici o identificativi di pazienti.",
+    ].join(" ");
+  }
+
   return [
     "Illustrazione pediatrica per esercizio di logopedia.",
     "Priorità massima: l'immagine deve essere semanticamente fedele alla consegna clinica; non aggiungere soggetti alternativi o non richiesti.",
-    `Scena: ${sanitizedScene}.`,
+    `Scena: ${resolvedScene}.`,
     "Crea una sola scena, un solo pannello, nessuna griglia, nessun collage, nessuna vignetta multipla.",
     "Stile vettoriale per bambini, colori chiari, sfondo semplice, nessun testo nell'immagine, nessuna etichetta, nessun fumetto.",
     `Output obbligatorio: aspect ratio ${IMAGE_GENERATION_ASPECT_RATIO}, risoluzione ${IMAGE_GENERATION_SIZE}.`,

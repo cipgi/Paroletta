@@ -70,11 +70,12 @@ Per creare una nuova scheda:
 
 1. Dal menu laterale, clicca su **Genera Scheda**.
 2. Scegli il tipo di scheda.
-3. Compila i campi richiesti.
-4. Controlla se vuoi includere immagini, quando l'opzione e disponibile.
-5. Clicca sul pulsante di generazione.
-6. Attendi il completamento.
-7. Al termine, Paroletta ti porta alla sezione **Schede**, dove trovi la nuova scheda salvata.
+3. Scegli il destinatario: **Bambino** o **Adulto**.
+4. Compila i campi richiesti.
+5. Controlla se vuoi includere immagini, quando l'opzione e disponibile.
+6. Clicca sul pulsante di generazione.
+7. Attendi il completamento.
+8. Al termine, Paroletta ti porta alla sezione **Schede**, dove trovi la nuova scheda salvata.
 
 Tipi di scheda disponibili:
 
@@ -83,10 +84,10 @@ Tipi di scheda disponibili:
 - **Lista parole**: parole organizzate per esercizio.
 - **Indica l'immagine corretta**: scelta tra immagini con un target corretto e distrattori coordinati.
 - **Morfologia e morfosintassi**: esercizi su strutture grammaticali.
-- **Narrazione e sequenze**: storia divisa in scene ordinate.
-- **Pragmatica**: situazioni sociali, emozioni, intenzioni e risposte possibili.
+- **Riabilitazione cognitivo-comunicativa: narrazione e sequenze**: storia divisa in scene per lavorare su ordine temporale, pianificazione del discorso e racconto.
+- **Riabilitazione cognitivo-comunicativa: pragmatica**: situazioni sociali, emozioni, intenzioni, inferenze e risposte possibili.
 
-Consiglio pratico: prima di generare, scrivi indicazioni semplici e concrete. Per esempio, invece di una richiesta molto generica, indica eta, tema, obiettivo e situazione.
+Consiglio pratico: prima di generare, scrivi indicazioni semplici e concrete. Per esempio, invece di una richiesta molto generica, indica destinatario, tema, obiettivo e situazione.
 
 ## 4. Gestione delle schede
 
@@ -207,6 +208,14 @@ Se una scheda o un'immagine non e corretta:
 - apri la scheda,
 - rigenera solo l'immagine interessata, se possibile,
 - oppure crea una nuova scheda con indicazioni piu precise.
+
+Se la generazione non parte o si interrompe, Paroletta mostra un errore leggibile:
+
+- **Richiesta non valida**: controlla destinatario, tipo scheda, fonema, interesse e campi obbligatori.
+- **Interesse Nessuno senza contesto**: aggiungi una frase target, un argomento, uno scenario o una descrizione.
+- **Limite schede o immagini raggiunto**: controlla piano e consumi disponibili.
+- **Servizio AI non disponibile o output non valido**: riprova piu tardi o modifica leggermente i parametri.
+- **Immagine non generabile**: riprova la generazione o rigenera la singola immagine; i dettagli tecnici restano nei log server.
 
 Se fai parte di un team e hai dubbi su posti, limiti o abbonamento:
 

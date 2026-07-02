@@ -3,6 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { trpc } from "@/providers/trpc";
 import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router";
+import {
+  formatSubscriptionPlan,
+  formatSubscriptionStatus,
+} from "@/lib/subscription";
 
 export default function SubscriptionPage() {
   const navigate = useNavigate();
@@ -13,6 +17,7 @@ export default function SubscriptionPage() {
     ? new Date(subscription.currentPeriodEnd).toLocaleDateString("it-IT")
     : "-";
   const isStaff = subscription?.accountRole === "staff";
+  const currentPlanLabel = formatSubscriptionPlan(subscription?.plan);
 
   if (isStaff) {
     return (
@@ -33,7 +38,7 @@ export default function SubscriptionPage() {
               Piano, posti e stato dell'abbonamento vengono gestiti manualmente.
             </p>
             <p>
-              <strong>Piano corrente:</strong> {subscription?.plan ?? "-"}
+              <strong>Piano corrente:</strong> {currentPlanLabel}
             </p>
           </CardContent>
         </Card>
@@ -60,9 +65,7 @@ export default function SubscriptionPage() {
           </div>
           {(plans ?? []).map(plan => (
             <div key={plan.code} className="rounded-lg border p-4 space-y-2">
-              <p className="font-medium">
-                {plan.name} ({plan.code})
-              </p>
+              <p className="font-medium">{plan.name}</p>
               {plan.description && (
                 <p className="text-sm text-slate-600">{plan.description}</p>
               )}
@@ -81,10 +84,10 @@ export default function SubscriptionPage() {
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <p>
-            <strong>Stato:</strong> {subscription?.status ?? "nessuno"}
+            <strong>Stato:</strong> {formatSubscriptionStatus(subscription)}
           </p>
           <p>
-            <strong>Piano:</strong> {subscription?.plan ?? "-"}
+            <strong>Piano:</strong> {currentPlanLabel}
           </p>
           <p>
             <strong>Posti team:</strong> {subscription?.seatsCount ?? 1}

@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { trpc } from "@/providers/trpc";
 import { useNavigate, useSearchParams } from "react-router";
 import { z } from "zod";
@@ -15,6 +15,12 @@ import {
 } from "@/lib/supabase-email-confirmation";
 
 type AuthMode = "login" | "register" | "password-reset";
+
+function isEmailNotConfirmedMessage(message: string | null | undefined) {
+  return /email.*non.*confermat|non.*ancora.*confermat|account.*non.*ancora.*confermat|not confirmed|email_not_confirmed/iu.test(
+    message ?? ""
+  );
+}
 
 const emailInputSchema = z.preprocess(
   value => (typeof value === "string" ? value.trim().toLowerCase() : value),
@@ -52,6 +58,7 @@ export default function Login() {
     }
   );
   const [formError, setFormError] = useState<string | null>(null);
+  const [canResendConfirmation, setCanResendConfirmation] = useState(false);
   const [isConfirmingEmail, setIsConfirmingEmail] = useState(() =>
     hasEmailConfirmationCallback()
   );
@@ -79,6 +86,7 @@ export default function Login() {
         if (cancelled) return;
         setRegistrationMessage("Email confermata. Ora puoi accedere.");
         setFormError(null);
+        setCanResendConfirmation(false);
         setAuthMode("login");
       })
       .catch(error => {
@@ -130,6 +138,7 @@ export default function Login() {
       setRegistrationMessage(
         "Se l'indirizzo non era già registrato, riceverai una mail di verifica. Apri il link, poi accedi."
       );
+      setCanResendConfirmation(true);
       setAuthMode("login");
       setPassword("");
       setName("");
@@ -145,6 +154,7 @@ export default function Login() {
         setRegistrationMessage(null);
         setFormError(data.message);
       }
+      setCanResendConfirmation(false);
       setAuthMode("login");
       setPassword("");
     },
@@ -170,6 +180,12 @@ export default function Login() {
     resetPasswordMutation.isPending ||
     resendConfirmationMutation.isPending ||
     isConfirmingEmail;
+  const showResendConfirmation =
+    !isRegister &&
+    !isPasswordReset &&
+    (canResendConfirmation ||
+      isEmailNotConfirmedMessage(loginMutation.error?.message) ||
+      isEmailNotConfirmedMessage(formError));
   const resendEmailConfirmation = () => {
     setRegistrationMessage(null);
     setFormError(null);
@@ -183,7 +199,8 @@ export default function Login() {
 
     resendConfirmationMutation.mutate({ email: parsedEmail.data });
   };
-  const onCredentialsSubmit = () => {
+  const onCredentialsSubmit = (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
     setRegistrationMessage(null);
     setFormError(null);
     if (isPasswordReset) {
@@ -219,6 +236,7 @@ export default function Login() {
       return;
     }
 
+    setCanResendConfirmation(false);
     loginMutation.mutate({
       email,
       password,
@@ -237,7 +255,8 @@ export default function Login() {
                 : "Accedi"}
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent>
+          <form className="space-y-4" onSubmit={onCredentialsSubmit}>
           {isRegister && (
             <div className="space-y-2">
               <Label htmlFor="name">Nome</Label>
@@ -269,8 +288,8 @@ export default function Login() {
               />
               {isRegister ? (
                 <p className="text-xs text-slate-500">
-                  {PasswordPolicy.helpText} Il piano iniziale viene sempre
-                  impostato su trial.
+                  {PasswordPolicy.helpText} Dopo la conferma dell'email parte
+                  la prova gratuita.
                 </p>
               ) : null}
             </div>
@@ -286,10 +305,10 @@ export default function Login() {
             </div>
           )}
           <Button
+            type="submit"
             className="w-full"
             size="lg"
             disabled={isPending}
-            onClick={onCredentialsSubmit}
           >
             {isRegister
               ? "Registrati con email"
@@ -306,6 +325,7 @@ export default function Login() {
                 setAuthMode(value => {
                   const nextValue = value === "register" ? "login" : "register";
                   if (nextValue === "register") setRegistrationMessage(null);
+                  setCanResendConfirmation(false);
                   return nextValue;
                 });
                 setFormError(null);
@@ -325,12 +345,13 @@ export default function Login() {
                 setAuthMode(isPasswordReset ? "login" : "password-reset");
                 setRegistrationMessage(null);
                 setFormError(null);
+                setCanResendConfirmation(false);
               }}
             >
               {isPasswordReset ? "Torna all'accesso" : "Password dimenticata?"}
             </Button>
           )}
-          {!isRegister && !isPasswordReset && (
+          {showResendConfirmation && (
             <Button
               type="button"
               variant="ghost"
@@ -354,6 +375,7 @@ export default function Login() {
                 resendConfirmationMutation.error?.message}
             </p>
           )}
+          </form>
         </CardContent>
       </Card>
     </div>

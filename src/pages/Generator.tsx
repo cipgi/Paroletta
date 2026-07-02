@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { trpc } from "@/providers/trpc";
+import type { TargetAudience } from "@contracts/target-audience";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Toggle } from "@/components/ui/toggle";
+import { useUsageRemaining } from "@/hooks/useUsageRemaining";
 import {
   Select,
   SelectContent,
@@ -28,22 +30,21 @@ import {
   MessageCircle,
 } from "lucide-react";
 
-const interessi = [
-  "libero",
-  "nessuno",
-  "dinosauro",
-  "principessa",
-  "calcio",
-  "gatto",
-  "cane",
-  "auto",
-  "cucina",
-  "mare",
-  "ballo",
-  "musica",
+const suggerimentiInteresse = [
+  { valore: "dinosauro", infantile: true },
+  { valore: "principessa", infantile: true },
+  { valore: "calcio", infantile: false },
+  { valore: "gatto", infantile: false },
+  { valore: "cane", infantile: false },
+  { valore: "auto", infantile: false },
+  { valore: "cucina", infantile: false },
+  { valore: "mare", infantile: false },
+  { valore: "ballo", infantile: false },
+  { valore: "musica", infantile: false },
 ];
 
 const fonemi = ["r", "s", "l", "t", "d", "k", "g", "p", "b", "f", "v"];
+const MAX_INTEREST_LENGTH = 60;
 
 type TipoScheda =
   | "storia"
@@ -67,6 +68,7 @@ type TipoTestoConFonema = Extract<
 >;
 
 type LivelloComplessita = "base" | "intermedio" | "avanzato";
+type InteresseMode = "tema" | "libero" | "nessuno";
 
 const tipiTestoConFonema: TipoTestoConFonema[] = [
   "storia",
@@ -109,15 +111,15 @@ const tipoSchedaConfig: Record<
     icona: Brain,
   },
   narrazione_sequenze: {
-    titolo: "Narrazione e sequenze",
+    titolo: "Cognitivo-comunicativa: narrazione",
     descrizione:
-      "Storia in 3-5 scene ordinate con domande su prima/dopo, problema e soluzione.",
+      "Controllo esecutivo applicato al discorso: sequenze, prima/dopo, problema e soluzione.",
     icona: ListOrdered,
   },
   pragmatica: {
-    titolo: "Pragmatica",
+    titolo: "Cognitivo-comunicativa: pragmatica",
     descrizione:
-      "Turni conversazionali, inferenze, emozioni e intenzioni comunicative.",
+      "Cognizione sociale applicata alla comunicazione: turni, inferenze, emozioni e intenzioni.",
     icona: MessageCircle,
   },
   testo_con_fonema: {
@@ -144,12 +146,12 @@ export default function Generator() {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
 
-  const [eta, setEta] = useState("6-8 anni");
+  const [targetAudience, setTargetAudience] =
+    useState<TargetAudience>("bambino");
   const [fonema, setFonema] = useState("r");
-  const [interesse, setInteresse] = useState("libero");
-  const [tipoOutput, setTipoOutput] = useState<TipoScheda>(
-    "discriminazione_visiva"
-  );
+  const [interesse, setInteresse] = useState("");
+  const [interesseMode, setInteresseMode] = useState<InteresseMode>("tema");
+  const [tipoOutput, setTipoOutput] = useState<TipoScheda>("storia");
   const [aspettoSpecifico, setAspettoSpecifico] = useState("");
   const [scenarioSmart, setScenarioSmart] = useState("");
   const [elementoGrammaticale, setElementoGrammaticale] = useState(
@@ -161,6 +163,8 @@ export default function Generator() {
   const [numeroOpzioni, setNumeroOpzioni] = useState(4);
   const [numeroScene, setNumeroScene] = useState(4);
   const [includeImages, setIncludeImages] = useState(true);
+  const [generationElapsedSeconds, setGenerationElapsedSeconds] = useState(0);
+  const usageRemaining = useUsageRemaining();
 
   const generate = trpc.ai.generate.useMutation({
     onSuccess: data => {
@@ -174,6 +178,7 @@ export default function Generator() {
         utils.sheets.list.invalidate(),
         utils.sheets.count.invalidate(),
         utils.auth.me.invalidate(),
+        utils.organization.overview.invalidate(),
         utils.subscriptions.mySubscription.invalidate(),
       ]).then(results => {
         const failedRefreshes = results.filter(
@@ -188,16 +193,71 @@ export default function Generator() {
     },
   });
 
+  useEffect(() => {
+    if (!generate.isPending) return;
+
+    const timer = window.setInterval(() => {
+      setGenerationElapsedSeconds(seconds => seconds + 1);
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [generate.isPending]);
+
+  const visibleInterestSuggestions = useMemo(
+    () =>
+      suggerimentiInteresse.filter(
+        suggestion => targetAudience !== "adulto" || !suggestion.infantile
+      ),
+    [targetAudience]
+  );
+  const isFreeInterest = interesseMode === "libero";
+  const isNoInterest = interesseMode === "nessuno";
+  const isInterestInputDisabled = interesseMode !== "tema";
+  const expectedImageCount = useMemo(() => {
+    const imagesEnabled = canDisableImagesForType(tipoOutput)
+      ? includeImages
+      : true;
+    if (!imagesEnabled) return 0;
+    if (tipoOutput === "discriminazione_visiva") return numeroOpzioni;
+    if (tipoOutput === "narrazione_sequenze") return numeroScene;
+    return 1;
+  }, [includeImages, numeroOpzioni, numeroScene, tipoOutput]);
+  const generationStatusMessage = useMemo(() => {
+    if (generationElapsedSeconds < 5) return "Preparo la scheda…";
+    if (generationElapsedSeconds < 15) return "Scrivo il testo…";
+    if (expectedImageCount > 0 && generationElapsedSeconds < 40) {
+      return "Genero le immagini… può richiedere fino a un minuto";
+    }
+    if (generationElapsedSeconds < 40) return "Rifinisco la scheda…";
+    return "Ancora qualche secondo…";
+  }, [expectedImageCount, generationElapsedSeconds]);
+  const generationCostLabel = useMemo(() => {
+    const imageLabel =
+      expectedImageCount === 1
+        ? "1 immagine"
+        : `${expectedImageCount} immagini`;
+
+    return `Questa generazione userà 1 scheda + ${imageLabel} · Ti rimangono ${usageRemaining.sheets} schede e ${usageRemaining.images} immagini.`;
+  }, [expectedImageCount, usageRemaining.images, usageRemaining.sheets]);
+
   const handleGenerate = () => {
     const trimmedAspettoSpecifico = aspettoSpecifico.trim();
     const trimmedScenarioSmart = scenarioSmart.trim();
     const trimmedElementoGrammaticale = elementoGrammaticale.trim();
     const trimmedDescrizioneScena = descrizioneScena.trim();
+    const trimmedInteresse = interesse.trim();
+    const resolvedInteresse =
+      interesseMode === "libero"
+        ? "libero"
+        : interesseMode === "nessuno"
+          ? "nessuno"
+          : trimmedInteresse || "libero";
 
+    setGenerationElapsedSeconds(0);
     generate.mutate({
-      eta,
+      targetAudience,
       fonema,
-      interesse,
+      interesse: resolvedInteresse,
       tipoOutput,
       includeImages: canDisableImagesForType(tipoOutput) ? includeImages : true,
       ...(isTipoTestoConFonema(tipoOutput)
@@ -262,6 +322,8 @@ export default function Generator() {
   };
 
   const renderClinicalInputs = () => {
+    const isAdultAudience = targetAudience === "adulto";
+
     if (tipoOutput === "discriminazione_visiva") {
       return (
         <div className="space-y-5 rounded-2xl border border-teal-100 bg-teal-50/50 p-4">
@@ -274,7 +336,11 @@ export default function Generator() {
               id="scenarioSmart"
               value={scenarioSmart}
               onChange={e => setScenarioSmart(e.target.value)}
-              placeholder='es. "Frase target: Il bambino accarezza il dinosauro. Struttura: soggetto-verbo-oggetto. Variazioni: azione, agente, oggetto"'
+              placeholder={
+                isAdultAudience
+                  ? 'es. "Frase target: La donna appoggia le chiavi sul tavolo. Struttura: soggetto-verbo-oggetto. Variazioni: azione, oggetto, posizione"'
+                  : 'es. "Frase target: Il bambino accarezza il dinosauro. Struttura: soggetto-verbo-oggetto. Variazioni: azione, agente, oggetto"'
+              }
               rows={5}
             />
             <p className="text-xs text-slate-500">
@@ -287,7 +353,7 @@ export default function Generator() {
           <div className="space-y-2">
             <Label htmlFor="numeroOpzioni" className="flex items-center gap-2">
               <Images className="w-4 h-4 text-teal-600" />
-              Numero di frame coerenti
+              Quante immagini mostrare
             </Label>
             <Select
               value={String(numeroOpzioni)}
@@ -323,18 +389,22 @@ export default function Generator() {
           <div className="space-y-2">
             <Label htmlFor="scenarioSmart" className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-amber-600" />
-              Tema narrativo e obiettivo
+              Obiettivo narrativo cognitivo-comunicativo
             </Label>
             <Textarea
               id="scenarioSmart"
               value={scenarioSmart}
               onChange={e => setScenarioSmart(e.target.value)}
-              placeholder='es. "Un bambino perde la palla al parco, chiede aiuto e la ritrova. Lavora su prima/dopo, problema e soluzione."'
+              placeholder={
+                isAdultAudience
+                  ? 'es. "Una persona dimentica la tessera in farmacia, chiede supporto e risolve il problema. Lavora su prima/dopo, problema e soluzione."'
+                  : 'es. "Un bambino perde la palla al parco, chiede aiuto e la ritrova. Lavora su prima/dopo, problema e soluzione."'
+              }
               rows={5}
             />
             <p className="text-xs text-slate-500">
-              Paroletta crea una sequenza ordinata con personaggi coerenti,
-              problema semplice e soluzione finale.
+              Paroletta crea una sequenza per lavorare su pianificazione del
+              discorso, ordine temporale, problema e soluzione.
             </p>
           </div>
 
@@ -367,7 +437,7 @@ export default function Generator() {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="aspettoSpecifico">
-                Abilità pragmatica target
+                Abilità pragmatico-sociale target
               </Label>
               <Input
                 id="aspettoSpecifico"
@@ -405,12 +475,16 @@ export default function Generator() {
               id="scenarioSmart"
               value={scenarioSmart}
               onChange={e => setScenarioSmart(e.target.value)}
-              placeholder='es. "Due bambini vogliono lo stesso gioco. Uno è triste e l’altro deve scegliere cosa dire."'
+              placeholder={
+                isAdultAudience
+                  ? 'es. "Due colleghi vogliono parlare nello stesso momento durante una riunione. Uno deve scegliere cosa dire."'
+                  : 'es. "Due bambini vogliono lo stesso gioco. Uno è triste e l’altro deve scegliere cosa dire."'
+              }
               rows={5}
             />
             <p className="text-xs text-slate-500">
-              L’IA genera uno scenario quotidiano con domande su emozioni,
-              intenzioni, inferenze e frasi possibili.
+              L’IA genera uno scenario quotidiano per lavorare su cognizione
+              sociale, intenzioni, inferenze e frasi possibili.
             </p>
           </div>
         </div>
@@ -458,13 +532,17 @@ export default function Generator() {
               className="flex items-center gap-2"
             >
               <Sparkles className="w-4 h-4 text-indigo-600" />
-              Smart Input: scena visiva e obiettivo clinico
+              Descrivi la scena e l'obiettivo clinico
             </Label>
             <Textarea
               id="descrizioneScena"
               value={descrizioneScena}
               onChange={e => setDescrizioneScena(e.target.value)}
-              placeholder='es. "Due bambini hanno una palla rossa e due palle blu: voglio lavorare su plurali e accordo nome-aggettivo."'
+              placeholder={
+                isAdultAudience
+                  ? 'es. "Due persone hanno una borsa rossa e due borse blu: voglio lavorare su plurali e accordo nome-aggettivo."'
+                  : 'es. "Due bambini hanno una palla rossa e due palle blu: voglio lavorare su plurali e accordo nome-aggettivo."'
+              }
               rows={5}
             />
             <p className="text-xs text-slate-500">
@@ -648,19 +726,24 @@ export default function Generator() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="eta" className="flex items-center gap-2">
+              <Label
+                htmlFor="targetAudience"
+                className="flex items-center gap-2"
+              >
                 <Baby className="w-4 h-4 text-teal-600" />
-                Fascia d'età
+                Destinatario
               </Label>
-              <Select value={eta} onValueChange={setEta}>
-                <SelectTrigger id="eta">
-                  <SelectValue placeholder="Seleziona fascia d'età" />
+              <Select
+                value={targetAudience}
+                onValueChange={(value: TargetAudience) =>
+                  setTargetAudience(value)
+                }
+              >
+                <SelectTrigger id="targetAudience">
+                  <SelectValue placeholder="Seleziona destinatario" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="3-5 anni">3-5 anni</SelectItem>
-                  <SelectItem value="6-8 anni">6-8 anni</SelectItem>
-                  <SelectItem value="9-11 anni">9-11 anni</SelectItem>
-                  <SelectItem value="12-14 anni">12-14 anni</SelectItem>
+                  <SelectItem value="bambino">Bambino</SelectItem>
                   <SelectItem value="adulto">Adulto</SelectItem>
                 </SelectContent>
               </Select>
@@ -669,24 +752,73 @@ export default function Generator() {
             <div className="space-y-2">
               <Label htmlFor="interesse" className="flex items-center gap-2">
                 <Heart className="w-4 h-4 text-teal-600" />
-                Interesse del bambino
+                Interesse o tema
               </Label>
-              <Select value={interesse} onValueChange={setInteresse}>
-                <SelectTrigger id="interesse">
-                  <SelectValue placeholder="Seleziona interesse" />
-                </SelectTrigger>
-                <SelectContent>
-                  {interessi.map(i => (
-                    <SelectItem key={i} value={i}>
-                      {i === "libero"
-                        ? "Libero (sceglie il sistema)"
-                        : i === "nessuno"
-                          ? "Nessuno (usa solo il tuo input)"
-                          : i.charAt(0).toUpperCase() + i.slice(1)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Input
+                id="interesse"
+                value={isInterestInputDisabled ? "" : interesse}
+                onChange={event => {
+                  setInteresseMode("tema");
+                  setInteresse(event.target.value);
+                }}
+                placeholder={
+                  targetAudience === "adulto"
+                    ? 'es. "la cucina", "il giardinaggio", "una passeggiata al mercato"'
+                    : 'es. "i trattori", "Frozen", "la pesca col nonno"'
+                }
+                disabled={isInterestInputDisabled}
+                maxLength={MAX_INTEREST_LENGTH}
+              />
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setInteresseMode(current =>
+                      current === "libero" ? "tema" : "libero"
+                    )
+                  }
+                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                    isFreeInterest
+                      ? "border-teal-600 bg-teal-50 text-teal-700"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                  }`}
+                >
+                  Scegli tu per me
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setInteresseMode(current =>
+                      current === "nessuno" ? "tema" : "nessuno"
+                    )
+                  }
+                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                    isNoInterest
+                      ? "border-teal-600 bg-teal-50 text-teal-700"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                  }`}
+                >
+                  Nessun tema
+                </button>
+                {visibleInterestSuggestions.map(suggestion => (
+                  <button
+                    key={suggestion.valore}
+                    type="button"
+                    onClick={() => {
+                      setInteresseMode("tema");
+                      setInteresse(suggestion.valore);
+                    }}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                      interesseMode === "tema" && interesse === suggestion.valore
+                        ? "border-teal-600 bg-teal-50 text-teal-700"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                    }`}
+                  >
+                    {suggestion.valore.charAt(0).toLocaleUpperCase("it-IT") +
+                      suggestion.valore.slice(1)}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -694,8 +826,12 @@ export default function Generator() {
 
           {renderClinicalInputs()}
 
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+            {generationCostLabel}
+          </div>
+
           <Button
-            className="w-full bg-teal-600 hover:bg-teal-700"
+            className="h-auto min-h-10 w-full whitespace-normal px-4 py-2 text-center"
             size="lg"
             onClick={handleGenerate}
             disabled={generate.isPending}
@@ -703,7 +839,7 @@ export default function Generator() {
             {generate.isPending ? (
               <>
                 <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                Generazione in corso...
+                {generationStatusMessage}
               </>
             ) : (
               <>
@@ -712,6 +848,13 @@ export default function Generator() {
               </>
             )}
           </Button>
+
+          {generate.isPending ? (
+            <p className="text-center text-sm text-slate-600">
+              {generationElapsedSeconds} secondi trascorsi · Non chiudere
+              questa pagina.
+            </p>
+          ) : null}
 
           {generate.isError && (
             <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">

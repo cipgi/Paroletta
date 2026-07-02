@@ -2,6 +2,7 @@ import { useParams, Link } from "react-router";
 import { useRef, useState } from "react";
 import { trpc } from "@/providers/trpc";
 import {
+  getVisualDisplayOptionCount,
   getSheetTypeLabel,
   getNeutralVisualOptionLabel,
   getVisualDiscriminationTitle,
@@ -25,13 +26,6 @@ import {
   RefreshCcw,
   Loader2,
 } from "lucide-react";
-
-function getVisualOptionCount(words: string[]) {
-  const count = words.filter(word =>
-    /^(target|distrattore)/i.test(word.trim())
-  ).length;
-  return Math.min(Math.max(count || 4, 2), 4);
-}
 
 function isDisplayableImagePath(path: string | null | undefined) {
   return Boolean(path && /^(https?:|data:image\/|\/)/u.test(path));
@@ -66,11 +60,7 @@ function populatePrintableSheetDocument(params: {
   printDocument: Document;
   sheetNode: Node;
   title: string;
-  sheetWidth: number;
-  sheetHeight: number;
 }) {
-  const pageWidth = params.sheetWidth + 48;
-  const pageHeight = params.sheetHeight + 48;
   const { printDocument } = params;
 
   printDocument.documentElement.lang = "it";
@@ -92,11 +82,16 @@ function populatePrintableSheetDocument(params: {
 
   const printStyle = printDocument.createElement("style");
   printStyle.textContent = `
+    @page {
+      size: A4;
+      margin: 15mm;
+    }
+
     html,
     body {
       margin: 0;
       min-height: 100%;
-      background: #f8fafc;
+      background: #ffffff;
     }
 
     *,
@@ -107,42 +102,57 @@ function populatePrintableSheetDocument(params: {
     }
 
     body {
-      padding: 24px;
+      padding: 0;
     }
 
     .pdf-page {
-      width: ${params.sheetWidth}px;
-      max-width: 100%;
-      margin: 0 auto;
+      width: 100%;
+      max-width: none;
+      margin: 0;
     }
 
     .pdf-page > * {
       width: 100%;
     }
 
-    @page {
-      size: ${pageWidth}px ${pageHeight}px;
-      margin: 0;
+    .no-print {
+      display: none !important;
+    }
+
+    .print-card-shell,
+    .print-card-content {
+      border: 0 !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      background: #ffffff !important;
+      padding: 0 !important;
+      overflow: visible !important;
+    }
+
+    .print-section,
+    .print-image-card {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+
+    .print-image-card img {
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
 
     @media print {
       html,
       body {
-        width: ${pageWidth}px;
-        min-height: ${pageHeight}px;
         background: #ffffff;
       }
 
       body {
-        padding: 24px;
+        padding: 0;
       }
 
       .pdf-page {
-        width: ${params.sheetWidth}px;
-        max-width: none;
-        margin: 0 auto;
-        break-inside: avoid;
-        page-break-inside: avoid;
+        width: 100%;
+        margin: 0;
       }
     }
   `;
@@ -196,7 +206,11 @@ export default function SheetDetail() {
 
   const printSheetAsPdf = () => {
     const sheetElement = sheetCardRef.current;
-    if (!sheetElement) return;
+    if (!sheetElement || !sheet) return;
+    const printableDisplayTitle =
+      sheet.tipoOutput === "discriminazione_visiva"
+        ? getVisualDiscriminationTitle(sheet.interesse)
+        : getSheetTypeLabel(sheet.tipoOutput);
 
     const printFrame = document.createElement("iframe");
     printFrame.title = "Anteprima PDF della scheda";
@@ -241,9 +255,7 @@ export default function SheetDetail() {
     populatePrintableSheetDocument({
       printDocument,
       sheetNode: sheetElement.cloneNode(true),
-      title: `Scheda ${sheetId}`,
-      sheetWidth: Math.ceil(sheetElement.getBoundingClientRect().width),
-      sheetHeight: Math.ceil(sheetElement.getBoundingClientRect().height),
+      title: `Paroletta — ${printableDisplayTitle}`,
     });
   };
 
@@ -286,6 +298,8 @@ export default function SheetDetail() {
   const isNarrativeSequence = sheet.tipoOutput === "narrazione_sequenze";
   const isPragmatic = sheet.tipoOutput === "pragmatica";
   const imageAssets = sheet.imageAssets ?? [];
+  const deliveryLabel =
+    sheet.targetAudience === "adulto" ? "Consegna adulto" : "Consegna bambino";
   const hasImageAssets = imageAssets.length > 0;
   const hasDisplayableImageAssets = imageAssets.some(asset =>
     isDisplayableImagePath(asset.filePath)
@@ -301,10 +315,10 @@ export default function SheetDetail() {
     imageAssets,
     sheet.id
   );
-  const visualOptionCount = Math.min(
-    Math.max(getVisualOptionCount(words), visualImageAssets.length || 0),
-    4
-  );
+  const visualOptionCount = getVisualDisplayOptionCount({
+    words,
+    imageCount: visualImageAssets.length,
+  });
   const primaryImageAsset = imageAssets[0];
   const userFacingContent = getUserFacingSheetContent({
     tipoOutput: sheet.tipoOutput,
@@ -338,11 +352,7 @@ export default function SheetDetail() {
           </Button>
         </Link>
         <div className="flex gap-2">
-          <Button
-            className="bg-teal-600 hover:bg-teal-700"
-            size="sm"
-            onClick={printSheetAsPdf}
-          >
+          <Button size="sm" onClick={printSheetAsPdf}>
             <Download className="w-4 h-4 mr-1" />
             Scarica PDF
           </Button>
@@ -351,10 +361,10 @@ export default function SheetDetail() {
 
       {/* Preview card */}
       <div ref={sheetCardRef}>
-        <Card className="overflow-hidden border-0 bg-gradient-to-br from-teal-100 via-white to-indigo-100 p-1 shadow-xl shadow-slate-200/70">
-          <CardContent className="rounded-[1.35rem] bg-white p-6 sm:p-8">
+        <Card className="print-card-shell overflow-hidden border-0 bg-gradient-to-br from-teal-100 via-white to-indigo-100 p-1 shadow-xl shadow-slate-200/70">
+          <CardContent className="print-card-content rounded-[1.35rem] bg-white p-6 sm:p-8">
             {/* Header */}
-            <div className="mb-6 flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 shadow-inner">
+            <div className="print-section mb-6 flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 shadow-inner">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center">
                   <Sparkles className="w-5 h-5 text-white" />
@@ -377,16 +387,16 @@ export default function SheetDetail() {
                 {displayTitle}
               </h2>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+              <div className="print-section rounded-xl border border-slate-200 bg-slate-50/60 p-4">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Consegna bambino
+                  {deliveryLabel}
                 </p>
                 <div className="text-slate-800 leading-relaxed whitespace-pre-line text-lg">
                   {userFacingContent}
                 </div>
               </div>
 
-              <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 text-sm text-slate-700">
+              <div className="no-print rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 text-sm text-slate-700">
                 <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-indigo-700">
                   Note professionista
                 </p>
@@ -401,7 +411,7 @@ export default function SheetDetail() {
             </div>
 
             {isVisualDiscrimination ? (
-              <div className="mt-8 rounded-[1.5rem] border border-teal-100 bg-gradient-to-br from-teal-50 to-cyan-50 p-5 shadow-inner sm:p-6">
+              <div className="print-section mt-8 rounded-[1.5rem] border border-teal-100 bg-gradient-to-br from-teal-50 to-cyan-50 p-5 shadow-inner sm:p-6">
                 <div className="mb-4 flex items-center gap-2 text-teal-800">
                   <Eye className="h-5 w-5" />
                   <p className="font-semibold">Scelta multipla visiva</p>
@@ -413,7 +423,7 @@ export default function SheetDetail() {
                     return (
                       <div
                         key={asset?.cacheKey ?? index}
-                        className="rounded-[1.35rem] border border-teal-100 bg-white p-3 text-center shadow-lg shadow-teal-900/5 ring-4 ring-white/80 sm:p-4"
+                        className="print-image-card rounded-[1.35rem] border border-teal-100 bg-white p-3 text-center shadow-lg shadow-teal-900/5 ring-4 ring-white/80 sm:p-4"
                       >
                         <div className="flex h-56 items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-slate-50 sm:h-64 md:h-72">
                           {isDisplayableImagePath(asset?.filePath) ? (
@@ -438,14 +448,14 @@ export default function SheetDetail() {
                 </div>
               </div>
             ) : isComplexMorphosyntax && hasImageAssets ? (
-              <div className="mt-8 rounded-[1.5rem] border border-indigo-100 bg-gradient-to-br from-indigo-50 to-violet-50 p-5 shadow-inner sm:p-6">
+              <div className="print-section mt-8 rounded-[1.5rem] border border-indigo-100 bg-gradient-to-br from-indigo-50 to-violet-50 p-5 shadow-inner sm:p-6">
                 <div className="mb-4 flex items-center gap-2 text-indigo-800">
                   <Brain className="h-5 w-5" />
                   <p className="font-semibold">
                     Scena morfologica o morfosintattica illustrata
                   </p>
                 </div>
-                <div className="rounded-[1.35rem] border border-indigo-100 bg-white p-4 text-center shadow-lg shadow-indigo-900/5 ring-4 ring-white/80 sm:p-5">
+                <div className="print-image-card rounded-[1.35rem] border border-indigo-100 bg-white p-4 text-center shadow-lg shadow-indigo-900/5 ring-4 ring-white/80 sm:p-5">
                   <div className="mx-auto flex h-72 max-w-2xl items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-slate-50 sm:h-80 md:h-[26rem]">
                     {isDisplayableImagePath(primaryImageAsset?.filePath) ? (
                       <img
@@ -463,7 +473,7 @@ export default function SheetDetail() {
                 </div>
               </div>
             ) : isNarrativeSequence ? (
-              <div className="mt-8 rounded-[1.5rem] border border-amber-100 bg-gradient-to-br from-amber-50 to-orange-50 p-5 shadow-inner sm:p-6">
+              <div className="print-section mt-8 rounded-[1.5rem] border border-amber-100 bg-gradient-to-br from-amber-50 to-orange-50 p-5 shadow-inner sm:p-6">
                 <div className="mb-4 flex items-center gap-2 text-amber-800">
                   <ListOrdered className="h-5 w-5" />
                   <p className="font-semibold">Sequenza narrativa</p>
@@ -472,7 +482,7 @@ export default function SheetDetail() {
                   {narrativeDisplayAssets.map((asset, index) => (
                     <div
                       key={asset.cacheKey}
-                      className="rounded-[1.35rem] border border-amber-100 bg-white p-3 text-center shadow-lg shadow-amber-900/5 ring-4 ring-white/80 sm:p-4"
+                      className="print-image-card rounded-[1.35rem] border border-amber-100 bg-white p-3 text-center shadow-lg shadow-amber-900/5 ring-4 ring-white/80 sm:p-4"
                     >
                       <div className="flex h-52 items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-slate-50 sm:h-60">
                         {isDisplayableImagePath(asset.filePath) ? (
@@ -496,14 +506,14 @@ export default function SheetDetail() {
                 </div>
               </div>
             ) : isPragmatic && hasImageAssets ? (
-              <div className="mt-8 rounded-[1.5rem] border border-rose-100 bg-gradient-to-br from-rose-50 to-pink-50 p-5 shadow-inner sm:p-6">
+              <div className="print-section mt-8 rounded-[1.5rem] border border-rose-100 bg-gradient-to-br from-rose-50 to-pink-50 p-5 shadow-inner sm:p-6">
                 <div className="mb-4 flex items-center gap-2 text-rose-800">
                   <MessageCircle className="h-5 w-5" />
                   <p className="font-semibold">
                     Scenario pragmatico illustrato
                   </p>
                 </div>
-                <div className="rounded-[1.35rem] border border-rose-100 bg-white p-4 text-center shadow-lg shadow-rose-900/5 ring-4 ring-white/80 sm:p-5">
+                <div className="print-image-card rounded-[1.35rem] border border-rose-100 bg-white p-4 text-center shadow-lg shadow-rose-900/5 ring-4 ring-white/80 sm:p-5">
                   <div className="mx-auto flex h-72 max-w-2xl items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-slate-50 sm:h-80 md:h-[26rem]">
                     {isDisplayableImagePath(primaryImageAsset?.filePath) ? (
                       <img
@@ -522,13 +532,13 @@ export default function SheetDetail() {
               </div>
             ) : hasImageAssets ||
               (sheet.tipoOutput === "lista" && words.length > 0) ? (
-              <div className="mt-8 rounded-[1.5rem] border border-slate-200 bg-gradient-to-br from-slate-50 to-teal-50/70 p-5 text-center shadow-inner sm:p-6">
+              <div className="print-section mt-8 rounded-[1.5rem] border border-slate-200 bg-gradient-to-br from-slate-50 to-teal-50/70 p-5 text-center shadow-inner sm:p-6">
                 {hasImageAssets ? (
                   <>
                     <p className="mb-4 text-base font-semibold text-slate-600">
                       Illustrazione
                     </p>
-                    <div className="mx-auto flex h-72 max-w-2xl items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-lg shadow-slate-900/5 ring-4 ring-white/80 sm:h-80 md:h-96">
+                    <div className="print-image-card mx-auto flex h-72 max-w-2xl items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-lg shadow-slate-900/5 ring-4 ring-white/80 sm:h-80 md:h-96">
                       {isDisplayableImagePath(primaryImageAsset?.filePath) ? (
                         <img
                           src={primaryImageAsset.filePath ?? undefined}
@@ -566,46 +576,10 @@ export default function SheetDetail() {
               </div>
             ) : null}
 
-            {imageActionAssets.length > 0 ? (
-              <div className="mt-4 flex flex-wrap gap-2">
-                {imageActionAssets.map((asset, index) => {
-                  const isRegenerating =
-                    regeneratingImageKeys.has(asset.cacheKey);
-                  const hasImage = isDisplayableImagePath(asset.filePath);
-
-                  return (
-                    <Button
-                      key={asset.cacheKey}
-                      variant="outline"
-                      size="sm"
-                      className="gap-1"
-                      disabled={isRegenerating}
-                      onClick={() => {
-                        regenerateImageAsset(asset.cacheKey);
-                      }}
-                    >
-                      {isRegenerating ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <RefreshCcw className="h-4 w-4" />
-                      )}
-                      {hasImage ? "Rigenera" : "Genera"} immagine {index + 1}
-                    </Button>
-                  );
-                })}
-                {regenerateImage.isError ? (
-                  <p className="basis-full text-sm text-red-600">
-                    {regenerateImage.error?.message ??
-                      "Errore durante la rigenerazione dell'immagine."}
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-
             {/* Watermark footer */}
-            <div className="mt-8 pt-4 border-t border-slate-200 text-center">
+            <div className="print-section mt-8 pt-4 border-t border-slate-200 text-center">
               <p className="text-sm text-slate-500 italic">
-                Materiale a cura del Dott. {doctorName}
+                Materiale a cura di {doctorName}
               </p>
               <p className="text-xs text-slate-400 mt-1">
                 Generato con Paroletta — www.paroletta.it
@@ -614,6 +588,41 @@ export default function SheetDetail() {
           </CardContent>
         </Card>
       </div>
+
+      {imageActionAssets.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {imageActionAssets.map((asset, index) => {
+            const isRegenerating = regeneratingImageKeys.has(asset.cacheKey);
+            const hasImage = isDisplayableImagePath(asset.filePath);
+
+            return (
+              <Button
+                key={asset.cacheKey}
+                variant="outline"
+                size="sm"
+                className="gap-1"
+                disabled={isRegenerating}
+                onClick={() => {
+                  regenerateImageAsset(asset.cacheKey);
+                }}
+              >
+                {isRegenerating ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCcw className="h-4 w-4" />
+                )}
+                {hasImage ? "Rigenera" : "Genera"} immagine {index + 1}
+              </Button>
+            );
+          })}
+          {regenerateImage.isError ? (
+            <p className="basis-full text-sm text-red-600">
+              {regenerateImage.error?.message ??
+                "Errore durante la rigenerazione dell'immagine."}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

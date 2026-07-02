@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  buildClinicalImagePrompt,
   buildImageRequests,
   buildSemanticCacheKey,
   normalizeSemanticTag,
@@ -225,6 +226,118 @@ Distrattore 1: singola immagine con un falco al centro nel cielo azzurro.`,
     });
 
     expect(requests).toEqual([]);
+  });
+
+  it("builds a concrete image request for illustrated pragmatic worksheets", () => {
+    const requests = buildImageRequests({
+      tipoOutput: "pragmatica",
+      interesse: "nessuno",
+      testoGenerato: JSON.stringify({
+        tipo: "pragmatica",
+        titolo: "Aspettare il turno",
+        consegna:
+          "Leggi la scena e rispondi alle domande su cosa provano e cosa possono dire i bambini.",
+        testo:
+          "Anna aspetta lo scivolo mentre Leo resta seduto in alto e non scende.",
+        immagini: [
+          {
+            ruolo: "illustrazione",
+            livello: "principale",
+            prompt:
+              "Child-friendly illustration of a child waiting near a slide while another child sits at the top, clear social interaction and facial expressions, no text.",
+          },
+        ],
+        domande: [
+          {
+            domanda: "Che cosa vuole fare Anna?",
+            risposta: "Vuole usare lo scivolo.",
+          },
+          {
+            domanda: "Come può sentirsi Anna?",
+            risposta: "Può sentirsi impaziente.",
+          },
+          {
+            domanda: "Perché Leo resta in alto?",
+            risposta: "Forse ha paura o vuole ancora giocare.",
+          },
+          {
+            domanda: "Che cosa può dire Anna?",
+            risposta: "Posso fare un turno anch'io?",
+          },
+        ],
+      }),
+    });
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      role: "base",
+      label: "Scenario pragmatico",
+    });
+    expect(requests[0]?.prompt).toContain("Scena: Child-friendly illustration");
+    expect(requests[0]?.semanticTags.map(normalizeSemanticTag)).toContain(
+      "tipo:pragmatica"
+    );
+  });
+
+  it("builds adult-neutral image prompts and cache tags for adult worksheets", () => {
+    const prompt = buildClinicalImagePrompt(
+      "Child-friendly illustration of a person buying groceries, no text.",
+      "adulto"
+    );
+    const requests = buildImageRequests({
+      targetAudience: "adulto",
+      tipoOutput: "pragmatica",
+      interesse: "nessuno",
+      testoGenerato: JSON.stringify({
+        tipo: "pragmatica",
+        titolo: "Chiedere un turno",
+        consegna:
+          "Leggi la scena e rispondi alle domande su cosa può dire la persona.",
+        testo:
+          "Due colleghi vogliono parlare nello stesso momento durante una riunione.",
+        immagini: [
+          {
+            ruolo: "illustrazione",
+            livello: "principale",
+            prompt:
+              "A clean neutral illustration of two adults in a meeting room, one waiting to speak while another is talking, no text.",
+          },
+        ],
+        domande: [
+          {
+            domanda: "Che cosa vogliono fare i colleghi?",
+            risposta: "Vogliono parlare.",
+          },
+          {
+            domanda: "Che cosa può dire chi aspetta?",
+            risposta: "Posso aggiungere una cosa dopo?",
+          },
+          {
+            domanda: "Come può sentirsi chi viene interrotto?",
+            risposta: "Può sentirsi frustrato.",
+          },
+          {
+            domanda: "Quale strategia può aiutare?",
+            risposta: "Aspettare il turno e chiedere la parola.",
+          },
+        ],
+      }),
+    });
+
+    expect(prompt).toContain("persona adulta");
+    expect(prompt).toContain("pulito, neutro e professionale");
+    expect(prompt).not.toMatch(/child-friendly|pediatr|bambin/iu);
+    expect(requests[0]?.prompt).toContain("persona adulta");
+    expect(requests[0]?.prompt).not.toMatch(/child-friendly|pediatr|bambin/iu);
+    expect(requests[0]?.semanticTags.map(normalizeSemanticTag)).toContain(
+      "audience:adulto"
+    );
+    expect(requests[0]?.semanticTags.map(normalizeSemanticTag)).toContain(
+      "stile:adulto_neutro_professionale"
+    );
+    expect(buildSemanticCacheKey(requests[0]?.semanticTags ?? [])).toContain(
+      "audience:adulto"
+    );
   });
 
   it("calls OpenAI with the requested GPT Image generation settings", async () => {
