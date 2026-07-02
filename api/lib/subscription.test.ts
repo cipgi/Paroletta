@@ -4,8 +4,8 @@ import { resolveSubscriptionAccess } from "./subscription-access";
 
 describe("formatSubscriptionStatus", () => {
   it("only formats display state without granting client-side access", () => {
-    expect(formatSubscriptionStatus({ status: "attivo" })).toBe("attivo");
-    expect(formatSubscriptionStatus(null)).toBe("nessuno");
+    expect(formatSubscriptionStatus({ status: "attivo" })).toBe("Attivo");
+    expect(formatSubscriptionStatus(null)).toBe("Nessun abbonamento");
   });
 });
 

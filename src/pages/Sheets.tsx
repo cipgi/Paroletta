@@ -25,7 +25,7 @@ export default function Sheets() {
           </p>
         </div>
         <Link to="/generator">
-          <Button className="bg-teal-600 hover:bg-teal-700">
+          <Button>
             <Sparkles className="w-4 h-4 mr-2" />
             Nuova scheda
           </Button>

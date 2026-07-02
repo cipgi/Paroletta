@@ -33,3 +33,12 @@ export const SubscriptionPlanLimits = {
   pro: { sheetLimit: 100, imageLimit: 100 },
   max: { sheetLimit: 100, imageLimit: 300 },
 } as const;
+
+export const SubscriptionPlanLabels = {
+  trial: "Prova Gratuita",
+  sviluppo: "Sviluppo",
+  nessun_abbonamento: "Nessun abbonamento",
+  starter: "Starter",
+  pro: "Pro",
+  max: "Max",
+} as const;

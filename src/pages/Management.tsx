@@ -37,6 +37,7 @@ import {
   getSheetTypeLabel,
   isTextWithPhonemeSheet,
 } from "@contracts/sheet-content";
+import { formatSubscriptionPlan } from "@/lib/subscription";
 
 function percent(value: number, total: number) {
   if (total <= 0) return 0;
@@ -209,7 +210,6 @@ export default function Management() {
               </div>
               <Button
                 type="button"
-                className="bg-teal-600 hover:bg-teal-700"
                 disabled={acceptInvitation.isPending}
                 onClick={() =>
                   acceptInvitation.mutate({ token: invitation.token })
@@ -319,7 +319,7 @@ export default function Management() {
             </div>
             <div>
               <p className="text-sm font-semibold text-slate-800">
-                {overview.subscription?.plan ?? "trial"}
+                {formatSubscriptionPlan(overview.subscription?.plan ?? "trial")}
               </p>
               <p className="text-sm text-slate-500">
                 Piano gestito dal Manager
@@ -480,7 +480,6 @@ export default function Management() {
                     disabled={
                       invite.isPending || overview.seats.available === 0
                     }
-                    className="bg-teal-600 hover:bg-teal-700"
                   >
                     Invita
                   </Button>

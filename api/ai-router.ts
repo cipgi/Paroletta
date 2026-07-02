@@ -40,9 +40,7 @@ import {
 } from "./lib/subscription";
 import { sanitizePlainText } from "./lib/sanitize";
 
-const ALLOWED_INTERESSI = [
-  "libero",
-  "nessuno",
+const INTEREST_SUGGESTIONS = [
   "dinosauro",
   "principessa",
   "calcio",
@@ -54,10 +52,6 @@ const ALLOWED_INTERESSI = [
   "ballo",
   "musica",
 ] as const;
-
-const AVAILABLE_SPECIFIC_INTERESTS = ALLOWED_INTERESSI.filter(
-  interesse => !["libero", "nessuno"].includes(interesse)
-);
 
 const ALLOWED_FONEMI = [
   "r",
@@ -87,7 +81,7 @@ export type TipoOutput =
 export type GenerationParams = {
   targetAudience: TargetAudience;
   fonema: (typeof ALLOWED_FONEMI)[number];
-  interesse: (typeof ALLOWED_INTERESSI)[number];
+  interesse: string;
   tipoOutput: TipoOutput;
   aspettoSpecifico?: string;
   scenarioSmart?: string;
@@ -120,6 +114,8 @@ type GeneratedSheetRow = {
 };
 
 const MAX_ASPETTO_SPECIFICO_LENGTH = 400;
+const MAX_INTEREST_LENGTH = 60;
+const MAX_INTEREST_INPUT_LENGTH = 240;
 const MAX_SMART_INPUT_LENGTH = 900;
 const MAX_GRAMMAR_ELEMENT_LENGTH = 120;
 const MAX_SCENE_DESCRIPTION_LENGTH = 900;
@@ -134,14 +130,14 @@ const CODE_FENCE_PATTERN = /```+/g;
 const ROLE_MARKER_PATTERN = /\b(?:system|developer|assistant|user)\s*:/giu;
 
 function resolveInterestForGeneration(
-  interesse: (typeof ALLOWED_INTERESSI)[number]
-): (typeof ALLOWED_INTERESSI)[number] {
+  interesse: string
+): string {
   if (interesse !== FREE_INTEREST_VALUE) return interesse;
   const randomIndex = Math.floor(
-    Math.random() * AVAILABLE_SPECIFIC_INTERESTS.length
+    Math.random() * INTEREST_SUGGESTIONS.length
   );
   return (
-    AVAILABLE_SPECIFIC_INTERESTS[randomIndex] ?? AVAILABLE_SPECIFIC_INTERESTS[0]
+    INTEREST_SUGGESTIONS[randomIndex] ?? INTEREST_SUGGESTIONS[0] ?? "musica"
   );
 }
 
@@ -191,6 +187,27 @@ export function sanitizePromptVariable(
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, maxLength);
+}
+
+function sanitizeInterest(input: string): string {
+  const sanitizedInterest = sanitizePromptVariable(
+    input,
+    MAX_INTEREST_LENGTH
+  );
+  const normalizedSpecialValue =
+    sanitizedInterest.toLocaleLowerCase("it-IT");
+
+  if (normalizedSpecialValue === FREE_INTEREST_VALUE) {
+    return FREE_INTEREST_VALUE;
+  }
+  if (normalizedSpecialValue === NO_INTEREST_VALUE) {
+    return NO_INTEREST_VALUE;
+  }
+  if (!sanitizedInterest.replace(/[^\p{L}\p{N}]+/gu, "")) {
+    return FREE_INTEREST_VALUE;
+  }
+
+  return sanitizedInterest;
 }
 
 function assertAllowedValue<T extends readonly string[]>(
@@ -320,14 +337,10 @@ export function sanitizeGenerationParams(input: {
     ? Math.min(Math.max(input.numeroScene ?? 4, 3), 5)
     : undefined;
 
-  const allowedInterest = assertAllowedValue(
-    input.interesse,
-    ALLOWED_INTERESSI,
-    "Interesse"
-  );
+  const sanitizedInterest = sanitizeInterest(input.interesse);
 
   if (
-    allowedInterest === NO_INTEREST_VALUE &&
+    sanitizedInterest === NO_INTEREST_VALUE &&
     !hasUserProvidedGenerationContext({
       aspettoSpecifico: scopedAspettoSpecifico,
       scenarioSmart: scopedScenarioSmart,
@@ -345,7 +358,7 @@ export function sanitizeGenerationParams(input: {
   return {
     targetAudience,
     fonema: assertAllowedValue(input.fonema, ALLOWED_FONEMI, "Fonema"),
-    interesse: resolveInterestForGeneration(allowedInterest),
+    interesse: resolveInterestForGeneration(sanitizedInterest),
     tipoOutput: input.tipoOutput,
     aspettoSpecifico: scopedAspettoSpecifico || undefined,
     scenarioSmart: scopedScenarioSmart || undefined,
@@ -592,7 +605,7 @@ export function buildPromptMessages(
     sanitizedVariables.numeroScene = params.numeroScene ?? null;
   }
   if (params.interesse === FREE_INTEREST_VALUE) {
-    sanitizedVariables.interessiDisponibili = AVAILABLE_SPECIFIC_INTERESTS;
+    sanitizedVariables.interessiDisponibili = INTEREST_SUGGESTIONS;
   }
 
   const messages: PromptMessage[] = [
@@ -875,7 +888,7 @@ export const aiRouter = createRouter({
       z.object({
         targetAudience: targetAudienceSchema,
         fonema: z.string().max(10),
-        interesse: z.string().max(100),
+        interesse: z.string().max(MAX_INTEREST_INPUT_LENGTH),
         tipoOutput: z.enum([
           "storia",
           "filastrocca",

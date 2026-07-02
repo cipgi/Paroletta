@@ -4,8 +4,18 @@ import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Sparkles, FileText, TrendingUp, ArrowRight } from "lucide-react";
-import { SubscriptionPlanLimits } from "@contracts/constants";
+import {
+  SubscriptionPlanLabels,
+  SubscriptionPlanLimits,
+} from "@contracts/constants";
 import {
   getSheetTypeLabel,
   isTextWithPhonemeSheet,
@@ -61,16 +71,11 @@ export default function Dashboard() {
     new Set((sheetsList ?? []).map(sheet => sheet.fonema))
   );
 
-  const planLabels: Record<string, string> = {
-    trial: "Prova Gratuita",
-    sviluppo: "Sviluppo",
-    nessun_abbonamento: "Nessun abbonamento",
-    starter: "Starter",
-    pro: "Pro",
-    max: "Max",
-  };
   const currentPlan = subscription?.plan ?? user?.piano ?? "trial";
-  const currentPlanLabel = planLabels[currentPlan] ?? currentPlan;
+  const currentPlanLabel =
+    SubscriptionPlanLabels[
+      currentPlan as keyof typeof SubscriptionPlanLabels
+    ] ?? currentPlan;
   const currentFallbackLimits =
     SubscriptionPlanLimits[
       currentPlan as keyof typeof SubscriptionPlanLimits
@@ -96,7 +101,7 @@ export default function Dashboard() {
     <div className="space-y-6 max-w-5xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold text-slate-800">
-          Ciao, Dott. {user?.name ?? "Utente"}
+          Ciao, {user?.name ?? "Utente"}
         </h1>
         <p className="text-slate-500 mt-1">
           Ecco cosa è successo oggi nella tua pratica.
@@ -142,7 +147,7 @@ export default function Dashboard() {
       {/* Quick actions */}
       <div className="flex flex-wrap gap-3">
         <Link to="/generator">
-          <Button className="bg-teal-600 hover:bg-teal-700">
+          <Button>
             <Sparkles className="w-4 h-4 mr-2" />
             Genera nuova scheda
           </Button>
@@ -154,40 +159,46 @@ export default function Dashboard() {
         <CardHeader>
           <CardTitle className="text-lg">Schede recenti</CardTitle>
           <div className="mt-3 flex flex-wrap gap-2">
-            <select
-              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm"
-              value={typeFilter}
-              onChange={event => setTypeFilter(event.target.value)}
-            >
-              <option value="all">Tutti i tipi</option>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="w-[180px]" size="sm">
+                <SelectValue placeholder="Tutti i tipi" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tutti i tipi</SelectItem>
               {availableTypes.map(type => (
-                <option key={type} value={type}>
+                <SelectItem key={type} value={type}>
                   {getSheetTypeLabel(type)}
-                </option>
+                </SelectItem>
               ))}
-            </select>
-            <select
-              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm"
-              value={phonemeFilter}
-              onChange={event => setPhonemeFilter(event.target.value)}
-            >
-              <option value="all">Tutti i fonemi</option>
+              </SelectContent>
+            </Select>
+            <Select value={phonemeFilter} onValueChange={setPhonemeFilter}>
+              <SelectTrigger className="w-[150px]" size="sm">
+                <SelectValue placeholder="Tutti i fonemi" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tutti i fonemi</SelectItem>
               {availablePhonemes.map(phoneme => (
-                <option key={phoneme} value={phoneme}>
+                <SelectItem key={phoneme} value={phoneme}>
                   /{phoneme}/
-                </option>
+                </SelectItem>
               ))}
-            </select>
-            <select
-              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm"
+              </SelectContent>
+            </Select>
+            <Select
               value={sortBy}
-              onChange={event =>
-                setSortBy(event.target.value as "recenti" | "vecchie")
+              onValueChange={value =>
+                setSortBy(value as "recenti" | "vecchie")
               }
             >
-              <option value="recenti">Più recenti</option>
-              <option value="vecchie">Più vecchie</option>
-            </select>
+              <SelectTrigger className="w-[140px]" size="sm">
+                <SelectValue placeholder="Ordina" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="recenti">Più recenti</SelectItem>
+                <SelectItem value="vecchie">Più vecchie</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardHeader>
         <CardContent className="p-6 pt-0">

@@ -296,9 +296,17 @@ export const organizationRouter = createRouter({
     const pendingInvitationsCount = (invitations ?? []).filter(
       invitation => invitation.status === "pending"
     ).length;
+    const receivedInvitationsCount = receivedInvitations?.length ?? 0;
+    const hasTeamContext =
+      account.role === "staff" ||
+      seatsCount > 1 ||
+      memberIds.length > 0 ||
+      pendingInvitationsCount > 0 ||
+      receivedInvitationsCount > 0;
 
     return {
       role: account.role,
+      hasTeamContext,
       owner: {
         id: ownerProfile.id,
         email: ownerProfile.email,

@@ -13,7 +13,7 @@ import {
   UserX,
   Users,
 } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useState } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,7 +33,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { trpc } from "@/providers/trpc";
-import { SubscriptionPlanLimits } from "@contracts/constants";
+import { useUsageRemaining } from "@/hooks/useUsageRemaining";
 
 function InactiveSubscriptionScreen({
   email,
@@ -94,12 +94,7 @@ export default function Layout({ children }: { children: ReactNode }) {
     trpc.subscriptions.mySubscription.useQuery(undefined, {
       enabled: isAuthenticated,
     });
-  const { data: organizationOverview } = trpc.organization.overview.useQuery(
-    undefined,
-    {
-      enabled: isAuthenticated,
-    }
-  );
+  const { label: usageLeftLabel, organizationOverview } = useUsageRemaining();
 
   const utils = trpc.useUtils();
 
@@ -112,27 +107,19 @@ export default function Layout({ children }: { children: ReactNode }) {
     },
   });
 
+  const showManagement =
+    user?.accountRole === "staff" ||
+    Boolean(organizationOverview?.hasTeamContext) ||
+    Boolean(organizationOverview?.receivedInvitations?.length);
+
   const navItems = [
     { path: "/", label: "Dashboard", icon: LayoutDashboard },
     { path: "/generator", label: "Genera Scheda", icon: Sparkles },
     { path: "/sheets", label: "Schede", icon: FileText },
-    { path: "/management", label: "Gestione", icon: Users },
+    ...(showManagement
+      ? [{ path: "/management", label: "Gestione", icon: Users }]
+      : []),
   ];
-
-  const usageLeftLabel = useMemo(() => {
-    if (organizationOverview) {
-      return `Rimangono: ${organizationOverview.usage.sheets.remaining} schede, ${organizationOverview.usage.images.remaining} immagini`;
-    }
-    if (!user) return "";
-    const limits =
-      SubscriptionPlanLimits[
-        user.piano as keyof typeof SubscriptionPlanLimits
-      ] ?? SubscriptionPlanLimits.trial;
-    if (user.piano === "trial") {
-      return `Rimangono: ${Math.max(limits.sheetLimit - (user.trialSchedeUsate ?? 0), 0)} schede, ${Math.max(limits.imageLimit - (user.trialImmaginiUsate ?? 0), 0)} immagini`;
-    }
-    return `Rimangono: ${Math.max(limits.sheetLimit - (user.schedeMese ?? 0), 0)} schede, ${Math.max(limits.imageLimit - (user.immaginiMese ?? 0), 0)} immagini`;
-  }, [organizationOverview, user]);
 
   if (isLoading) {
     return (
@@ -225,15 +212,12 @@ export default function Layout({ children }: { children: ReactNode }) {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() =>
-                  window.open(
-                    "https://www.notion.so/help",
-                    "_blank",
-                    "noopener,noreferrer"
-                  )
+                  (window.location.href =
+                    "mailto:ghpodoleanu@gmail.com?subject=Assistenza%20Paroletta")
                 }
               >
                 <CircleHelp className="w-4 h-4" />
-                FAQ
+                Contatta l'assistenza
               </DropdownMenuItem>
               {user?.accountRole !== "staff" ? (
                 <DropdownMenuItem onClick={() => navigate("/abbonamento")}>

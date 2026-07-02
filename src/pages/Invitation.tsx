@@ -58,7 +58,7 @@ export default function Invitation() {
                 Per collegare il tuo account al Manager devi accedere con la
                 stessa email che ha ricevuto l'invito.
               </p>
-              <Button asChild className="bg-teal-600 hover:bg-teal-700">
+              <Button asChild>
                 <Link to="/login">
                   <LogIn className="w-4 h-4 mr-2" /> Accedi o registrati
                 </Link>
@@ -75,10 +75,7 @@ export default function Invitation() {
                 Stai per collegare l'account <strong>{user?.email}</strong> a
                 questo team. Conferma solo se riconosci l'invito ricevuto.
               </p>
-              <Button
-                className="bg-teal-600 hover:bg-teal-700"
-                onClick={confirmInvitation}
-              >
+              <Button onClick={confirmInvitation}>
                 Conferma e accetta invito
               </Button>
             </div>
